@@ -9,23 +9,34 @@ struct ManualEntryView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Product Details")) {
+                Section {
                     TextField("Barcode", text: $viewModel.manualBarcode)
                         .keyboardType(.numberPad)
                     
                     TextField("Product Name", text: $viewModel.manualProductName)
                     
                     TextField("Brand", text: $viewModel.manualBrand)
+                } header: {
+                    Text("Product Details")
                 }
                 
-                Section(header: Text("Usage Information")) {
+                Section {
                     DatePicker("Purchase Date", selection: $viewModel.purchaseDate, displayedComponents: .date)
                     
                     Toggle("Product is already open", isOn: $viewModel.isProductOpen)
                     
                     if viewModel.isProductOpen {
-                        DatePicker("Open Date", selection: $viewModel.openDate ?? .now, displayedComponents: .date)
+                        DatePicker(
+                            "Open Date",
+                            selection: Binding(
+                                get: { viewModel.openDate ?? Date() },
+                                set: { viewModel.openDate = $0 }
+                            ),
+                            displayedComponents: .date
+                        )
                     }
+                } header: {
+                    Text("Usage Information")
                 }
                 
                 Section {

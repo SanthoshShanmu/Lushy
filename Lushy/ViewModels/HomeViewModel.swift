@@ -29,33 +29,38 @@ class HomeViewModel: ObservableObject {
     func fetchProducts() {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         
-        do {
-            let allProducts = try managedObjectContext.fetch(request)
+        // Ensure we're on the main thread when fetching and updating UI
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             
-            // Sort products into categories
-            let today = Date()
-            
-            // Products that have been opened
-            openProducts = allProducts.filter { product in
-                guard let openDate = product.openDate else { return false }
-                guard let expireDate = product.expireDate else { return true } // If no expiry, consider open
-                return openDate <= today && expireDate > today
+            do {
+                let allProducts = try self.managedObjectContext.fetch(request)
+                
+                // Sort products into categories
+                let today = Date()
+                
+                // Products that have been opened
+                self.openProducts = allProducts.filter { product in
+                    guard let openDate = product.openDate else { return false }
+                    guard let expireDate = product.expireDate else { return true } 
+                    return openDate <= today && expireDate > today
+                }
+                
+                // Products that are expiring soon (within 30 days)
+                self.expiringProducts = allProducts.filter { product in
+                    guard let expireDate = product.expireDate else { return false }
+                    let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: today)!
+                    return expireDate <= thirtyDaysFromNow && expireDate > today
+                }
+                
+                // Products in storage (purchased but not opened)
+                self.storedProducts = allProducts.filter { product in
+                    return product.openDate == nil
+                }
+                
+            } catch {
+                print("Error fetching products: \(error)")
             }
-            
-            // Products that are expiring soon (within 30 days)
-            expiringProducts = allProducts.filter { product in
-                guard let expireDate = product.expireDate else { return false }
-                let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: today)!
-                return expireDate <= thirtyDaysFromNow && expireDate > today
-            }
-            
-            // Products in storage (purchased but not opened)
-            storedProducts = allProducts.filter { product in
-                return product.openDate == nil
-            }
-            
-        } catch {
-            print("Error fetching products: \(error)")
         }
     }
     

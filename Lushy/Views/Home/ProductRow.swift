@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 struct ProductRow: View {
     let product: UserProduct

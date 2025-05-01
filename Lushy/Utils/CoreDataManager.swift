@@ -22,7 +22,7 @@ class CoreDataManager {
     
     // MARK: - UserProduct Operations
     
-    func saveUserProduct(barcode: String, 
+    func saveUserProduct(barcode: String,
                         productName: String,
                         brand: String?,
                         imageUrl: String?,
@@ -49,8 +49,7 @@ class CoreDataManager {
             userProduct.crueltyFree = crueltyFree
             userProduct.favorite = false
             userProduct.inWishlist = false
-            userProduct.comments = []
-            userProduct.reviews = []
+            // No need to initialize comments and reviews as they are CoreData relationships now
             
             // Calculate expiry date if opened and has periodsAfterOpening
             if let openDate = openDate, let periodsAfterOpening = periodsAfterOpening {
@@ -63,7 +62,7 @@ class CoreDataManager {
                 try context.save()
                 objectID = userProduct.objectID
             } catch {
-                print("Error saving UserProduct: \(error)")
+                print("Failed to save user product: \(error)")
             }
         }
         
@@ -99,16 +98,16 @@ class CoreDataManager {
         let context = container.newBackgroundContext()
         
         context.performAndWait {
-            if let userProduct = context.object(with: id) as? UserProduct {
-                let comment = Comment(text: text)
-                var comments = userProduct.comments ?? []
-                comments.append(comment)
-                userProduct.comments = comments
+            if let userProduct = try? context.existingObject(with: productID) as? UserProduct {
+                let comment = Comment(context: context)
+                comment.text = text
+                comment.createdAt = Date()
+                comment.userProduct = userProduct
                 
                 do {
                     try context.save()
                 } catch {
-                    print("Error saving comment: \(error)")
+                    print("Failed to save comment: \(error)")
                 }
             }
         }
@@ -119,16 +118,18 @@ class CoreDataManager {
         let context = container.newBackgroundContext()
         
         context.performAndWait {
-            if let userProduct = context.object(with: id) as? UserProduct {
-                let review = Review(rating: rating, title: title, text: text)
-                var reviews = userProduct.reviews ?? []
-                reviews.append(review)
-                userProduct.reviews = reviews
+            if let userProduct = try? context.existingObject(with: productID) as? UserProduct {
+                let review = Review(context: context)
+                review.rating = Int16(rating)
+                review.title = title
+                review.text = text
+                review.createdAt = Date()
+                review.userProduct = userProduct
                 
                 do {
                     try context.save()
                 } catch {
-                    print("Error saving review: \(error)")
+                    print("Failed to save review: \(error)")
                 }
             }
         }

@@ -41,7 +41,11 @@ class WishlistViewModel: ObservableObject {
             return
         }
         
-        // URL validation
+        // Better URL validation
+        if !newProductURL.hasPrefix("http://") && !newProductURL.hasPrefix("https://") {
+            newProductURL = "https://" + newProductURL
+        }
+        
         guard URL(string: newProductURL) != nil else {
             errorMessage = "Please enter a valid URL"
             return

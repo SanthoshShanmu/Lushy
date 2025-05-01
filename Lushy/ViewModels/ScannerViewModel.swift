@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftUI
 import AVFoundation
+import CoreData
 
 class ScannerViewModel: ObservableObject {
     @Published var isScanning = false
@@ -20,7 +21,13 @@ class ScannerViewModel: ObservableObject {
     // Form data for adding product
     @Published var purchaseDate = Date()
     @Published var openDate: Date?
-    @Published var isProductOpen = false
+    @Published var isProductOpen = false {
+        didSet {
+            if isProductOpen && openDate == nil {
+                openDate = Date()
+            }
+        }
+    }
     
     private var barcodeScannerService = BarcodeScannerService()
     private var cancellables = Set<AnyCancellable>()

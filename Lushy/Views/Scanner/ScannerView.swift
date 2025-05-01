@@ -257,8 +257,15 @@ struct ProductFoundView: View {
                             .foregroundColor(.white)
                         
                         if viewModel.isProductOpen {
-                            DatePicker("Open Date", selection: $viewModel.openDate ?? .now, displayedComponents: .date)
-                                .foregroundColor(.white)
+                            DatePicker(
+                                "Open Date",
+                                selection: Binding(
+                                    get: { viewModel.openDate ?? Date() },
+                                    set: { viewModel.openDate = $0 }
+                                ),
+                                displayedComponents: .date
+                            )
+                            .foregroundColor(.white)
                         }
                     }
                     .padding()

@@ -63,6 +63,23 @@ extension Date {
     }
 }
 
+// Add these formatters to the existing Extensions.swift file:
+extension DateFormatter {
+    static let medium: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+    
+    static let shortWithTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
 // MARK: - String Extensions
 
 extension String {

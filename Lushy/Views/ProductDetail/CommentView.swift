@@ -5,11 +5,11 @@ struct CommentView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(comment.text)
+            Text(comment.text ?? "")
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
             
-            Text(formatDate(comment.date))
+            Text(formatDate(comment.createdAt ?? Date()))
                 .font(.caption)
                 .foregroundColor(.secondary)
             
