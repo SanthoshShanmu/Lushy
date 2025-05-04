@@ -137,18 +137,18 @@ class CoreDataManager {
     
     // Toggle favorite status
     func toggleFavorite(id: NSManagedObjectID) {
-        let context = container.newBackgroundContext()
+        let context = viewContext
         
-        context.performAndWait {
-            if let userProduct = context.object(with: id) as? UserProduct {
-                userProduct.favorite = !userProduct.favorite
-                
-                do {
-                    try context.save()
-                } catch {
-                    print("Error toggling favorite: \(error)")
-                }
+        context.perform {
+            guard let product = try? context.existingObject(with: id) as? UserProduct else {
+                return
             }
+            
+            // Toggle the favorite status
+            product.favorite = !product.favorite
+            
+            // Save the context immediately
+            try? context.save()
         }
     }
     

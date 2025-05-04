@@ -1,5 +1,6 @@
 import Foundation
 
+// Standard model without namespace
 struct WishlistItem: Identifiable, Codable {
     let id: UUID
     let productName: String

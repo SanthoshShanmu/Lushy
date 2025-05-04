@@ -34,6 +34,21 @@ class FavoritesViewModel: ObservableObject {
     
     // Toggle favorite status
     func toggleFavorite(product: UserProduct) {
-        CoreDataManager.shared.toggleFavorite(id: product.objectID)
+        // Store the ID
+        let productID = product.objectID
+        
+        // Toggle in CoreData
+        CoreDataManager.shared.toggleFavorite(id: productID)
+        
+        // Immediately update UI without waiting for notification
+        DispatchQueue.main.async {
+            // If we're removing from favorites, remove from our array
+            if !product.favorite {
+                self.favoriteProducts.removeAll { $0.objectID == productID }
+            } else {
+                // Re-fetch all favorites to ensure proper sorting/filtering
+                self.fetchFavorites()
+            }
+        }
     }
 }

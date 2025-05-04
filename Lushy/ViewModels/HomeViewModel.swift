@@ -42,7 +42,7 @@ class HomeViewModel: ObservableObject {
                 // Products that have been opened
                 self.openProducts = allProducts.filter { product in
                     guard let openDate = product.openDate else { return false }
-                    guard let expireDate = product.expireDate else { return true } 
+                    guard let expireDate = product.expireDate else { return true }
                     return openDate <= today && expireDate > today
                 }
                 
@@ -90,7 +90,43 @@ class HomeViewModel: ObservableObject {
     
     // Toggle favorite status
     func toggleFavorite(product: UserProduct) {
-        CoreDataManager.shared.toggleFavorite(id: product.objectID)
+        // Store the ID before toggling
+        let productID = product.objectID
+        
+        // Toggle favorite status in CoreData
+        CoreDataManager.shared.toggleFavorite(id: productID)
+        
+        // Immediately update the UI for this specific product
+        DispatchQueue.main.async {
+            // Refresh the specific product in our collections
+            if let updatedProduct = try? self.managedObjectContext.existingObject(with: productID) as? UserProduct {
+                // Find and update the product in all arrays
+                self.updateProductInArrays(updatedProduct)
+            }
+        }
+    }
+    
+    // Add this helper method to update a product in all arrays
+    private func updateProductInArrays(_ updatedProduct: UserProduct) {
+        // Update in openProducts
+        if let index = openProducts.firstIndex(where: { $0.objectID == updatedProduct.objectID }) {
+            openProducts[index] = updatedProduct
+        }
+        
+        // Update in expiringProducts
+        if let index = expiringProducts.firstIndex(where: { $0.objectID == updatedProduct.objectID }) {
+            expiringProducts[index] = updatedProduct
+        }
+        
+        // Update in storedProducts
+        if let index = storedProducts.firstIndex(where: { $0.objectID == updatedProduct.objectID }) {
+            storedProducts[index] = updatedProduct
+        }
+        
+        // If this is the selected product, update it too
+        if let selected = selectedProduct, selected.objectID == updatedProduct.objectID {
+            selectedProduct = updatedProduct
+        }
     }
     
     // Delete product

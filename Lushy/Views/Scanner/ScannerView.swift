@@ -7,53 +7,96 @@ struct ScannerView: View {
     
     var body: some View {
         ZStack {
+            // Background
+            Color.black.edgesIgnoringSafeArea(.all)
+            
             // Camera view
             if viewModel.isScanning {
                 CameraPreviewView(viewModel: viewModel)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.green, lineWidth: 3)
-                            .frame(width: 250, height: 250)
+                        RoundedRectangle(cornerRadius: 30)
+                            .stroke(Color.lushyPink, lineWidth: 4)
+                            .frame(width: 280, height: 280)
                             .padding()
+                            .shadow(color: Color.lushyPink.opacity(0.7), radius: 10, x: 0, y: 0)
                     )
                     .overlay(
                         VStack {
                             Spacer()
                             Text("Position barcode within the frame")
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white)
-                                .padding()
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 20)
                                 .background(Color.black.opacity(0.7))
-                                .cornerRadius(10)
-                                .padding(.bottom, 40)
+                                .cornerRadius(20)
+                                .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 0)
+                                .padding(.bottom, 60)
                         }
                     )
             } else {
-                Color.black.opacity(0.9)
-                    .overlay(
-                        VStack(spacing: 20) {
-                            Button(action: {
-                                viewModel.startScanning()
-                            }) {
-                                Label("Start Scanning", systemImage: "barcode.viewfinder")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .cornerRadius(10)
+                // Scanner not active view
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.black, Color.fromHex("#1E1E1E")]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
+                .overlay(
+                    VStack(spacing: 30) {
+                        // Icon
+                        Image(systemName: "barcode.viewfinder")
+                            .font(.system(size: 60))
+                            .foregroundColor(.lushyPink)
+                            .padding(20)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(0.6))
+                                    .shadow(color: Color.lushyPink.opacity(0.3), radius: 20, x: 0, y: 0)
+                            )
+                            .padding(.bottom, 20)
+                        
+                        // Scan button
+                        Button(action: {
+                            viewModel.startScanning()
+                        }) {
+                            HStack(spacing: 15) {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 18, weight: .medium))
+                                Text("Start Scanning")
+                                    .font(.system(size: 18, weight: .semibold))
                             }
-                            
-                            Button(action: {
-                                viewModel.showManualEntry = true
-                            }) {
-                                Label("Manual Entry", systemImage: "keyboard")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.green)
-                                    .cornerRadius(10)
-                            }
+                            .padding(.vertical, 18)
+                            .frame(width: 250)
+                            .background(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .fill(Color.lushyPink)
+                                    .shadow(color: Color.lushyPink.opacity(0.6), radius: 15, x: 0, y: 5)
+                            )
+                            .foregroundColor(.white)
                         }
-                    )
+                        
+                        // Manual entry button
+                        Button(action: {
+                            viewModel.showManualEntry = true
+                        }) {
+                            HStack(spacing: 15) {
+                                Image(systemName: "keyboard")
+                                    .font(.system(size: 18, weight: .medium))
+                                Text("Manual Entry")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
+                            .padding(.vertical, 18)
+                            .frame(width: 250)
+                            .background(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .fill(Color.lushyPurple)
+                                    .shadow(color: Color.lushyPurple.opacity(0.6), radius: 15, x: 0, y: 5)
+                            )
+                            .foregroundColor(.white)
+                        }
+                    }
+                )
             }
             
             // Show loading indicator while fetching product
@@ -140,7 +183,7 @@ struct ScannerView: View {
         case .notDetermined:
             // Request permission
             AVCaptureDevice.requestAccess(for: .video) { granted in
-                if !granted {
+                if (!granted) {
                     DispatchQueue.main.async {
                         self.showCameraPermissionAlert = true
                     }

@@ -28,7 +28,13 @@ struct FavoritesView: View {
                 selectedProduct = nil
             }) {
                 if let product = selectedProduct {
-                    ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                    // Ensure we have the latest data for this product
+                    if let refreshedProduct = try? CoreDataManager.shared.viewContext.existingObject(with: product.objectID) as? UserProduct {
+                        ProductDetailView(viewModel: ProductDetailViewModel(product: refreshedProduct))
+                    } else {
+                        // Fallback to the selected product if refresh fails
+                        ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                    }
                 }
             }
             .onAppear {

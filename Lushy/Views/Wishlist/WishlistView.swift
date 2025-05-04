@@ -1,69 +1,96 @@
+import Foundation
 import SwiftUI
 
 struct WishlistView: View {
     @ObservedObject var viewModel: WishlistViewModel
-    @State private var showingAddItemSheet = false
+    @State private var showingLoginPrompt = false
+    @Binding var isLoggedIn: Bool  // Make sure this binding exists
     
     var body: some View {
         NavigationView {
-            List {
-                if viewModel.wishlistItems.isEmpty {
-                    Text("Your wishlist is empty. Tap the + button to add items.")
-                        .foregroundColor(.gray)
-                        .padding()
-                } else {
-                    ForEach(viewModel.wishlistItems) { item in
-                        WishlistItemRow(item: item)
-                    }
-                    .onDelete { indexSet in
-                        viewModel.removeItem(at: indexSet)
-                    }
-                }
-            }
-            .listStyle(InsetGroupedListStyle())
-            .navigationTitle("Wishlist")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddItemSheet = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddItemSheet) {
-                AddWishlistItemView(viewModel: viewModel)
-            }
-            .overlay(
-                Group {
-                    if viewModel.isLoading {
-                        ProgressView("Loading wishlist...")
-                            .padding()
-                            .background(Color.secondary.opacity(0.3))
-                            .cornerRadius(10)
-                    }
-                    
-                    if let errorMessage = viewModel.errorMessage {
-                        VStack {
-                            Spacer()
-                            Text(errorMessage)
+            ZStack {
+                Color.lushyBackground.opacity(0.3).edgesIgnoringSafeArea(.all)
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                        .scaleEffect(1.5)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 20) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.lushyPink)
+                        
+                        Text("Authentication Required")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                        
+                        Text(errorMessage)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Button(action: {
+                            showingLoginPrompt = true
+                        }) {
+                            Text("Log In")
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 30)
+                                .background(Color.lushyPink)
                                 .foregroundColor(.white)
-                                .padding()
-                                .background(Color.red.opacity(0.8))
-                                .cornerRadius(10)
-                                .padding()
-                                .onAppear {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                        viewModel.errorMessage = nil
-                                    }
-                                }
+                                .cornerRadius(15)
                         }
                     }
+                    .padding()
+                } else if viewModel.wishlistItems.isEmpty {
+                    // Empty state view
+                    VStack(spacing: 20) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.lushyPink)
+                        
+                        Text("Your Wishlist is Empty")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                        
+                        Text("Items you add to your wishlist will appear here")
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding()
+                } else {
+                    // Your wishlist items display
+                    List {
+                        ForEach(viewModel.wishlistItems) { item in
+                            WishlistItemRow(item: item)
+                        }
+                        .onDelete(perform: viewModel.removeItem)
+                    }
+                    .listStyle(InsetGroupedListStyle())
                 }
-            )
-            .onAppear {
-                viewModel.fetchWishlistItems()
             }
+            .navigationTitle("My Wishlist")
+            .sheet(isPresented: $showingLoginPrompt) {
+                LoginView(isLoggedIn: $isLoggedIn)
+                    .onDisappear {
+                        if isLoggedIn {
+                            // Add a short delay to ensure the token is properly saved
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                print("Login sheet dismissed, refreshing wishlist with token: \(AuthService.shared.token ?? "none")")
+                                viewModel.fetchWishlist()
+                            }
+                        }
+                    }
+            }
+        }
+        .onAppear {
+            // Debug print to check auth state
+            print("WishlistView appeared, logged in: \(isLoggedIn), token: \(AuthService.shared.token ?? "none")")
+            viewModel.fetchWishlist()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("AuthenticationFailed"))) { _ in
+            showingLoginPrompt = true
         }
     }
 }

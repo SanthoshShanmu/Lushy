@@ -111,12 +111,7 @@ extension String {
 // MARK: - Color Extensions
 
 extension Color {
-    static let lushyPrimary = Color("Primary")
-    static let lushySecondary = Color("Secondary")
-    static let lushyBackground = Color("Background")
-    static let lushyAccent = Color("Accent")
-    
-    // Utility function to get UI color from hex
+    // Keep only the hex utility function
     static func fromHex(_ hex: String) -> Color {
         var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")

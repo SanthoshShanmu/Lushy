@@ -6,18 +6,30 @@ struct ProductDetailView: View {
     @State private var showingDeleteAlert = false
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Break up into smaller components within the same file
-                _ProductHeaderView(viewModel: viewModel)
-                _UsageInfoView(viewModel: viewModel)
-                _ActionButtonsView(viewModel: viewModel)
-                _CommentsSection(viewModel: viewModel)
-                _ReviewsSection(viewModel: viewModel)
+        ZStack {
+            Color.lushyBackground.opacity(0.3).edgesIgnoringSafeArea(.all)
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    // Product header
+                    _PrettyProductHeader(viewModel: viewModel)
+                    
+                    // Usage info
+                    _PrettyUsageInfo(viewModel: viewModel)
+                    
+                    // Actions
+                    _PrettyActionButtons(viewModel: viewModel)
+                    
+                    // Comments
+                    _PrettyCommentsSection(viewModel: viewModel)
+                    
+                    // Reviews
+                    _PrettyReviewsSection(viewModel: viewModel)
+                }
+                .padding(.bottom, 30)
             }
-            .padding()
         }
-        .navigationTitle("Product Details")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -26,7 +38,17 @@ struct ProductDetailView: View {
                 }) {
                     Image(systemName: "trash")
                         .foregroundColor(.red)
+                        .padding(8)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Circle())
                 }
+            }
+            
+            // Add a back button with custom design
+            ToolbarItem(placement: .principal) {
+                Text("Product Details")
+                    .font(.headline)
+                    .foregroundColor(.lushyPurple)
             }
         }
         .sheet(isPresented: $viewModel.showReviewForm) {
@@ -37,7 +59,6 @@ struct ProductDetailView: View {
                 title: Text("Delete Product"),
                 message: Text("Are you sure you want to delete this product? This action cannot be undone."),
                 primaryButton: .destructive(Text("Delete")) {
-                    // Handle delete
                     presentationMode.wrappedValue.dismiss()
                 },
                 secondaryButton: .cancel()
@@ -59,95 +80,124 @@ struct ProductDetailView: View {
     }
 }
 
-// MARK: - Product Header Component
-private struct _ProductHeaderView: View {
+// Create prettier components for product detail
+
+private struct _PrettyProductHeader: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
-        HStack(alignment: .top) {
-            if let imageUrlString = viewModel.product.imageUrl, let imageUrl = URL(string: imageUrlString) {
+        VStack(alignment: .center, spacing: 15) {
+            if let imageUrlString = viewModel.product.imageUrl,
+               let imageUrl = URL(string: imageUrlString) {
                 AsyncImage(url: imageUrl) { phase in
                     switch phase {
                     case .empty:
                         ProgressView()
-                            .frame(width: 120, height: 120)
+                            .frame(width: 180, height: 180)
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 120, height: 120)
-                            .cornerRadius(8)
+                            .frame(width: 180, height: 180)
+                            .cornerRadius(20)
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
                     case .failure:
                         Image(systemName: "photo")
-                            .frame(width: 120, height: 120)
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                            .frame(width: 180, height: 180)
                     @unknown default:
                         EmptyView()
                     }
                 }
             } else {
                 Image(systemName: "photo")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
+                    .font(.system(size: 60))
                     .foregroundColor(.gray)
+                    .frame(width: 180, height: 180)
             }
             
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 5) {
                 Text(viewModel.product.productName ?? "Unknown Product")
-                    .font(.title3)
-                    .fontWeight(.bold)
+                    .font(.system(size: 24, weight: .bold))
+                    .multilineTextAlignment(.center)
                 
                 if let brand = viewModel.product.brand {
                     Text(brand)
-                        .font(.subheadline)
+                        .font(.system(size: 18))
                         .foregroundColor(.secondary)
                 }
-                
-                HStack {
-                    if viewModel.product.vegan {
-                        Label("Vegan", systemImage: "leaf.fill")
+            }
+            .padding(.top, 10)
+            
+            HStack(spacing: 20) {
+                if viewModel.product.vegan {
+                    VStack(spacing: 5) {
+                        Image(systemName: "leaf.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 22))
+                        
+                        Text("Vegan")
                             .font(.caption)
                             .foregroundColor(.green)
-                            .padding(.vertical, 2)
-                            .padding(.horizontal, 8)
-                            .background(Color.green.opacity(0.1))
-                            .cornerRadius(4)
                     }
-                    
-                    if viewModel.product.crueltyFree {
-                        Label("Cruelty-Free", systemImage: "heart.fill")
-                            .font(.caption)
-                            .foregroundColor(.pink)
-                            .padding(.vertical, 2)
-                            .padding(.horizontal, 8)
-                            .background(Color.pink.opacity(0.1))
-                            .cornerRadius(4)
-                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(15)
                 }
                 
-                Spacer()
-                
-                Button(action: {
-                    viewModel.toggleFavorite()
-                }) {
-                    Label(
-                        viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
-                        systemImage: viewModel.product.favorite ? "star.fill" : "star"
-                    )
-                    .font(.caption)
-                    .foregroundColor(viewModel.product.favorite ? .yellow : .blue)
+                if viewModel.product.crueltyFree {
+                    VStack(spacing: 5) {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.lushyPink)
+                            .font(.system(size: 22))
+                        
+                        Text("Cruelty-Free")
+                            .font(.caption)
+                            .foregroundColor(.lushyPink)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .background(Color.lushyPink.opacity(0.1))
+                    .cornerRadius(15)
                 }
             }
+            .padding(.top, 5)
+            
+            Button(action: {
+                viewModel.toggleFavorite()
+            }) {
+                HStack(spacing: 10) {
+                    Image(systemName: viewModel.product.favorite ? "star.fill" : "star")
+                        .foregroundColor(viewModel.product.favorite ? .yellow : .gray)
+                    
+                    Text(viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites")
+                        .font(.system(size: 16))
+                        .foregroundColor(viewModel.product.favorite ? .yellow : .gray)
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 15)
+                        .stroke(viewModel.product.favorite ? Color.yellow : Color.gray, lineWidth: 1)
+                )
+            }
+            .padding(.top, 10)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 25)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 15, x: 0, y: 5)
+        )
+        .padding(.horizontal)
     }
 }
 
 // MARK: - Usage Info Component
-private struct _UsageInfoView: View {
+private struct _PrettyUsageInfo: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
@@ -239,7 +289,7 @@ private struct _UsageInfoView: View {
 }
 
 // MARK: - Action Buttons Component
-private struct _ActionButtonsView: View {
+private struct _PrettyActionButtons: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
@@ -273,7 +323,7 @@ private struct _ActionButtonsView: View {
 }
 
 // MARK: - Comments Section Component
-private struct _CommentsSection: View {
+private struct _PrettyCommentsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
@@ -322,7 +372,7 @@ private struct _CommentsSection: View {
 }
 
 // MARK: - Reviews Section Component
-private struct _ReviewsSection: View {
+private struct _PrettyReviewsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
