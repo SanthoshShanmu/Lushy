@@ -89,7 +89,8 @@ struct ProductRow: View {
             
             // Show days until expiry if available
             if let expireDate = product.expireDate {
-                let days = Calendar.current.dateComponents([.day], from: Date(), to: expireDate).day ?? 0
+                let daysComponent = Calendar.current.dateComponents([.day], from: Date(), to: expireDate)
+                let days = max(0, daysComponent.day ?? 0) // Ensure non-negative values
                 
                 VStack(spacing: 2) {
                     if days > 0 {
@@ -231,7 +232,8 @@ struct PrettyProductRow: View {
             
             // Show days until expiry with prettier styling
             if let expireDate = product.expireDate {
-                let days = Calendar.current.dateComponents([.day], from: Date(), to: expireDate).day ?? 0
+                let daysComponent = Calendar.current.dateComponents([.day], from: Date(), to: expireDate)
+                let days = max(0, daysComponent.day ?? 0) // Ensure non-negative values
                 
                 ZStack {
                     Circle()

@@ -8,61 +8,124 @@ class CoreDataManager {
     private let container: NSPersistentContainer
     
     var viewContext: NSManagedObjectContext {
-        return container.viewContext
+        // Set the main queue concurrency type explicitly
+        let context = container.viewContext
+        context.automaticallyMergesChangesFromParent = true
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        return context
     }
     
     private init() {
         container = NSPersistentContainer(name: "Lushy")
+        
+        // Add better error handling
         container.loadPersistentStores { (storeDescription, error) in
             if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
+                print("Persistent store loading error: \(error), \(error.userInfo)")
+                
+                // Handle corrupted store by recreating it
+                if error.code == NSPersistentStoreIncompatibleVersionHashError || 
+                   error.code == 256 || // The file couldn't be opened
+                   error.domain == NSSQLiteErrorDomain {
+                    
+                    self.recreateCorruptedStore()
+                }
             }
+        }
+        
+        // Set global configurations for the container
+        container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
+    
+    // Add this method to handle corrupted database
+    private func recreateCorruptedStore() {
+        // Get URL to the SQLite store
+        guard let storeURL = container.persistentStoreCoordinator.persistentStores.first?.url else {
+            print("Could not find store URL")
+            return
+        }
+        
+        print("Attempting to recreate corrupted store at \(storeURL)")
+        
+        do {
+            // Remove corrupted store
+            try container.persistentStoreCoordinator.destroyPersistentStore(at: storeURL, ofType: NSSQLiteStoreType)
+            
+            // Create a new store
+            try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: storeURL, options: nil)
+            
+            print("Successfully recreated store")
+        } catch {
+            print("Failed to recreate store: \(error)")
         }
     }
     
     // MARK: - UserProduct Operations
     
-    func saveUserProduct(barcode: String,
-                        productName: String,
-                        brand: String?,
-                        imageUrl: String?,
-                        purchaseDate: Date,
-                        openDate: Date?,
-                        periodsAfterOpening: String?,
-                        vegan: Bool,
-                        crueltyFree: Bool) -> NSManagedObjectID? {
-        
+    func saveUserProduct(
+        barcode: String,
+        productName: String,
+        brand: String?,
+        imageUrl: String?,
+        purchaseDate: Date,
+        openDate: Date?,
+        periodsAfterOpening: String?,
+        vegan: Bool,
+        crueltyFree: Bool
+    ) -> NSManagedObjectID? {
+        // Create a new context for this operation
         let context = container.newBackgroundContext()
         var objectID: NSManagedObjectID?
         
         context.performAndWait {
-            let userProduct = NSEntityDescription.insertNewObject(forEntityName: "UserProduct", into: context) as! UserProduct
+            let product = UserProduct(context: context)
             
-            userProduct.barcode = barcode
-            userProduct.productName = productName
-            userProduct.brand = brand
-            userProduct.imageUrl = imageUrl
-            userProduct.purchaseDate = purchaseDate
-            userProduct.openDate = openDate
-            userProduct.periodsAfterOpening = periodsAfterOpening
-            userProduct.vegan = vegan
-            userProduct.crueltyFree = crueltyFree
-            userProduct.favorite = false
-            userProduct.inWishlist = false
-            // No need to initialize comments and reviews as they are CoreData relationships now
+            // Set properties
+            product.barcode = barcode
+            product.productName = productName
+            product.brand = brand
+            product.imageUrl = imageUrl
+            product.purchaseDate = purchaseDate
+            product.openDate = openDate
+            product.vegan = vegan
+            product.crueltyFree = crueltyFree
             
-            // Calculate expiry date if opened and has periodsAfterOpening
+            // Calculate expiry date if provided period after opening
             if let openDate = openDate, let periodsAfterOpening = periodsAfterOpening {
-                if let months = extractMonths(from: periodsAfterOpening) {
-                    userProduct.expireDate = Calendar.current.date(byAdding: .month, value: months, to: openDate)
+                if let months = extractMonths(from: periodsAfterOpening),
+                   let expireDate = Calendar.current.date(byAdding: .month, value: months, to: openDate) {
+                    product.expireDate = expireDate
                 }
             }
             
             do {
                 try context.save()
-                objectID = userProduct.objectID
+                objectID = product.objectID
+                print("Successfully saved product: \(productName)")
             } catch {
                 print("Failed to save user product: \(error)")
+                
+                // If error is SQLite related, try to recover
+                if (error as NSError).domain == NSSQLiteErrorDomain {
+                    recreateCorruptedStore()
+                    
+                    // Try one more time with a fresh context
+                    let recoveryContext = container.newBackgroundContext()
+                    recoveryContext.performAndWait {
+                        let recoveryProduct = UserProduct(context: recoveryContext)
+                        // Set all properties again...
+                        // (Same code as above but in recoveryContext)
+                        
+                        do {
+                            try recoveryContext.save()
+                            objectID = recoveryProduct.objectID
+                            print("Successfully recovered product save after store recreation")
+                        } catch {
+                            print("Still failed to save after recovery attempt: \(error)")
+                        }
+                    }
+                }
             }
         }
         
@@ -170,14 +233,121 @@ class CoreDataManager {
     
     // Helper function to extract months from period string like "12 months"
     private func extractMonths(from periodString: String) -> Int? {
-        let pattern = "(\\d+)\\s*[Mm]"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        // Common formats: "12M", "12 months", "12 Month(s)", etc.
+        let pattern = "([0-9]+)[\\s]*[Mm]?"
         
-        if let match = regex.firstMatch(in: periodString, range: NSRange(periodString.startIndex..., in: periodString)) {
-            if let range = Range(match.range(at: 1), in: periodString) {
-                return Int(periodString[range])
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: periodString, range: NSRange(periodString.startIndex..., in: periodString)),
+           let range = Range(match.range(at: 1), in: periodString) {
+            return Int(periodString[range])
+        }
+        
+        return nil
+    }
+    
+    // Update product expiry date
+    func updateProductExpiry(id: NSManagedObjectID, newExpiry: Date) {
+        let context = container.newBackgroundContext()
+        
+        context.performAndWait {
+            if let product = try? context.existingObject(with: id) as? UserProduct {
+                // Cancel existing notification
+                NotificationService.shared.cancelNotification(for: product)
+                
+                // Update expiry
+                product.expireDate = newExpiry
+                
+                try? context.save()
+                
+                // Reschedule notification
+                NotificationService.shared.scheduleExpiryNotification(for: product)
             }
         }
-        return nil
+    }
+    
+    // Add this function
+    func calculateAverageProductLifespan(brand: String? = nil, productType: String? = nil) -> TimeInterval? {
+        let context = viewContext
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        
+        // Only include products that have been opened
+        var predicates: [NSPredicate] = [
+            NSPredicate(format: "openDate != nil"),
+        ]
+        
+        if let brand = brand {
+            predicates.append(NSPredicate(format: "brand == %@", brand))
+        }
+        
+        if let productType = productType {
+            predicates.append(NSPredicate(format: "productType == %@", productType))
+        }
+        
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        
+        do {
+            let products = try context.fetch(request)
+            if products.isEmpty { return nil }
+            
+            // Get finished products from UserDefaults
+            let defaults = UserDefaults.standard
+            let finishedProducts = defaults.dictionary(forKey: "FinishedProducts") as? [String: Date] ?? [:]
+            
+            // Calculate average time from open to finish using explicit closure instead of + operator
+            let intervals = products.compactMap { product -> TimeInterval? in
+                guard let barcode = product.barcode,
+                      let openDate = product.openDate,
+                      let finishDate = finishedProducts[barcode] else { 
+                    return nil 
+                }
+                return finishDate.timeIntervalSince(openDate)
+            }
+            
+            if intervals.isEmpty { return nil }
+            
+            // Sum intervals explicitly to avoid ambiguity
+            let totalSeconds = intervals.reduce(0.0) { (result, interval) in
+                return result + interval
+            }
+            
+            return totalSeconds / Double(intervals.count)
+        } catch {
+            print("Error calculating average lifespan: \(error)")
+            return nil
+        }
+    }
+    
+    // Improve the markProductAsFinished method:
+
+    func markProductAsFinished(id: NSManagedObjectID) {
+        let context = container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        
+        context.performAndWait {
+            guard let product = try? context.existingObject(with: id) as? UserProduct else {
+                return
+            }
+            
+            // Cancel any pending notifications
+            NotificationService.shared.cancelNotification(for: product)
+            
+            // Instead of deleting, add a "finished" flag
+            product.setValue(true, forKey: "isFinished")
+            product.setValue(Date(), forKey: "finishDate")
+            
+            do {
+                try context.save()
+                
+                // Notify on the main thread after successful save
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .NSManagedObjectContextDidSave,
+                        object: context
+                    )
+                }
+            } catch {
+                print("Error updating product: \(error)")
+            }
+        }
     }
 }

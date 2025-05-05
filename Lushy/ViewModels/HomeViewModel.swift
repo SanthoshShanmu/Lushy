@@ -14,15 +14,22 @@ class HomeViewModel: ObservableObject {
     private let managedObjectContext = CoreDataManager.shared.viewContext
     
     init() {
+        print("HomeViewModel: initializing")
+        
         fetchProducts()
+        
+        print("HomeViewModel: setting up notification listener")
         
         // Subscribe to context changes to keep the UI updated
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
+                print("HomeViewModel: received context did save notification")
                 self?.fetchProducts()
             }
             .store(in: &cancellables)
+        
+        print("HomeViewModel: initialization complete")
     }
     
     // Fetch products and sort into sections
@@ -41,6 +48,11 @@ class HomeViewModel: ObservableObject {
                 
                 // Products that have been opened
                 self.openProducts = allProducts.filter { product in
+                    // Skip products that are marked as finished
+                    guard product.value(forKey: "isFinished") as? Bool != true else {
+                        return false
+                    }
+                    
                     guard let openDate = product.openDate else { return false }
                     guard let expireDate = product.expireDate else { return true }
                     return openDate <= today && expireDate > today
@@ -48,6 +60,11 @@ class HomeViewModel: ObservableObject {
                 
                 // Products that are expiring soon (within 30 days)
                 self.expiringProducts = allProducts.filter { product in
+                    // Skip products that are marked as finished
+                    guard product.value(forKey: "isFinished") as? Bool != true else {
+                        return false
+                    }
+                    
                     guard let expireDate = product.expireDate else { return false }
                     let thirtyDaysFromNow = Calendar.current.date(byAdding: .day, value: 30, to: today)!
                     return expireDate <= thirtyDaysFromNow && expireDate > today
@@ -55,6 +72,11 @@ class HomeViewModel: ObservableObject {
                 
                 // Products in storage (purchased but not opened)
                 self.storedProducts = allProducts.filter { product in
+                    // Skip products that are marked as finished
+                    guard product.value(forKey: "isFinished") as? Bool != true else {
+                        return false
+                    }
+                    
                     return product.openDate == nil
                 }
                 
@@ -131,10 +153,21 @@ class HomeViewModel: ObservableObject {
     
     // Delete product
     func deleteProduct(product: UserProduct) {
+        // First remove the product from arrays to prevent UI from referencing deleted objects
+        openProducts.removeAll { $0.objectID == product.objectID }
+        expiringProducts.removeAll { $0.objectID == product.objectID }
+        storedProducts.removeAll { $0.objectID == product.objectID }
+        
+        // If this was the selected product, clear the selection
+        if selectedProduct?.objectID == product.objectID {
+            selectedProduct = nil
+            showProductDetail = false 
+        }
+        
         // Cancel any pending notifications
         NotificationService.shared.cancelNotification(for: product)
         
-        // Delete from Core Data
+        // Then delete from Core Data
         CoreDataManager.shared.deleteProduct(id: product.objectID)
     }
 }

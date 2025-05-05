@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 struct ProductDetailView: View {
     @ObservedObject var viewModel: ProductDetailViewModel
@@ -63,6 +64,13 @@ struct ProductDetailView: View {
                 },
                 secondaryButton: .cancel()
             )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProductDeleted"))) { notification in
+            if let deletedID = notification.object as? NSManagedObjectID, 
+               deletedID == viewModel.product.objectID {
+                // Product was deleted, dismiss this view
+                presentationMode.wrappedValue.dismiss()
+            }
         }
     }
     

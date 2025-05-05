@@ -14,6 +14,8 @@ struct ManualEntryView: View {
                         .keyboardType(.numberPad)
                     
                     TextField("Product Name", text: $viewModel.manualProductName)
+                        .padding(.vertical, 8) // Add consistent padding
+                        .textFieldStyle(RoundedBorderTextFieldStyle()) // Use standard style
                     
                     TextField("Brand", text: $viewModel.manualBrand)
                 } header: {
@@ -60,7 +62,7 @@ struct ManualEntryView: View {
                     
                     Button(action: {
                         // Try to look up product by barcode if entered
-                        if !viewModel.manualBarcode.isEmpty {
+                        if (!viewModel.manualBarcode.isEmpty) {
                             viewModel.fetchProduct(barcode: viewModel.manualBarcode)
                         }
                     }) {

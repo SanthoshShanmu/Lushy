@@ -35,10 +35,12 @@ class ScannerViewModel: ObservableObject {
     init() {
         // Subscribe to barcode scanner result
         barcodeScannerService.$scannedBarcode
-            .compactMap { $0 }
+            .compactMap { $0 } // Filter out nil values
             .sink { [weak self] barcode in
-                self?.scannedBarcode = barcode
-                self?.fetchProduct(barcode: barcode)
+                guard let self = self else { return }
+                self.scannedBarcode = barcode
+                self.fetchProduct(barcode: barcode)
+                self.isScanning = false // Stop scanning after finding a barcode
             }
             .store(in: &cancellables)
         
@@ -48,12 +50,13 @@ class ScannerViewModel: ObservableObject {
             .sink { [weak self] error in
                 switch error {
                 case .cameraAccessDenied:
-                    self?.errorMessage = "Camera access denied. Please enable camera access in Settings."
+                    self?.errorMessage = "Camera access is required to scan barcodes."
                 case .cameraSetupFailed:
-                    self?.errorMessage = "Failed to set up camera."
+                    self?.errorMessage = "Failed to setup camera."
                 case .barcodeDetectionFailed:
-                    self?.errorMessage = "Failed to detect barcode."
+                    self?.errorMessage = "Could not detect barcode."
                 }
+                self?.isScanning = false
             }
             .store(in: &cancellables)
     }
@@ -67,8 +70,18 @@ class ScannerViewModel: ObservableObject {
         barcodeScannerService.stopScanning()
     }
     
-    func setupCaptureSession() -> Result<AVCaptureVideoPreviewLayer, BarcodeScannerError> {
-        return barcodeScannerService.setupCaptureSession()
+    // Use the BarcodeScannerService for camera setup instead of duplicating code
+    func setupCaptureSession() -> Result<AVCaptureVideoPreviewLayer, Error> {
+        let result = barcodeScannerService.setupCaptureSession()
+        
+        // Start scanning when setup is successful
+        if case .success = result {
+            DispatchQueue.main.async { [weak self] in
+                self?.isScanning = true
+            }
+        }
+        
+        return result.mapError { $0 as Error }
     }
     
     // Fetch product information from barcode
@@ -82,7 +95,17 @@ class ScannerViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if case .failure(let error) = completion {
-                    self?.errorMessage = "Failed to fetch product: \(error.localizedDescription)"
+                    // Remove the unnecessary cast
+                    switch error {
+                    case .invalidURL:
+                        self?.errorMessage = "Cannot access product database."
+                    case .invalidResponse, .decodingError:
+                        self?.errorMessage = "Product not found. Try manual entry instead."
+                    case .networkError:
+                        self?.errorMessage = "Network issue. Please check your connection."
+                    default:
+                        self?.errorMessage = "Couldn't fetch product information. Try again?"
+                    }
                 }
             }, receiveValue: { [weak self] product in
                 self?.scannedProduct = product

@@ -1,147 +1,134 @@
 import Foundation
+import Combine
+import KeychainSwift
 
 class AuthService {
     static let shared = AuthService()
     
-    private let tokenKey = "authToken"
-    private let userIdKey = "userId"
+    private let keychain = KeychainSwift()
+    private let tokenKey = "lushy_auth_token"
+    private let userIdKey = "lushy_user_id"
+    
+    @Published var isAuthenticated = false
+    @Published var currentUserId: String?
+    
+    var cancellables = Set<AnyCancellable>()
     
     var token: String? {
-        get {
-            let token = UserDefaults.standard.string(forKey: tokenKey)
-            print("Getting token: \(token ?? "nil")")
-            return token
-        }
+        get { keychain.get(tokenKey) }
         set {
-            print("Setting token: \(newValue ?? "nil")")
-            UserDefaults.standard.set(newValue, forKey: tokenKey)
+            if let newValue = newValue {
+                keychain.set(newValue, forKey: tokenKey)
+                isAuthenticated = true
+            } else {
+                keychain.delete(tokenKey)
+                isAuthenticated = false
+            }
         }
     }
     
     var userId: String? {
-        get { UserDefaults.standard.string(forKey: userIdKey) }
-        set { UserDefaults.standard.set(newValue, forKey: userIdKey) }
-    }
-    
-    var isLoggedIn: Bool {
-        return token != nil
-    }
-    
-    func login(email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
-        // Create the login request
-        guard let url = URL(string: "http://localhost:5001/api/auth/login") else {
-            completion(false, "Invalid URL")
-            return
+        get { keychain.get(userIdKey) }
+        set {
+            if let newValue = newValue {
+                keychain.set(newValue, forKey: userIdKey)
+                currentUserId = newValue
+            } else {
+                keychain.delete(userIdKey)
+                currentUserId = nil
+            }
         }
-        
-        // Setup request
+    }
+    
+    private init() {
+        // Check if user is already authenticated
+        if let _ = keychain.get(tokenKey), 
+           let userId = keychain.get(userIdKey) {
+            self.isAuthenticated = true
+            self.currentUserId = userId
+        }
+    }
+    
+    func register(name: String, email: String, password: String) -> AnyPublisher<Bool, Error> {
+        let url = URL(string: "http://localhost:5001/api/auth/signup")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // Create credentials JSON
-        let credentials = ["email": email, "password": password]
-        guard let jsonData = try? JSONEncoder().encode(credentials) else {
-            completion(false, "Failed to encode credentials")
-            return
-        }
-        request.httpBody = jsonData
+        let body = ["name": name, "email": email, "password": password, "passwordConfirm": password]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // Make request
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            // Handle response
-            if let error = error {
-                completion(false, error.localizedDescription)
-                return
-            }
-            
-            guard let data = data else {
-                completion(false, "No data received")
-                return
-            }
-            
-            // Parse response
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let token = json["token"] as? String,
-                   let userId = json["userId"] as? String {
-                    
-                    // Store token and user ID
-                    self?.token = token
-                    self?.userId = userId
-                    
-                    print("Login successful, token received")
-                    completion(true, nil)
-                } else {
-                    // Failed to get token
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let message = json["message"] as? String {
-                        completion(false, message)
-                    } else {
-                        completion(false, "Invalid response format")
-                    }
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    throw APIError.invalidResponse
                 }
-            } catch {
-                completion(false, "Failed to parse response: \(error.localizedDescription)")
+                return data
             }
-        }.resume()
+            .decode(type: AuthResponse.self, decoder: JSONDecoder())
+            .map { response in
+                self.token = response.token
+                self.userId = response.userId
+                return true
+            }
+            .eraseToAnyPublisher()
     }
     
-    func register(name: String, email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
-        // Create the registration request
-        guard let url = URL(string: "http://localhost:5001/api/auth/signup") else {
-            completion(false, "Invalid URL")
-            return
-        }
-        
-        // Setup request
+    func login(email: String, password: String) -> AnyPublisher<Bool, Error> {
+        let url = URL(string: "http://localhost:5001/api/auth/login")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // Create user data JSON
-        let userData = ["name": name, "email": email, "password": password]
-        guard let jsonData = try? JSONEncoder().encode(userData) else {
-            completion(false, "Failed to encode user data")
-            return
-        }
-        request.httpBody = jsonData
+        let body = ["email": email, "password": password]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // Make request
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            // Handle response
-            if let error = error {
-                completion(false, error.localizedDescription)
-                return
-            }
-            
-            guard let data = data else {
-                completion(false, "No data received")
-                return
-            }
-            
-            // Parse response
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let success = json["success"] as? Bool, success {
-                    completion(true, nil)
-                } else {
-                    // Registration failed
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let message = json["message"] as? String {
-                        completion(false, message)
-                    } else {
-                        completion(false, "Registration failed")
-                    }
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    throw APIError.invalidResponse
                 }
-            } catch {
-                completion(false, "Failed to parse response: \(error.localizedDescription)")
+                return data
             }
-        }.resume()
+            .decode(type: AuthResponse.self, decoder: JSONDecoder())
+            .map { response in
+                self.token = response.token
+                self.userId = response.userId
+                return true
+            }
+            .eraseToAnyPublisher()
     }
     
     func logout() {
         token = nil
         userId = nil
+    }
+}
+
+// Response model for auth endpoints
+struct AuthResponse: Codable {
+    let status: String
+    let token: String
+    let userId: String
+    let data: AuthUserData
+    
+    struct AuthUserData: Codable {
+        let user: User
+    }
+    
+    struct User: Codable {
+        // The backend sends _id, not id
+        let _id: String
+        let name: String
+        let email: String
+        
+        // Use CodingKeys to map _id to id if you prefer to use "id" in your Swift code
+        enum CodingKeys: String, CodingKey {
+            case _id = "_id"  // This maps the JSON field "_id" to the Swift property "_id"
+            case name
+            case email
+        }
     }
 }

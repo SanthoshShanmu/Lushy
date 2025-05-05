@@ -53,6 +53,17 @@ struct ReviewFormView: View {
                     }
                     .listRowBackground(Color.blue)
                     .disabled(viewModel.reviewTitle.isEmpty || viewModel.reviewText.isEmpty)
+                    
+                    Button(action: {
+                        // Mark as empty without review
+                        CoreDataManager.shared.markProductAsFinished(id: viewModel.product.objectID)
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Text("Skip Review & Mark as Used Up")
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(.white)
+                    }
+                    .listRowBackground(Color.orange)
                 }
             }
             .navigationTitle("Write a Review")

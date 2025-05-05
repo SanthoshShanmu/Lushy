@@ -1,11 +1,3 @@
-//
-//  UserProduct+CoreDataProperties.swift
-//  Lushy
-//
-//  Created by Karoline Herleiksplass on 01/05/2025.
-//
-//
-
 import Foundation
 import CoreData
 
@@ -28,6 +20,8 @@ extension UserProduct {
     @NSManaged public var productName: String?
     @NSManaged public var purchaseDate: Date?
     @NSManaged public var vegan: Bool
+    @NSManaged public var finishDate: Date?
+    @NSManaged public var isFinished: Bool
     @NSManaged public var comments: NSSet?
     @NSManaged public var reviews: NSSet?
 

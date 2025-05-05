@@ -24,17 +24,16 @@ struct FavoritesView: View {
             }
             .listStyle(InsetGroupedListStyle())
             .navigationTitle("Favorites")
-            .sheet(isPresented: $showProductDetail, onDismiss: {
-                selectedProduct = nil
-            }) {
+            .sheet(isPresented: $showProductDetail) {
                 if let product = selectedProduct {
-                    // Ensure we have the latest data for this product
-                    if let refreshedProduct = try? CoreDataManager.shared.viewContext.existingObject(with: product.objectID) as? UserProduct {
-                        ProductDetailView(viewModel: ProductDetailViewModel(product: refreshedProduct))
-                    } else {
-                        // Fallback to the selected product if refresh fails
-                        ProductDetailView(viewModel: ProductDetailViewModel(product: product))
-                    }
+                    ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                        .onAppear {
+                            // Ensure the view is fully loaded with product data
+                            DispatchQueue.main.async {
+                                // Force view to refresh if needed
+                                viewModel.objectWillChange.send()
+                            }
+                        }
                 }
             }
             .onAppear {

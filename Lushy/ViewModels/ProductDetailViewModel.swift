@@ -12,8 +12,17 @@ class ProductDetailViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
+    // Fix the incomplete notification handler in init()
     init(product: UserProduct) {
         self.product = product
+        
+        // Complete the notification subscription that was left incomplete
+        NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshProduct()
+            }
+            .store(in: &cancellables)
     }
     
     // Add a comment to the product
@@ -40,6 +49,9 @@ class ProductDetailViewModel: ObservableObject {
         reviewTitle = ""
         reviewText = ""
         showReviewForm = false
+        
+        // Refresh product
+        refreshProduct()
     }
     
     // Mark product as opened
@@ -48,17 +60,62 @@ class ProductDetailViewModel: ObservableObject {
         
         // Schedule expiry notification
         NotificationService.shared.scheduleExpiryNotification(for: product)
+        
+        // Refresh the product with updated data
+        refreshProduct()
     }
     
-    // Mark product as empty/finished
+    // Replace the markAsEmpty() function with this:
     func markAsEmpty() {
-        // For now, this just opens the review form
-        showReviewForm = true
+        // Check if product already has a review
+        let hasReview = (product.reviews?.count ?? 0) > 0
+        
+        if hasReview {
+            // If already reviewed, directly mark as finished
+            CoreDataManager.shared.markProductAsFinished(id: product.objectID)
+            // This will trigger UI refresh via the notification subscription
+        } else {
+            // If no review yet, offer to write one via the review form
+            showReviewForm = true
+        }
     }
     
     // Toggle favorite status
     func toggleFavorite() {
         CoreDataManager.shared.toggleFavorite(id: product.objectID)
+        
+        // Refresh the product with updated data
+        refreshProduct()
+    }
+    
+    // Make sure refreshProduct() handles errors properly:
+    private func refreshProduct() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // Check if the object still exists in the context
+                if self.product.managedObjectContext == nil {
+                    // Object has been deleted from the context
+                    NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+                    return
+                }
+                
+                // Safely try to get the updated object
+                let updatedProduct = try CoreDataManager.shared.viewContext.existingObject(with: self.product.objectID)
+                
+                if let userProduct = updatedProduct as? UserProduct {
+                    self.product = userProduct
+                } else {
+                    print("Object is not a UserProduct")
+                    NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+                }
+            } catch {
+                print("Error refreshing product: \(error)")
+                // Object was deleted or otherwise unavailable - notify to dismiss the view
+                NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+            }
+        }
     }
     
     // Calculate days until expiry
@@ -79,5 +136,14 @@ class ProductDetailViewModel: ObservableObject {
         formatter.dateStyle = .medium
         
         return "Expires on \(formatter.string(from: expireDate))"
+    }
+    
+    // Also modify the submitReview function to handle cancellations properly:
+    func cancelReview() {
+        // Reset form
+        reviewRating = 3
+        reviewTitle = ""
+        reviewText = ""
+        showReviewForm = false
     }
 }

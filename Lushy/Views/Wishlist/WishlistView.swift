@@ -96,7 +96,7 @@ struct WishlistView: View {
 }
 
 struct WishlistItemRow: View {
-    let item: WishlistItem
+    let item: AppWishlistItem
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

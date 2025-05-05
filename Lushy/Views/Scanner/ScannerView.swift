@@ -204,21 +204,26 @@ struct CameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         
+        // Set up capture session using BarcodeScannerService through the ViewModel
         let result = viewModel.setupCaptureSession()
-        switch result {
-        case .success(let previewLayer):
-            previewLayer.frame = view.bounds
-            view.layer.addSublayer(previewLayer)
-        case .failure(let error):
-            viewModel.errorMessage = "Camera setup failed: \(error.localizedDescription)"
-            viewModel.stopScanning()
+        
+        // Handle result after view creation to avoid warnings
+        DispatchQueue.main.async {
+            switch result {
+            case .success(let previewLayer):
+                previewLayer.frame = view.bounds
+                view.layer.addSublayer(previewLayer)
+            case .failure(let error):
+                viewModel.errorMessage = "Camera setup failed: \(error.localizedDescription)"
+                viewModel.isScanning = false
+            }
         }
         
         return view
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
-        // Nothing to update
+        // No updates needed
     }
 }
 
