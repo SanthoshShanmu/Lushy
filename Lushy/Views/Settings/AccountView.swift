@@ -15,6 +15,9 @@ struct AccountView: View {
     // Add state for sync button
     @State private var isSyncing = false
     
+    // Add state for region picker
+    @State private var selectedRegion = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
+    
     var body: some View {
         List {
             // Debug section for troubleshooting
@@ -159,6 +162,32 @@ struct AccountView: View {
                 }) {
                     Label("Privacy Policy", systemImage: "shield.checkerboard")
                 }
+            }
+            
+            // Add this section to your settings view
+            Section(header: Text("Product Compliance")) {
+                Picker("Region", selection: $selectedRegion) {
+                    Text("Global").tag("GLOBAL")
+                    Text("European Union").tag("EU")
+                    Text("United States").tag("US")
+                    Text("Japan").tag("JP")
+                }
+                // Replace deprecated onChange with the new version
+                #if compiler(>=5.9) && canImport(SwiftUI)
+                // Use new API for iOS 17+
+                .onChange(of: selectedRegion) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "userRegion")
+                }
+                #else
+                // Use old API for iOS 16 and earlier
+                .onChange(of: selectedRegion) { newValue in
+                    UserDefaults.standard.set(newValue, forKey: "userRegion")
+                }
+                #endif
+                
+                Text("Region setting affects product compliance information")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .listStyle(InsetGroupedListStyle())

@@ -4,7 +4,9 @@ const axios = require('axios');
 // Helper function to proxy external API calls
 async function fetchProductDetails(barcode) {
   try {
-    const response = await axios.get(`https://world.openbeautyfacts.org/api/v2/product/${barcode}.json`);
+    const response = await axios.get(
+      `https://world.openbeautyfacts.org/api/v2/product/${barcode}?fields=code,product_name,brands,image_url,image_small_url,periods_after_opening,periods_after_opening_tags,batch_code,manufacturing_date`
+    );
     return response.data;
   } catch (error) {
     console.error('Error fetching product from Open Beauty Facts:', error);
@@ -27,6 +29,54 @@ async function fetchEthicsInfo(brand) {
   }
 }
 
+// Add this new function
+async function fetchPAOTaxonomy() {
+  try {
+    const response = await axios.get(`https://world.openbeautyfacts.org/periods-after-opening.json`);
+    return response.data.tags;
+  } catch (error) {
+    console.error('Error fetching PAO taxonomy:', error);
+    return [];
+  }
+}
+
+// Add this function for batch code decoding
+function decodeBatchCode(code) {
+  if (!code) return null;
+  
+  // Common pattern: Year+Julian date (e.g., 2024-180)
+  let match = code.match(/(\d{4})[-/]?(\d{3})/);
+  if (match) {
+    const year = parseInt(match[1]);
+    const day = parseInt(match[2]);
+    
+    // Create date from Julian day
+    const date = new Date(year, 0);
+    date.setDate(day);
+    return { manufactureDate: date };
+  }
+  
+  // Month/year formats (e.g., 0324 for March 2024)
+  match = code.match(/^(\d{2})(\d{2})$/);
+  if (match) {
+    const month = parseInt(match[1]) - 1; // 0-based month
+    const year = 2000 + parseInt(match[2]);
+    return { manufactureDate: new Date(year, month, 1) };
+  }
+  
+  return null;
+}
+
+// Add function to get region-specific compliance advisories
+function getExpiryGuideline(region) {
+  const rules = {
+    'EU': 'PAO mandatory after opening',
+    'US': 'Manufacture date required',
+    'JP': 'Both expiry and PAO required'
+  };
+  return rules[region] || 'Use within 36 months of manufacture';
+}
+
 // Get all products for a user
 exports.getUserProducts = async (req, res) => {
   try {
@@ -44,7 +94,7 @@ exports.getUserProducts = async (req, res) => {
   }
 };
 
-// Get a single product
+// Enhance getUserProduct to include compliance info
 exports.getUserProduct = async (req, res) => {
   try {
     const product = await UserProduct.findOne({
@@ -58,10 +108,22 @@ exports.getUserProduct = async (req, res) => {
         message: 'Product not found'
       });
     }
+    
+    // Get user's region from request or user profile
+    const userRegion = req.query.region || req.user?.region || 'GLOBAL';
+    
+    // Add compliance advisory
+    const complianceInfo = {
+      advisory: getExpiryGuideline(userRegion),
+      region: userRegion
+    };
 
     res.status(200).json({
       status: 'success',
-      data: { product }
+      data: { 
+        product,
+        compliance: complianceInfo
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -109,6 +171,18 @@ exports.createUserProduct = async (req, res) => {
           productData.vegan = ethicsInfo.vegan;
           productData.crueltyFree = ethicsInfo.crueltyFree;
         }
+      }
+    }
+
+    // If no PAO but batch code is available, use fallback
+    if (!productData.periodsAfterOpening && externalData?.product?.batch_code) {
+      const batchInfo = decodeBatchCode(externalData.product.batch_code);
+      if (batchInfo && batchInfo.manufactureDate) {
+        // Default to 36 months if no PAO specified
+        productData.manufactureDate = batchInfo.manufactureDate;
+        
+        // Set a generic PAO of 36 months as fallback
+        productData.periodsAfterOpening = "36 months";
       }
     }
 
@@ -238,6 +312,23 @@ exports.deleteUserProduct = async (req, res) => {
     res.status(204).json({
       status: 'success',
       data: null
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Add a new endpoint to access the taxonomy
+exports.getPAOTaxonomy = async (req, res) => {
+  try {
+    const taxonomy = await fetchPAOTaxonomy();
+    
+    res.status(200).json({
+      status: 'success',
+      data: { taxonomy }
     });
   } catch (error) {
     res.status(500).json({

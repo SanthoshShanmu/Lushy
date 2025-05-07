@@ -10,12 +10,13 @@ struct LushyApp: App {
     var body: some Scene {
         WindowGroup {
             if showSplash {
-                SplashScreenView(completion: {
-                    // This will be called when splash animation completes
+                // Use the UIKit wrapper for your original animation
+                SplashUIKitWrapper {
                     withAnimation {
                         showSplash = false
                     }
-                })
+                }
+                .edgesIgnoringSafeArea(.all) // Important for full-screen display
                 .environmentObject(authManager)
             } else if !authManager.isAuthenticated {
                 LoginView(isLoggedIn: .constant(false))

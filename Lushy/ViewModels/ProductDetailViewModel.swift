@@ -12,6 +12,33 @@ class ProductDetailViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
+    // Get compliance advisory for current region
+    var complianceAdvisory: String {
+        // Get user's region from UserDefaults
+        let region = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
+        
+        // Rules for different regions
+        let rules = [
+            "EU": "PAO symbol mandatory for cosmetics after opening.",
+            "US": "Manufacture date required, expiry guidelines recommended.",
+            "JP": "Both expiry date and PAO are required by regulation.",
+            "GLOBAL": "Use within 36 months of manufacture if no PAO specified."
+        ]
+        
+        // Return region-specific rule or global rule
+        return rules[region] ?? rules["GLOBAL"]!
+    }
+    
+    // Check if a product has a PAO symbol
+    var hasPAOSymbol: Bool {
+        return product.periodsAfterOpening != nil
+    }
+    
+    // Add batch code info if available
+    var batchCodeInfo: String? {
+        return product.value(forKey: "batchCode") as? String
+    }
+    
     // Fix the incomplete notification handler in init()
     init(product: UserProduct) {
         self.product = product

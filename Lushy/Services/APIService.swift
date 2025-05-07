@@ -11,6 +11,7 @@ enum APIError: Error, Equatable {
     case invalidResponse
     case customError(String)
     case encodingError // Add this missing case
+    case productNotFound  // Add this case
     
     var localizedDescription: String {
         switch self {
@@ -32,6 +33,8 @@ enum APIError: Error, Equatable {
             return message
         case .encodingError:
             return "Failed to encode request"
+        case .productNotFound:
+            return "Product not found"
         }
     }
     
@@ -44,7 +47,8 @@ enum APIError: Error, Equatable {
              (.unexpectedResponse, .unexpectedResponse),
              (.invalidResponse, .invalidResponse),
              (.authenticationRequired, .authenticationRequired),
-             (.encodingError, .encodingError):
+             (.encodingError, .encodingError),
+             (.productNotFound, .productNotFound):
             return true
         case (.customError(let lhsMessage), .customError(let rhsMessage)):
             return lhsMessage == rhsMessage
@@ -64,31 +68,39 @@ class APIService {
     
     // MARK: - Open Beauty Facts API
     
+    // Update the fetchProduct method to include new fields
+
     func fetchProduct(barcode: String) -> AnyPublisher<Product, APIError> {
-        let urlString = "https://world.openbeautyfacts.org/api/v2/product/\(barcode).json"
+        let urlString = "https://world.openbeautyfacts.org/api/v2/product/\(barcode)?fields=code,product_name,brands,image_url,image_small_url,periods_after_opening,periods_after_opening_tags,ingredients_text_with_allergens,batch_code,manufacturing_date"
         
         guard let url = URL(string: urlString) else {
-            return Fail<Product, APIError>(error: .invalidURL).eraseToAnyPublisher()
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
         }
         
         return URLSession.shared.dataTaskPublisher(for: url)
-            .map { $0.data }
-            .tryMap { data in
-                guard let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+            .tryMap { data, response -> [String: Any] in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
                     throw APIError.invalidResponse
                 }
                 
+                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    throw APIError.decodingError
+                }
+                
+                return json
+            }
+            .tryMap { json -> Product in
                 guard let product = Product.fromOpenBeautyFactsResponse(json) else {
-                    throw APIError.invalidResponse
+                    throw APIError.decodingError
                 }
-                
                 return product
             }
-            .mapError { error in
+            .mapError { error -> APIError in
                 if let apiError = error as? APIError {
                     return apiError
                 } else {
-                    return APIError.customError(error.localizedDescription)
+                    return APIError.networkError
                 }
             }
             .eraseToAnyPublisher()
@@ -553,6 +565,36 @@ class APIService {
             }
             .eraseToAnyPublisher()
     }
+
+    // Add this method to APIService class
+
+    // Fetch PAO taxonomy from Open Beauty Facts
+    func fetchPAOTaxonomy() -> AnyPublisher<[PAOTaxonomyItem], APIError> {
+        let urlString = "https://world.openbeautyfacts.org/periods-after-opening.json"
+        guard let url = URL(string: urlString) else {
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        
+        return URLSession.shared.dataTaskPublisher(for: url)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return data
+            }
+            .decode(type: PAOTaxonomyResponse.self, decoder: JSONDecoder())
+            .map { $0.tags }
+            .mapError { error -> APIError in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return APIError.decodingError
+                }
+                return APIError.networkError
+            }
+            .eraseToAnyPublisher()
+    }
 }
 
 // API version of wishlist item (matches what your backend returns)
@@ -567,5 +609,26 @@ struct APIWishlistItem: Codable {
 // Create a Models namespace to avoid ambiguity
 enum Models {
     // Empty for namespace purposes
+}
+
+// Also add these model definitions
+struct PAOTaxonomyResponse: Codable {
+    let tags: [PAOTaxonomyItem]
+}
+
+struct PAOTaxonomyItem: Codable, Identifiable {
+    let id: String
+    let known: Int
+    let products: Int
+    
+    var displayName: String {
+        // Convert "en:12-months" to "12 Months"
+        let parts = id.split(separator: ":")
+        if parts.count > 1 {
+            return parts[1].replacingOccurrences(of: "-", with: " ")
+                .capitalized
+        }
+        return id
+    }
 }
 

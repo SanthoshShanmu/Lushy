@@ -5,12 +5,13 @@ struct ContentView: View {
     @StateObject private var scannerViewModel = ScannerViewModel()
     @StateObject private var wishlistViewModel = WishlistViewModel()
     @StateObject private var statsViewModel = StatsViewModel()
+    @StateObject private var favoritesViewModel = FavoritesViewModel()
     @EnvironmentObject var authManager: AuthManager
     @State private var showLoginPrompt = false
     
     // Tab items
     private enum Tab {
-        case home, scan, wishlist, stats, settings
+        case home, scan, wishlist, stats, settings, favorites
     }
     
     @State private var selectedTab: Tab = .home
@@ -54,6 +55,15 @@ struct ContentView: View {
                 Text("Settings")
             }
             .tag(Tab.settings)
+            
+            NavigationView {
+                FavoritesView(viewModel: favoritesViewModel)
+            }
+            .tabItem {
+                Image(systemName: "star.fill")
+                Text("Favorites")
+            }
+            .tag(Tab.favorites)
         }
         .onAppear {
             // Any additional setup needed when the main content view appears

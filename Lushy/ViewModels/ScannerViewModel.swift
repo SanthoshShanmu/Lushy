@@ -99,27 +99,47 @@ class ScannerViewModel: ObservableObject {
                     switch error {
                     case .invalidURL:
                         self?.errorMessage = "Cannot access product database."
-                    case .invalidResponse, .decodingError:
-                        self?.errorMessage = "Product not found. Try manual entry instead."
+                    case .invalidResponse:
+                        self?.errorMessage = "Invalid response from product database."
+                    case .decodingError:
+                        self?.errorMessage = "Could not process product information."
                     case .networkError:
-                        self?.errorMessage = "Network issue. Please check your connection."
+                        self?.errorMessage = "Network error. Please check your connection."
+                    case .productNotFound:
+                        self?.errorMessage = "Product not found in database."
                     default:
-                        self?.errorMessage = "Couldn't fetch product information. Try again?"
+                        // Add this default case to handle any other possible errors
+                        self?.errorMessage = "An unknown error occurred."
                     }
                 }
             }, receiveValue: { [weak self] product in
-                self?.scannedProduct = product
+                guard let self = self else { return }
+                self.scannedProduct = product
                 
-                // If we have a brand, fetch ethics info
-                if let brand = product.brands {
-                    self?.fetchEthicsInfo(brand: brand)
+                // Add these lines to populate the manual fields
+                if !product.code.isEmpty {
+                    self.manualBarcode = product.code
                 }
+                if let productName = product.productName {
+                    self.manualProductName = productName
+                }
+                if let brand = product.brands {
+                    self.manualBrand = brand
+                }
+                
+                self.fetchEthicsInfo(for: product)
             })
             .store(in: &cancellables)
     }
     
     // Fetch ethics information for the brand
-    private func fetchEthicsInfo(brand: String) {
+    private func fetchEthicsInfo(for product: Product) {
+        guard let brand = product.brands else {
+            // If no brand is available, set default values
+            self.ethicsInfo = EthicsInfo(vegan: false, crueltyFree: false)
+            return
+        }
+        
         APIService.shared.fetchEthicsInfo(brand: brand)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
@@ -131,6 +151,58 @@ class ScannerViewModel: ObservableObject {
                 self?.ethicsInfo = ethicsInfo
             })
             .store(in: &cancellables)
+    }
+    
+    // Function to decode batch code
+    private func decodeBatchCode(_ batchCode: String) -> (manufactureDate: Date?, expiryEstimate: Date?)? {
+        guard !batchCode.isEmpty else { return nil }
+        
+        // Common pattern: Year+Julian date (e.g., 2024-180)
+        let julianPattern = "([0-9]{4})[-/]?([0-9]{3})"
+        if let julianRegex = try? NSRegularExpression(pattern: julianPattern),
+           let match = julianRegex.firstMatch(in: batchCode, range: NSRange(batchCode.startIndex..., in: batchCode)) {
+            
+            if let yearRange = Range(match.range(at: 1), in: batchCode),
+               let dayRange = Range(match.range(at: 2), in: batchCode),
+               let year = Int(batchCode[yearRange]),
+               let day = Int(batchCode[dayRange]) {
+                
+                var dateComponents = DateComponents()
+                dateComponents.year = year
+                dateComponents.day = day
+                
+                if let manufactureDate = Calendar.current.date(from: dateComponents) {
+                    // Default to 36 months shelf life
+                    let expiryEstimate = Calendar.current.date(byAdding: .month, value: 36, to: manufactureDate)
+                    return (manufactureDate, expiryEstimate)
+                }
+            }
+        }
+        
+        // Month/year formats (e.g., 0324 for March 2024)
+        let monthYearPattern = "([0-9]{2})([0-9]{2})"
+        if let monthYearRegex = try? NSRegularExpression(pattern: monthYearPattern),
+           let match = monthYearRegex.firstMatch(in: batchCode, range: NSRange(batchCode.startIndex..., in: batchCode)) {
+            
+            if let monthRange = Range(match.range(at: 1), in: batchCode),
+               let yearRange = Range(match.range(at: 2), in: batchCode),
+               let month = Int(batchCode[monthRange]),
+               let year = Int(batchCode[yearRange]) {
+                
+                var dateComponents = DateComponents()
+                dateComponents.year = 2000 + year
+                dateComponents.month = month
+                dateComponents.day = 1
+                
+                if let manufactureDate = Calendar.current.date(from: dateComponents) {
+                    // Default to 36 months shelf life
+                    let expiryEstimate = Calendar.current.date(byAdding: .month, value: 36, to: manufactureDate)
+                    return (manufactureDate, expiryEstimate)
+                }
+            }
+        }
+        
+        return nil
     }
     
     // Save the product to local storage
@@ -146,6 +218,26 @@ class ScannerViewModel: ObservableObject {
         
         let openDateValue = isProductOpen ? openDate : nil
         
+        // Determine PAO value - use batch code fallback if needed
+        var paoValue = product.periodsAfterOpening
+        var expiryDate: Date? = nil
+        
+        // If product has no PAO but has batch code, try to decode it
+        if paoValue == nil, let batchCode = product.batchCode {
+            if let batchInfo = decodeBatchCode(batchCode) {
+                // Set PAO to 36 months as fallback
+                paoValue = "36 months"
+                
+                // If product will be opened now, calculate expiry from today
+                if isProductOpen && openDate != nil {
+                    expiryDate = Calendar.current.date(byAdding: .month, value: 36, to: openDate!)
+                } else {
+                    // Otherwise use the estimated expiry from batch code
+                    expiryDate = batchInfo.expiryEstimate
+                }
+            }
+        }
+        
         return CoreDataManager.shared.saveUserProduct(
             barcode: product.code,
             productName: product.productName ?? "Unknown Product",
@@ -153,9 +245,10 @@ class ScannerViewModel: ObservableObject {
             imageUrl: product.imageUrl,
             purchaseDate: purchaseDate,
             openDate: openDateValue,
-            periodsAfterOpening: product.periodsAfterOpening,
+            periodsAfterOpening: paoValue,
             vegan: ethicsInfo?.vegan ?? false,
-            crueltyFree: ethicsInfo?.crueltyFree ?? false
+            crueltyFree: ethicsInfo?.crueltyFree ?? false,
+            expiryOverride: expiryDate
         )
     }
     

@@ -49,33 +49,21 @@ class SplashAnimationViewController: UIViewController {
     // MARK: - Setup
     
     private func setupEdgeToEdgeAppearance() {
-        // Extend background to the edges of the screen
-        let lushyCream = UIColor(named: "LushyCream") ?? .white
-        
-        // Configure the view to extend under the status bar and bottom indicator
-        view.backgroundColor = lushyCream
+        // Make background fully transparent so gradient shows through
+        view.backgroundColor = .clear
         
         // Configure status bar appearance
         setNeedsStatusBarAppearanceUpdate()
         
-        // Apply same color to navigation bar if it exists
-        navigationController?.navigationBar.backgroundColor = lushyCream
-        navigationController?.navigationBar.barTintColor = lushyCream
-        
         // Make background extend edge-to-edge
         edgesForExtendedLayout = .all
         
-        // For iOS 13 and above, handle the appearance correctly
-        if #available(iOS 13.0, *) {
-            // Don't create an unused variable - just use it directly if needed
-            if UIApplication.shared.connectedScenes.first is UIWindowScene {
-                let appearance = UINavigationBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                appearance.backgroundColor = lushyCream
-                navigationController?.navigationBar.standardAppearance = appearance
-                navigationController?.navigationBar.scrollEdgeAppearance = appearance
-            }
-        }
+        // Hide navigation bar if it exists
+        navigationController?.setNavigationBarHidden(true, animated: false)
+        navigationController?.navigationBar.isHidden = true
+        
+        // Important for full-screen display
+        modalPresentationStyle = .overFullScreen
     }
     
     // Make sure status bar style matches our design
@@ -277,5 +265,10 @@ class SplashAnimationViewController: UIViewController {
                 self.onAnimationCompleted?()
             }
         }
+    }
+    
+    // Add this method to ensure status bar is hidden during splash
+    override var prefersStatusBarHidden: Bool {
+        return true
     }
 }

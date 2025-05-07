@@ -207,6 +207,7 @@ private struct _PrettyProductHeader: View {
 // MARK: - Usage Info Component
 private struct _PrettyUsageInfo: View {
     @ObservedObject var viewModel: ProductDetailViewModel
+    @AppStorage("userRegion") private var userRegion: String = "GLOBAL"
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -275,6 +276,43 @@ private struct _PrettyUsageInfo: View {
                         Spacer()
                     }
                 }
+            }
+            
+            // Add compliance advisory section
+            if viewModel.product.openDate != nil {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Compliance Information")
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                    
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        
+                        Text(viewModel.complianceAdvisory)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Region selector
+                    Menu {
+                        Button("Global") { userRegion = "GLOBAL" }
+                        Button("European Union") { userRegion = "EU" }
+                        Button("United States") { userRegion = "US" }
+                        Button("Japan") { userRegion = "JP" }
+                    } label: {
+                        HStack {
+                            Text("Region: \(userRegion)")
+                                .font(.caption)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(.blue)
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 5)
             }
         }
         .padding()

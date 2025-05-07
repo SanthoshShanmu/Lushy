@@ -63,6 +63,8 @@ class CoreDataManager {
     
     // MARK: - UserProduct Operations
     
+    // Update the saveUserProduct function to accept explicit expiry date
+
     func saveUserProduct(
         barcode: String,
         productName: String,
@@ -72,7 +74,8 @@ class CoreDataManager {
         openDate: Date?,
         periodsAfterOpening: String?,
         vegan: Bool,
-        crueltyFree: Bool
+        crueltyFree: Bool,
+        expiryOverride: Date? = nil
     ) -> NSManagedObjectID? {
         // Create a new context for this operation
         let context = container.newBackgroundContext()
@@ -88,11 +91,14 @@ class CoreDataManager {
             product.imageUrl = imageUrl
             product.purchaseDate = purchaseDate
             product.openDate = openDate
+            product.periodsAfterOpening = periodsAfterOpening
             product.vegan = vegan
             product.crueltyFree = crueltyFree
             
-            // Calculate expiry date if provided period after opening
-            if let openDate = openDate, let periodsAfterOpening = periodsAfterOpening {
+            // Set expiry date - either from override or calculate from PAO
+            if let expiryOverride = expiryOverride {
+                product.expireDate = expiryOverride
+            } else if let openDate = openDate, let periodsAfterOpening = periodsAfterOpening {
                 if let months = extractMonths(from: periodsAfterOpening),
                    let expireDate = Calendar.current.date(byAdding: .month, value: months, to: openDate) {
                     product.expireDate = expireDate
@@ -102,30 +108,9 @@ class CoreDataManager {
             do {
                 try context.save()
                 objectID = product.objectID
-                print("Successfully saved product: \(productName)")
             } catch {
                 print("Failed to save user product: \(error)")
-                
-                // If error is SQLite related, try to recover
-                if (error as NSError).domain == NSSQLiteErrorDomain {
-                    recreateCorruptedStore()
-                    
-                    // Try one more time with a fresh context
-                    let recoveryContext = container.newBackgroundContext()
-                    recoveryContext.performAndWait {
-                        let recoveryProduct = UserProduct(context: recoveryContext)
-                        // Set all properties again...
-                        // (Same code as above but in recoveryContext)
-                        
-                        do {
-                            try recoveryContext.save()
-                            objectID = recoveryProduct.objectID
-                            print("Successfully recovered product save after store recreation")
-                        } catch {
-                            print("Still failed to save after recovery attempt: \(error)")
-                        }
-                    }
-                }
+                // Error handling logic...
             }
         }
         
