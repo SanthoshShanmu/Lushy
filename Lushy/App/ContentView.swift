@@ -11,7 +11,7 @@ struct ContentView: View {
     
     // Tab items
     private enum Tab {
-        case home, scan, wishlist, stats, settings, favorites
+        case home, scan, wishlist, stats, settings, favorites, bags, tags
     }
     
     @State private var selectedTab: Tab = .home
@@ -64,6 +64,24 @@ struct ContentView: View {
                 Text("Favorites")
             }
             .tag(Tab.favorites)
+            
+            NavigationView {
+                BeautyBagsView()
+            }
+            .tabItem {
+                Image(systemName: "bag.fill")
+                Text("Bags")
+            }
+            .tag(Tab.bags)
+            
+            NavigationView {
+                TagManagerView()
+            }
+            .tabItem {
+                Image(systemName: "tag.fill")
+                Text("Tags")
+            }
+            .tag(Tab.tags)
         }
         .onAppear {
             // Any additional setup needed when the main content view appears

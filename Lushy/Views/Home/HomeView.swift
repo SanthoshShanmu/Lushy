@@ -5,6 +5,8 @@ struct HomeView: View {
     @State private var showOpenProducts = true
     @State private var showExpiringProducts = true
     @State private var showStoredProducts = true
+    @State private var showBagFilterMenu = false
+    @State private var showTagFilterMenu = false
     
     var body: some View {
         if #available(iOS 16.0, *) {
@@ -34,6 +36,29 @@ struct HomeView: View {
                         Toggle("Open Products", isOn: $showOpenProducts)
                         Toggle("Expiring Soon", isOn: $showExpiringProducts)
                         Toggle("In Storage", isOn: $showStoredProducts)
+                        Divider()
+                        // Bag filter
+                        Menu {
+                            Button("All Bags", action: { viewModel.setBagFilter(nil) })
+                            ForEach(viewModel.allBags, id: \.self) { bag in
+                                Button(action: { viewModel.setBagFilter(bag) }) {
+                                    Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
+                                }
+                            }
+                        } label: {
+                            Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
+                        }
+                        // Tag filter
+                        Menu {
+                            Button("All Tags", action: { viewModel.setTagFilter(nil) })
+                            ForEach(viewModel.allTags, id: \.self) { tag in
+                                Button(action: { viewModel.setTagFilter(tag) }) {
+                                    Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
+                                }
+                            }
+                        } label: {
+                            Label(viewModel.selectedTag?.name ?? "All Tags", systemImage: "tag")
+                        }
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 18))
@@ -54,10 +79,18 @@ struct HomeView: View {
                             .padding(.horizontal, 20)
                         
                         ForEach(viewModel.openProducts) { product in
-                            ProductRow(product: product)
+                            PrettyProductRow(product: product)
+                                .contentShape(Rectangle())  // Makes the entire row tappable
                                 .onTapGesture {
                                     viewModel.selectedProduct = product
                                     viewModel.showProductDetail = true
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        confirmDeleteProduct(product)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 }
                         }
                     }
@@ -71,10 +104,18 @@ struct HomeView: View {
                             .padding(.horizontal, 20)
                         
                         ForEach(viewModel.expiringProducts) { product in
-                            ProductRow(product: product)
+                            PrettyProductRow(product: product)
+                                .contentShape(Rectangle())  // Makes the entire row tappable
                                 .onTapGesture {
                                     viewModel.selectedProduct = product
                                     viewModel.showProductDetail = true
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        confirmDeleteProduct(product)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 }
                         }
                     }
@@ -88,10 +129,18 @@ struct HomeView: View {
                             .padding(.horizontal, 20)
                         
                         ForEach(viewModel.storedProducts) { product in
-                            ProductRow(product: product)
+                            PrettyProductRow(product: product)
+                                .contentShape(Rectangle())  // Makes the entire row tappable
                                 .onTapGesture {
                                     viewModel.selectedProduct = product
                                     viewModel.showProductDetail = true
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        confirmDeleteProduct(product)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 }
                         }
                     }
@@ -147,6 +196,25 @@ struct HomeView: View {
         }
         .onAppear {
             viewModel.fetchProducts()
+        }
+    }
+    
+    private func confirmDeleteProduct(_ product: UserProduct) {
+        let alert = UIAlertController(
+            title: "Delete \(product.productName ?? "Product")?",
+            message: "This action cannot be undone.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+            viewModel.deleteProduct(product: product)
+        })
+        
+        // Get the UIWindow to present the alert
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            rootViewController.present(alert, animated: true)
         }
     }
 }

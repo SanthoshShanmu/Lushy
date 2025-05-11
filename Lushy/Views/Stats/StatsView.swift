@@ -44,6 +44,29 @@ struct StatsView: View {
                                 selectedTimeRange = range
                             }
                         }
+                        Divider()
+                        // Bag filter
+                        Menu {
+                            Button("All Bags", action: { viewModel.setBagFilter(nil) })
+                            ForEach(viewModel.allBags, id: \.self) { bag in
+                                Button(action: { viewModel.setBagFilter(bag) }) {
+                                    Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
+                                }
+                            }
+                        } label: {
+                            Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
+                        }
+                        // Tag filter
+                        Menu {
+                            Button("All Tags", action: { viewModel.setTagFilter(nil) })
+                            ForEach(viewModel.allTags, id: \.self) { tag in
+                                Button(action: { viewModel.setTagFilter(tag) }) {
+                                    Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
+                                }
+                            }
+                        } label: {
+                            Label(viewModel.selectedTag?.name ?? "All Tags", systemImage: "tag")
+                        }
                     } label: {
                         HStack {
                             Text(selectedTimeRange.rawValue)
@@ -222,6 +245,40 @@ struct StatsView: View {
                     Text(brand)
                         .font(.subheadline)
                         .foregroundColor(.gray)
+                }
+                
+                // Bag and tag indicators
+                HStack(spacing: 6) {
+                    if let bags = product.bags as? Set<BeautyBag>, let bag = bags.first {
+                        HStack(spacing: 3) {
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                            Text(bag.name ?? "Bag")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(bag.color ?? "lushyPink").opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                    if let tags = product.tags as? Set<ProductTag>, !tags.isEmpty {
+                        ForEach(Array(tags.prefix(2)), id: \.self) { tag in
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(Color(tag.color ?? "blue"))
+                                    .frame(width: 7, height: 7)
+                                Text(tag.name ?? "")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color(tag.color ?? "blue").opacity(0.10))
+                            .cornerRadius(8)
+                        }
+                    }
                 }
                 
                 HStack {

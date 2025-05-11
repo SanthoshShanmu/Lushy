@@ -132,13 +132,59 @@ struct ScannerView: View {
                             .background(Color.blue)
                             .cornerRadius(10)
                     }
-                    .padding(.bottom, 30)
+                    .padding(.bottom)
                 }
             }
             
+            // Product not found view
+            if viewModel.productNotFound {
+                ProductNotFoundView(viewModel: viewModel)
+            }
+            
             // Show product found screen
-            if viewModel.scannedProduct != nil {
+            if viewModel.scannedProduct != nil && !viewModel.productNotFound {
                 ProductFoundView(viewModel: viewModel)
+            }
+            
+            // Product successfully added message
+            if viewModel.showProductAddedSuccess {
+                VStack {
+                    Spacer()
+                    VStack(spacing: 20) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.green)
+                        
+                        Text("Product Added Successfully!")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        Text(viewModel.scannedProduct?.productName ?? "Product")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        Button(action: {
+                            viewModel.showProductAddedSuccess = false
+                            viewModel.reset()
+                        }) {
+                            Text("Done")
+                                .fontWeight(.medium)
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 30)
+                                .background(Color.green)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .padding(.top)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.85))
+                    .cornerRadius(15)
+                    .padding()
+                    Spacer()
+                }
+                .transition(.opacity)
+                .animation(.easeInOut, value: viewModel.showProductAddedSuccess)
             }
         }
         .edgesIgnoringSafeArea(.all)
@@ -229,17 +275,18 @@ struct CameraPreviewView: UIViewRepresentable {
 
 struct ProductFoundView: View {
     @ObservedObject var viewModel: ScannerViewModel
-    @State private var showingAlert = false
+    @State private var selectedTagIDs: Set<NSManagedObjectID> = []
+    @State private var allTags: [ProductTag] = []
+    @State private var newTagName: String = ""
+    @State private var newTagColor: String = "blue"
     
     var body: some View {
         ZStack {
             Color.black.opacity(0.85)
-            
             VStack(spacing: 15) {
                 Text("Product Found")
                     .font(.title)
                     .foregroundColor(.white)
-                
                 if let product = viewModel.scannedProduct {
                     if let imageUrlString = product.imageUrl, let imageUrl = URL(string: imageUrlString) {
                         AsyncImage(url: imageUrl) { phase in
@@ -320,36 +367,97 @@ struct ProductFoundView: View {
                     .background(Color.gray.opacity(0.2))
                     .cornerRadius(10)
                     
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            viewModel.reset()
-                            viewModel.startScanning()
-                        }) {
-                            Text("Cancel")
-                                .fontWeight(.medium)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.red.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                        }
-                        
-                        Button(action: {
-                            if let _ = viewModel.saveProduct() {
-                                showingAlert = true
-                            } else {
-                                viewModel.errorMessage = "Failed to save product"
+                    // Tag selection UI
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Add Tags")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        if allTags.isEmpty {
+                            Text("No tags yet. Create one below.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(allTags, id: \.objectID) { tag in
+                                Button(action: {
+                                    if selectedTagIDs.contains(tag.objectID) {
+                                        selectedTagIDs.remove(tag.objectID)
+                                    } else {
+                                        selectedTagIDs.insert(tag.objectID)
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "tag")
+                                            .foregroundColor(Color(tag.color ?? "blue"))
+                                        Text(tag.name ?? "Unnamed Tag")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        if selectedTagIDs.contains(tag.objectID) {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
                             }
-                        }) {
-                            Text("Add to My Bag")
-                                .fontWeight(.medium)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
+                        }
+                        // Quick add new tag
+                        HStack {
+                            TextField("New Tag", text: $newTagName)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Picker("Color", selection: $newTagColor) {
+                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"], id: \.self) { color in
+                                    Text(color.capitalized)
+                                }
+                            }
+                            .frame(width: 80)
+                            Button("Add") {
+                                if !newTagName.isEmpty {
+                                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                                    allTags = CoreDataManager.shared.fetchProductTags()
+                                    newTagName = ""
+                                    newTagColor = "blue"
+                                }
+                            }.disabled(newTagName.isEmpty)
                         }
                     }
+                    .padding(.vertical, 8)
+                    
+                    Button(action: {
+                        if let objectID = viewModel.saveProduct() {
+                            // Assign tags
+                            let context = CoreDataManager.shared.viewContext
+                            if let userProduct = try? context.existingObject(with: objectID) as? UserProduct {
+                                for tagID in selectedTagIDs {
+                                    if let tag = try? context.existingObject(with: tagID) as? ProductTag {
+                                        userProduct.addToTags(tag)
+                                    }
+                                }
+                                try? context.save()
+                            }
+                            viewModel.showProductAddedSuccess = true
+                        } else {
+                            viewModel.errorMessage = "Failed to save product"
+                        }
+                    }) {
+                        Text("Add to My Bag")
+                            .fontWeight(.medium)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.top)
+                    
+                    Button(action: {
+                        viewModel.reset()
+                        viewModel.startScanning()
+                    }) {
+                        Text("Cancel")
+                            .fontWeight(.medium)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .padding(.top, 5)
                 }
             }
             .padding()
@@ -357,14 +465,62 @@ struct ProductFoundView: View {
             .cornerRadius(15)
             .padding()
         }
-        .alert(isPresented: $showingAlert) {
-            Alert(
-                title: Text("Product Added"),
-                message: Text("The product has been added to your bag."),
-                dismissButton: .default(Text("OK")) {
-                    viewModel.reset()
+        .onAppear {
+            allTags = CoreDataManager.shared.fetchProductTags()
+        }
+    }
+}
+
+struct ProductNotFoundView: View {
+    @ObservedObject var viewModel: ScannerViewModel
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.85)
+            
+            VStack(spacing: 20) {
+                Image(systemName: "magnifyingglass.circle")
+                    .font(.system(size: 60))
+                    .foregroundColor(.orange)
+                
+                Text("Product Not Found")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                
+                Text("This product isn't in our database yet. Let's add it!")
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                
+                Button(action: {
+                    // Go to manual entry with barcode filled in
+                    viewModel.showManualEntry = true
+                }) {
+                    Text("Continue to Manual Entry")
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
-            )
+                .padding(.top, 10)
+                
+                Button(action: {
+                    viewModel.productNotFound = false
+                    viewModel.reset()
+                    viewModel.startScanning()
+                }) {
+                    Text("Scan Another Product")
+                        .fontWeight(.medium)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.top, 5)
+            }
+            .padding()
+            .background(Color.black.opacity(0.7))
+            .cornerRadius(15)
+            .padding()
         }
     }
 }

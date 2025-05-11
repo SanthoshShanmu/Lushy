@@ -335,4 +335,78 @@ class CoreDataManager {
             }
         }
     }
+
+    // MARK: - BeautyBag Operations
+    
+    func createBeautyBag(name: String, color: String, icon: String) {
+        let context = viewContext
+        let bag = BeautyBag(context: context)
+        bag.name = name
+        bag.color = color
+        bag.icon = icon
+        bag.createdAt = Date()
+        try? context.save()
+    }
+    
+    func fetchBeautyBags() -> [BeautyBag] {
+        let request: NSFetchRequest<BeautyBag> = BeautyBag.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        return (try? viewContext.fetch(request)) ?? []
+    }
+    
+    func deleteBeautyBag(_ bag: BeautyBag) {
+        let context = viewContext
+        context.delete(bag)
+        try? context.save()
+    }
+    
+    func addProduct(_ product: UserProduct, toBag bag: BeautyBag) {
+        bag.addToProducts(product)
+        try? viewContext.save()
+    }
+    
+    func removeProduct(_ product: UserProduct, fromBag bag: BeautyBag) {
+        bag.removeFromProducts(product)
+        try? viewContext.save()
+    }
+    
+    func products(inBag bag: BeautyBag) -> [UserProduct] {
+        (bag.products as? Set<UserProduct>)?.sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
+    }
+
+    // MARK: - ProductTag Operations
+    
+    func createProductTag(name: String, color: String) {
+        let context = viewContext
+        let tag = ProductTag(context: context)
+        tag.name = name
+        tag.color = color
+        try? context.save()
+    }
+    
+    func fetchProductTags() -> [ProductTag] {
+        let request: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        return (try? viewContext.fetch(request)) ?? []
+    }
+    
+    func deleteProductTag(_ tag: ProductTag) {
+        let context = viewContext
+        context.delete(tag)
+        try? context.save()
+    }
+    
+    func addTag(_ tag: ProductTag, toProduct product: UserProduct) {
+        product.addToTags(tag)
+        try? viewContext.save()
+    }
+    
+    func removeTag(_ tag: ProductTag, fromProduct product: UserProduct) {
+        product.removeFromTags(tag)
+        try? viewContext.save()
+    }
+    
+    func products(withTag tag: ProductTag) -> [UserProduct] {
+        (tag.products as? Set<UserProduct>)?.sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
+    }
 }

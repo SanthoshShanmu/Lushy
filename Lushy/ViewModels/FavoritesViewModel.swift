@@ -4,7 +4,11 @@ import Combine
 
 class FavoritesViewModel: ObservableObject {
     @Published var favoriteProducts: [UserProduct] = []
-    
+    @Published var selectedBag: BeautyBag? = nil
+    @Published var selectedTag: ProductTag? = nil
+    @Published var allBags: [BeautyBag] = []
+    @Published var allTags: [ProductTag] = []
+
     private var cancellables = Set<AnyCancellable>()
     private let managedObjectContext = CoreDataManager.shared.viewContext
     
@@ -22,14 +26,36 @@ class FavoritesViewModel: ObservableObject {
     
     // Fetch favorite products from Core Data
     func fetchFavorites() {
+        fetchAllBagsAndTags()
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         request.predicate = NSPredicate(format: "favorite == YES")
-        
         do {
-            favoriteProducts = try managedObjectContext.fetch(request)
+            var products = try managedObjectContext.fetch(request)
+            if let bag = selectedBag {
+                products = products.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }
+            }
+            if let tag = selectedTag {
+                products = products.filter { ($0.tags as? Set<ProductTag>)?.contains(tag) == true }
+            }
+            favoriteProducts = products
         } catch {
             print("Error fetching favorites: \(error)")
         }
+    }
+
+    func fetchAllBagsAndTags() {
+        allBags = CoreDataManager.shared.fetchBeautyBags()
+        allTags = CoreDataManager.shared.fetchProductTags()
+    }
+
+    func setBagFilter(_ bag: BeautyBag?) {
+        selectedBag = bag
+        fetchFavorites()
+    }
+
+    func setTagFilter(_ tag: ProductTag?) {
+        selectedTag = tag
+        fetchFavorites()
     }
     
     // Toggle favorite status

@@ -18,6 +18,10 @@ struct AccountView: View {
     // Add state for region picker
     @State private var selectedRegion = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
     
+    // Add these state properties at the top of AccountView:
+    @State private var showingOBFCredentialsSheet = false
+    @State private var contributionCount = 0 // This would be loaded from local storage or API
+    
     var body: some View {
         List {
             // Debug section for troubleshooting
@@ -188,6 +192,34 @@ struct AccountView: View {
                 Text("Region setting affects product compliance information")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+            
+            // Update the OBF section
+
+            let contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count") 
+            let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
+
+            Section(header: Text("Open Beauty Facts")) {
+                Text("You've contributed \(contributionCount) products")
+                    .font(.body)
+                
+                if !contributions.isEmpty {
+                    NavigationLink("View My Contributions (\(contributions.count))") {
+                        List {
+                            ForEach(contributions, id: \.self) { productId in
+                                Link(productId, 
+                                     destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
+                            }
+                        }
+                        .navigationTitle("My Contributions")
+                    }
+                }
+                
+                Link("View Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
+                    .foregroundColor(.blue)
+            }
+            .sheet(isPresented: $showingOBFCredentialsSheet) {
+                OBFCredentialsView(isPresented: $showingOBFCredentialsSheet)
             }
         }
         .listStyle(InsetGroupedListStyle())

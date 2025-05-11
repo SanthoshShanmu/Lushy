@@ -26,51 +26,67 @@ struct ProductDetailView: View {
                     
                     // Reviews
                     _PrettyReviewsSection(viewModel: viewModel)
+                    
+                    // Bags & Tags
+                    _PrettyBagsSection(viewModel: viewModel)
+                    _PrettyTagsSection(viewModel: viewModel)
+                    
+                    // Add a less prominent delete option at the very bottom
+                    Button(action: {
+                        showingDeleteAlert = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14))
+                            Text("Remove from beauty bag")
+                                .font(.footnote)
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .padding(.top, 16)
                 }
                 .padding(.bottom, 30)
             }
         }
-        .navigationTitle("")
+        .navigationTitle("Product Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    showingDeleteAlert = true
-                }) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
-                        .padding(8)
-                        .background(Color.red.opacity(0.1))
-                        .clipShape(Circle())
+                Menu {
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Label("Delete Product", systemImage: "trash")
+                    }
+                    
+                    Button {
+                        viewModel.toggleFavorite()
+                    } label: {
+                        Label(
+                            viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
+                            systemImage: viewModel.product.favorite ? "heart.slash" : "heart"
+                        )
+                    }
+                } label: {
+                    // Make the icon more visible and larger
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.blue) // Use a more visible color
                 }
             }
-            
-            // Add a back button with custom design
-            ToolbarItem(placement: .principal) {
-                Text("Product Details")
-                    .font(.headline)
-                    .foregroundColor(.lushyPurple)
-            }
-        }
-        .sheet(isPresented: $viewModel.showReviewForm) {
-            ReviewFormView(viewModel: viewModel)
         }
         .alert(isPresented: $showingDeleteAlert) {
             Alert(
                 title: Text("Delete Product"),
                 message: Text("Are you sure you want to delete this product? This action cannot be undone."),
                 primaryButton: .destructive(Text("Delete")) {
+                    viewModel.deleteProduct()
                     presentationMode.wrappedValue.dismiss()
                 },
                 secondaryButton: .cancel()
             )
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProductDeleted"))) { notification in
-            if let deletedID = notification.object as? NSManagedObjectID, 
-               deletedID == viewModel.product.objectID {
-                // Product was deleted, dismiss this view
-                presentationMode.wrappedValue.dismiss()
-            }
         }
     }
     
@@ -498,5 +514,179 @@ private struct _PrettyReviewsSection: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Bags Section
+private struct _PrettyBagsSection: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    @State private var showBagPicker = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Beauty Bags")
+                    .font(.headline)
+                Spacer()
+                Button(action: {
+                    viewModel.fetchBagsAndTags()
+                    showBagPicker = true
+                }) {
+                    Image(systemName: "plus")
+                }
+            }
+            if viewModel.bagsForProduct().isEmpty {
+                Text("Not in any bag.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(viewModel.bagsForProduct(), id: \.self) { bag in
+                    HStack {
+                        Image(systemName: bag.icon ?? "bag.fill")
+                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        Text(bag.name ?? "Unnamed Bag")
+                        Spacer()
+                        Button(action: { viewModel.removeProductFromBag(bag) }) {
+                            Image(systemName: "minus.circle")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+        .sheet(isPresented: $showBagPicker) {
+            NavigationView {
+                List {
+                    ForEach(viewModel.allBags, id: \.self) { bag in
+                        Button(action: {
+                            viewModel.addProductToBag(bag)
+                            showBagPicker = false
+                        }) {
+                            HStack {
+                                Image(systemName: bag.icon ?? "bag.fill")
+                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                Text(bag.name ?? "Unnamed Bag")
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Add to Bag")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Close") { showBagPicker = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Tags Section
+private struct _PrettyTagsSection: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    @State private var showTagPicker = false
+    @State private var newTagName = ""
+    @State private var newTagColor = "blue"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Tags")
+                    .font(.headline)
+                Spacer()
+                Button(action: {
+                    viewModel.fetchBagsAndTags()
+                    showTagPicker = true
+                }) {
+                    Image(systemName: "plus")
+                }
+            }
+            if viewModel.tagsForProduct().isEmpty {
+                Text("No tags.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(viewModel.tagsForProduct(), id: \.self) { tag in
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(Color(tag.color ?? "blue"))
+                                    .frame(width: 10, height: 10)
+                                Text(tag.name ?? "")
+                                    .font(.caption)
+                                Button(action: { viewModel.removeTagFromProduct(tag) }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(tag.color ?? "blue").opacity(0.15))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+        .sheet(isPresented: $showTagPicker) {
+            NavigationView {
+                VStack {
+                    List {
+                        ForEach(viewModel.allTags, id: \.self) { tag in
+                            Button(action: {
+                                viewModel.addTagToProduct(tag)
+                                showTagPicker = false
+                            }) {
+                                HStack {
+                                    Circle()
+                                        .fill(Color(tag.color ?? "blue"))
+                                        .frame(width: 16, height: 16)
+                                    Text(tag.name ?? "Unnamed Tag")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    VStack(spacing: 10) {
+                        Text("Quick Create Tag")
+                            .font(.headline)
+                        HStack {
+                            TextField("New Tag", text: $newTagName)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Picker("Color", selection: $newTagColor) {
+                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"], id: \.self) { color in
+                                    Text(color.capitalized)
+                                }
+                            }
+                            .frame(width: 80)
+                            Button("Add") {
+                                if !newTagName.isEmpty {
+                                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                                    viewModel.fetchBagsAndTags()
+                                    newTagName = ""
+                                    newTagColor = "blue"
+                                }
+                            }.disabled(newTagName.isEmpty)
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("Add Tag")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Close") { showTagPicker = false }
+                    }
+                }
+            }
+        }
     }
 }

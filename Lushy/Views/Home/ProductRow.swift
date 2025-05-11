@@ -191,6 +191,40 @@ struct PrettyProductRow: View {
                         .lineLimit(1)
                 }
                 
+                // Bag and tag indicators
+                HStack(spacing: 6) {
+                    if let bags = product.bags as? Set<BeautyBag>, let bag = bags.first {
+                        HStack(spacing: 3) {
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                            Text(bag.name ?? "Bag")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(bag.color ?? "lushyPink").opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                    if let tags = product.tags as? Set<ProductTag>, !tags.isEmpty {
+                        ForEach(Array(tags.prefix(2)), id: \.self) { tag in
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(Color(tag.color ?? "blue"))
+                                    .frame(width: 7, height: 7)
+                                Text(tag.name ?? "")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color(tag.color ?? "blue").opacity(0.10))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                
                 HStack(spacing: 10) {
                     if product.vegan {
                         HStack(spacing: 3) {

@@ -9,7 +9,11 @@ class HomeViewModel: ObservableObject {
     @Published var storedProducts: [UserProduct] = []
     @Published var selectedProduct: UserProduct?
     @Published var showProductDetail = false
-    
+    @Published var selectedBag: BeautyBag? = nil
+    @Published var selectedTag: ProductTag? = nil
+    @Published var allBags: [BeautyBag] = []
+    @Published var allTags: [ProductTag] = []
+
     private var cancellables = Set<AnyCancellable>()
     private let managedObjectContext = CoreDataManager.shared.viewContext
     
@@ -34,6 +38,8 @@ class HomeViewModel: ObservableObject {
     
     // Fetch products and sort into sections
     func fetchProducts() {
+        allBags = CoreDataManager.shared.fetchBeautyBags()
+        allTags = CoreDataManager.shared.fetchProductTags()
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         
         // Ensure we're on the main thread when fetching and updating UI
@@ -41,7 +47,17 @@ class HomeViewModel: ObservableObject {
             guard let self = self else { return }
             
             do {
-                let allProducts = try self.managedObjectContext.fetch(request)
+                var allProducts = try self.managedObjectContext.fetch(request)
+                
+                // Filter by bag if selected
+                if let bag = self.selectedBag {
+                    allProducts = allProducts.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }
+                }
+                
+                // Filter by tag if selected
+                if let tag = self.selectedTag {
+                    allProducts = allProducts.filter { ($0.tags as? Set<ProductTag>)?.contains(tag) == true }
+                }
                 
                 // Sort products into categories
                 let today = Date()
@@ -169,5 +185,15 @@ class HomeViewModel: ObservableObject {
         
         // Then delete from Core Data
         CoreDataManager.shared.deleteProduct(id: product.objectID)
+    }
+    
+    func setBagFilter(_ bag: BeautyBag?) {
+        selectedBag = bag
+        fetchProducts()
+    }
+    
+    func setTagFilter(_ tag: ProductTag?) {
+        selectedTag = tag
+        fetchProducts()
     }
 }

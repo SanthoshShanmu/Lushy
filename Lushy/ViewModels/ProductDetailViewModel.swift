@@ -9,7 +9,9 @@ class ProductDetailViewModel: ObservableObject {
     @Published var reviewRating = 3
     @Published var reviewTitle = ""
     @Published var reviewText = ""
-    
+    @Published var allBags: [BeautyBag] = []
+    @Published var allTags: [ProductTag] = []
+
     private var cancellables = Set<AnyCancellable>()
     
     // Get compliance advisory for current region
@@ -172,5 +174,56 @@ class ProductDetailViewModel: ObservableObject {
         reviewTitle = ""
         reviewText = ""
         showReviewForm = false
+    }
+    
+    // Add this method to ProductDetailViewModel:
+
+    // Delete current product
+    func deleteProduct() {
+        // Cancel any pending notifications
+        NotificationService.shared.cancelNotification(for: product)
+        
+        // Delete from Core Data
+        CoreDataManager.shared.deleteProduct(id: product.objectID)
+        
+        // Post notification so lists can update
+        NotificationCenter.default.post(
+            name: NSNotification.Name("ProductDeleted"), 
+            object: product.objectID
+        )
+    }
+
+    // MARK: - Beauty Bags & Tags
+    func fetchBagsAndTags() {
+        allBags = CoreDataManager.shared.fetchBeautyBags()
+        allTags = CoreDataManager.shared.fetchProductTags()
+    }
+
+    func bagsForProduct() -> [BeautyBag] {
+        (product.bags as? Set<BeautyBag>)?.sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
+    }
+
+    func tagsForProduct() -> [ProductTag] {
+        (product.tags as? Set<ProductTag>)?.sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
+    }
+
+    func addProductToBag(_ bag: BeautyBag) {
+        CoreDataManager.shared.addProduct(product, toBag: bag)
+        refreshProduct()
+    }
+
+    func removeProductFromBag(_ bag: BeautyBag) {
+        CoreDataManager.shared.removeProduct(product, fromBag: bag)
+        refreshProduct()
+    }
+
+    func addTagToProduct(_ tag: ProductTag) {
+        CoreDataManager.shared.addTag(tag, toProduct: product)
+        refreshProduct()
+    }
+
+    func removeTagFromProduct(_ tag: ProductTag) {
+        CoreDataManager.shared.removeTag(tag, fromProduct: product)
+        refreshProduct()
     }
 }

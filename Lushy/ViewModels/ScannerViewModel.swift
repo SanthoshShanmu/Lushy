@@ -29,6 +29,11 @@ class ScannerViewModel: ObservableObject {
         }
     }
     
+    // New properties for improved workflow
+    @Published var productNotFound = false
+    @Published var showProductAddedSuccess = false
+    @Published var isContributingToOBF = false
+    
     private var barcodeScannerService = BarcodeScannerService()
     private var cancellables = Set<AnyCancellable>()
     
@@ -85,9 +90,10 @@ class ScannerViewModel: ObservableObject {
     }
     
     // Fetch product information from barcode
-    func fetchProduct(barcode: String) {
+    func fetchProduct(barcode: String, autoAddIfFound: Bool = false) {
         isLoading = true
         errorMessage = nil
+        productNotFound = false
         
         APIService.shared.fetchProduct(barcode: barcode)
             .receive(on: DispatchQueue.main)
@@ -95,7 +101,6 @@ class ScannerViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if case .failure(let error) = completion {
-                    // Remove the unnecessary cast
                     switch error {
                     case .invalidURL:
                         self?.errorMessage = "Cannot access product database."
@@ -106,9 +111,13 @@ class ScannerViewModel: ObservableObject {
                     case .networkError:
                         self?.errorMessage = "Network error. Please check your connection."
                     case .productNotFound:
-                        self?.errorMessage = "Product not found in database."
+                        // Product not found in OpenBeautyFacts
+                        self?.productNotFound = true
+                        self?.manualBarcode = barcode
+                        if autoAddIfFound {
+                            self?.showManualEntry = true
+                        }
                     default:
-                        // Add this default case to handle any other possible errors
                         self?.errorMessage = "An unknown error occurred."
                     }
                 }
@@ -116,7 +125,7 @@ class ScannerViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.scannedProduct = product
                 
-                // Add these lines to populate the manual fields
+                // Populate manual fields in case needed later
                 if !product.code.isEmpty {
                     self.manualBarcode = product.code
                 }
@@ -125,6 +134,15 @@ class ScannerViewModel: ObservableObject {
                 }
                 if let brand = product.brands {
                     self.manualBrand = brand
+                }
+                
+                // Auto-add to bag if requested
+                if autoAddIfFound {
+                    if let _ = self.saveProduct() {
+                        self.showProductAddedSuccess = true
+                    } else {
+                        self.errorMessage = "Failed to save product"
+                    }
                 }
                 
                 self.fetchEthicsInfo(for: product)
@@ -253,20 +271,120 @@ class ScannerViewModel: ObservableObject {
     }
     
     // Save a manually entered product
-    private func saveManualProduct() -> NSManagedObjectID? {
-        let openDateValue = isProductOpen ? openDate : nil
-        
-        return CoreDataManager.shared.saveUserProduct(
+    func saveManualProduct(periodsAfterOpening: String? = nil, productImage: UIImage? = nil) -> NSManagedObjectID? {
+        // Save locally
+        let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: manualBarcode,
             productName: manualProductName,
             brand: manualBrand,
             imageUrl: nil,
             purchaseDate: purchaseDate,
-            openDate: openDateValue,
-            periodsAfterOpening: nil, // Manual entry doesn't have this info
-            vegan: false, // Default values
+            openDate: isProductOpen ? openDate : nil,
+            periodsAfterOpening: periodsAfterOpening,
+            vegan: false,
             crueltyFree: false
         )
+        
+        // If saved successfully, always contribute to OBF regardless of lookup status
+        // The API will handle duplicates appropriately
+        if objectID != nil && !manualProductName.isEmpty {
+            print("📱 Product saved locally, now uploading to OBF")
+            
+            // Set this flag to true to show the spinner
+            isContributingToOBF = true
+            
+            // Start the contribution
+            silentlyContributeToOBF(productImage: productImage)
+        }
+        
+        return objectID
+    }
+    
+    // Format PAO from "12 M" to "12 months" for storage
+    private func formatPAOForStorage(_ pao: String?) -> String? {
+        guard let pao = pao else { return nil }
+        
+        if pao.hasSuffix(" M") {
+            if let months = Int(pao.replacingOccurrences(of: " M", with: "")) {
+                return "\(months) months"
+            }
+        }
+        return pao
+    }
+    
+    // Contribute to OpenBeautyFacts silently
+    func silentlyContributeToOBF(productImage: UIImage? = nil) {
+        guard !manualProductName.isEmpty else { return }
+        
+        isContributingToOBF = true
+        print("Starting OBF contribution for \(manualProductName)")
+        
+        // Use default PAO if not specified
+        let pao = "12 M" // Default to 12 months if not specified
+        
+        // Determine a reasonable category based on product name
+        let category = determineCategory(from: manualProductName)
+        
+        OBFContributionService.shared.uploadProduct(
+            barcode: manualBarcode.isEmpty ? nil : manualBarcode,
+            name: manualProductName,
+            brand: manualBrand.isEmpty ? "Unknown" : manualBrand,
+            category: category,
+            periodsAfterOpening: pao,
+            productImage: productImage
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isContributingToOBF = false
+                
+                switch result {
+                case .success(let productId):
+                    print("Successfully uploaded to OBF with ID: \(productId)")
+                    
+                    // Increment contribution count
+                    let count = UserDefaults.standard.integer(forKey: "obf_contribution_count")
+                    UserDefaults.standard.set(count + 1, forKey: "obf_contribution_count")
+                    
+                    // Store the product ID for reference
+                    var contributedProducts = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
+                    contributedProducts.append(productId)
+                    UserDefaults.standard.set(contributedProducts, forKey: "obf_contributed_products")
+                    
+                    // Post notification for success toast
+                    NotificationCenter.default.post(name: NSNotification.Name("OBFContributionSuccess"), object: nil)
+                    
+                case .failure(let error):
+                    print("OBF upload failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    // Simple category determination based on product name
+    private func determineCategory(from productName: String) -> String {
+        let lowercaseName = productName.lowercased()
+        
+        if lowercaseName.contains("lipstick") || lowercaseName.contains("lip") {
+            return "Lip Makeup"
+        } else if lowercaseName.contains("mascara") || lowercaseName.contains("eyeshadow") || 
+                  lowercaseName.contains("eyeliner") || lowercaseName.contains("eye") {
+            return "Eye Makeup"
+        } else if lowercaseName.contains("foundation") || lowercaseName.contains("powder") || 
+                  lowercaseName.contains("blush") || lowercaseName.contains("concealer") {
+            return "Face Makeup"
+        } else if lowercaseName.contains("moisturizer") || lowercaseName.contains("cream") ||
+                  lowercaseName.contains("serum") {
+            return "Skincare"
+        } else if lowercaseName.contains("shampoo") || lowercaseName.contains("conditioner") ||
+                  lowercaseName.contains("hair") {
+            return "Haircare"
+        } else if lowercaseName.contains("perfume") || lowercaseName.contains("fragrance") ||
+                  lowercaseName.contains("cologne") {
+            return "Fragrance"
+        } else if lowercaseName.contains("nail") || lowercaseName.contains("polish") {
+            return "Nail Care"
+        } else {
+            return "Makeup" // Default category
+        }
     }
     
     // Reset after adding product
@@ -282,5 +400,10 @@ class ScannerViewModel: ObservableObject {
         isProductOpen = false
         openDate = nil
         purchaseDate = Date()
+    }
+    
+    // Store external publisher subscriptions
+    func store(_ cancellable: AnyCancellable) {
+        cancellables.insert(cancellable)
     }
 }
