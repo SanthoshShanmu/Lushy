@@ -75,7 +75,7 @@ exports.getUserProfile = async (req, res) => {
     } catch (e) {}
     try {
       const UserProduct = require('../models/userProduct');
-      products = await UserProduct.find({ user: userId }).select('name brand isFavorite');
+      products = await UserProduct.find({ user: userId }).select('productName brand favorite');
     } catch (e) {}
     // Attach bags and products to user object
     user = user.toObject();

@@ -58,7 +58,8 @@ struct BackendWishlistItem: Codable, Identifiable {
     let productURL: String
     let notes: String?
     let imageURL: String?
-    let createdAt: TimeInterval
+    let user: String
+    let createdAt: String
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -66,6 +67,7 @@ struct BackendWishlistItem: Codable, Identifiable {
         case productURL
         case notes
         case imageURL
+        case user
         case createdAt
     }
 }
@@ -120,9 +122,9 @@ struct UserProductSummary: Identifiable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case name
+        case name = "productName"  // Map productName from backend to name in iOS
         case brand
-        case isFavorite
+        case isFavorite = "favorite"  // Map favorite from backend to isFavorite in iOS
     }
 }
 
@@ -139,4 +141,12 @@ struct Activity: Codable, Identifiable {
         case id = "_id"
         case user, type, targetId, targetType, description, createdAt
     }
+}
+
+// Model for creating new wishlist items
+struct NewWishlistItem: Codable {
+    let productName: String
+    let productURL: String
+    let notes: String
+    let imageURL: String?
 }

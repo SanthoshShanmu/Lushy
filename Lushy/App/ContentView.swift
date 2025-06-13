@@ -49,7 +49,8 @@ struct ContentView: View {
                 }
                 .tag(Tab.scan)
             
-            WishlistView(viewModel: wishlistViewModel, isLoggedIn: $authManager.isAuthenticated)
+            WishlistView()
+                .environmentObject(authManager)
                 .tabItem {
                     Image(systemName: "heart.fill")
                     Text("Wishlist")

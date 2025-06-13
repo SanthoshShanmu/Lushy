@@ -3,7 +3,7 @@ const WishlistItem = require('../models/wishlist');
 // Get all wishlist items for a user
 exports.getWishlistItems = async (req, res) => {
   try {
-    const wishlistItems = await WishlistItem.find({ userId: req.params.userId });
+    const wishlistItems = await WishlistItem.find({ user: req.params.userId });
     res.status(200).json({
       status: 'success',
       results: wishlistItems.length,
@@ -22,7 +22,7 @@ exports.getWishlistItem = async (req, res) => {
   try {
     const wishlistItem = await WishlistItem.findOne({
       _id: req.params.id,
-      userId: req.params.userId
+      user: req.params.userId
     });
 
     if (!wishlistItem) {
@@ -50,7 +50,7 @@ exports.createWishlistItem = async (req, res) => {
     // Add user ID to wishlist data
     const wishlistItemData = {
       ...req.body,
-      userId: req.params.userId
+      user: req.params.userId
     };
 
     // Validate URL format
@@ -83,8 +83,8 @@ exports.createWishlistItem = async (req, res) => {
 exports.updateWishlistItem = async (req, res) => {
   try {
     // Protect against updating userId
-    if (req.body.userId) {
-      delete req.body.userId;
+    if (req.body.user) {
+      delete req.body.user;
     }
 
     // Validate URL format if present
@@ -100,7 +100,7 @@ exports.updateWishlistItem = async (req, res) => {
     }
 
     const wishlistItem = await WishlistItem.findOneAndUpdate(
-      { _id: req.params.id, userId: req.params.userId },
+      { _id: req.params.id, user: req.params.userId },
       req.body,
       { new: true, runValidators: true }
     );
@@ -129,7 +129,7 @@ exports.deleteWishlistItem = async (req, res) => {
   try {
     const wishlistItem = await WishlistItem.findOneAndDelete({
       _id: req.params.id,
-      userId: req.params.userId
+      user: req.params.userId
     });
 
     if (!wishlistItem) {

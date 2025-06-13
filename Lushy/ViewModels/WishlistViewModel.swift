@@ -36,7 +36,8 @@ class WishlistViewModel: ObservableObject {
             }
         }
         
-        APIService.shared.fetchWishlist()
+        // Use the correct API extension method instead of the old one
+        APIService.shared.fetchWishlist() // This calls the APIService+Wishlist extension
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 timeoutTimer.invalidate()
@@ -70,15 +71,18 @@ class WishlistViewModel: ObservableObject {
         )
         
         isLoading = true
-        APIService.shared.addWishlistItem(item)
+        // Use the correct API extension method
+        APIService.shared.addWishlistItem(item) // This calls the APIService+Wishlist extension
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 self?.isLoading = false
                 
                 if case .failure(let error) = completion {
-                    self?.errorMessage = "Failed to add item: \(error)"
+                    print("Add wishlist item error: \(error)")
+                    self?.errorMessage = "Failed to add item: \(error.localizedDescription)"
                 }
             } receiveValue: { [weak self] _ in
+                print("Successfully added wishlist item")
                 // Reset form fields
                 self?.newProductName = ""
                 self?.newProductURL = ""
@@ -96,24 +100,19 @@ class WishlistViewModel: ObservableObject {
         guard let index = offsets.first, index < wishlistItems.count else { return }
         let itemToDelete = wishlistItems[index]
         
-        APIService.shared.deleteWishlistItem(id: itemToDelete.id.uuidString)
+        // Use the correct API extension method
+        APIService.shared.deleteWishlistItem(id: itemToDelete.id.uuidString) // This calls the APIService+Wishlist extension
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case .failure(let error) = completion {
-                    self?.errorMessage = "Failed to delete item: \(error)"
+                    print("Delete wishlist item error: \(error)")
+                    self?.errorMessage = "Failed to delete item: \(error.localizedDescription)"
                 }
             } receiveValue: { [weak self] _ in
+                print("Successfully deleted wishlist item")
                 // Remove from local array
                 self?.wishlistItems.remove(at: index)
             }
             .store(in: &cancellables)
     }
-}
-
-// Only define the new item struct, not WishlistItem
-struct NewWishlistItem: Codable {
-    let productName: String
-    let productURL: String
-    let notes: String
-    let imageURL: String?
 }

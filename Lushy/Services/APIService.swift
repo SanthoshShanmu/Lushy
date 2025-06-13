@@ -208,8 +208,60 @@ class APIService {
     
     func fetchUserProfile(userId: String, completion: @escaping (Result<UserProfileWrapper, Error>) -> Void) {
         let url = baseURL.appendingPathComponent("users/\(userId)/profile")
-        let request = URLRequest(url: url)
-        perform(request: request, completion: completion)
+        var request = URLRequest(url: url)
+        
+        // Add authentication headers
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        print("APIService: Fetching user profile from: \(url.absoluteString)")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("APIService: Network error: \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("APIService: Invalid response type")
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            print("APIService: Profile response status: \(httpResponse.statusCode)")
+            
+            if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                print("APIService: Profile response: \(responseString)")
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401 {
+                    completion(.failure(APIError.authenticationRequired))
+                } else if httpResponse.statusCode == 404 {
+                    completion(.failure(APIError.customError("User not found")))
+                } else {
+                    completion(.failure(APIError.invalidResponse))
+                }
+                return
+            }
+            
+            guard let data = data else {
+                print("APIService: No data received")
+                completion(.failure(APIError.noData))
+                return
+            }
+            
+            do {
+                let userProfileWrapper = try JSONDecoder().decode(UserProfileWrapper.self, from: data)
+                print("APIService: Successfully decoded user profile for \(userProfileWrapper.user.name)")
+                completion(.success(userProfileWrapper))
+            } catch {
+                print("APIService: Decoding error: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
     }
 
     func searchUsers(query: String, completion: @escaping (Result<[UserSummary], Error>) -> Void) {
@@ -224,30 +276,6 @@ class APIService {
                 completion(.failure(error))
             }
         }
-    }
-    
-    func addProductToWishlist(productId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("wishlist/add")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["productId": productId]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(APIError.invalidResponse))
-                return
-            }
-            if (200...299).contains(httpResponse.statusCode) {
-                completion(.success(()))
-            } else {
-                completion(.failure(APIError.unexpectedResponse))
-            }
-        }.resume()
     }
     
     // MARK: - Open Beauty Facts API
@@ -339,272 +367,86 @@ class APIService {
             .eraseToAnyPublisher()
     }
     
-    // Method to fetch wishlist items from backend
-    func fetchWishlistItems() -> AnyPublisher<[WishlistItem], APIError> {
-        let urlString = "http://localhost:5001/api/users/current/wishlist"
+    // Token validation endpoint
+    func validateToken() -> AnyPublisher<Bool, APIError> {
+        guard let token = AuthService.shared.token else {
+            return Just(false)
+                .setFailureType(to: APIError.self)
+                .eraseToAnyPublisher()
+        }
         
+        let urlString = "\(baseURL)/auth/validate-token"
         guard let url = URL(string: urlString) else {
-            return Fail<[WishlistItem], APIError>(error: .invalidURL).eraseToAnyPublisher()
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
         }
         
         var request = URLRequest(url: url)
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
-        // Add authentication
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Bool in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    throw APIError.authenticationRequired
+                }
+                
+                return (200...299).contains(httpResponse.statusCode)
+            }
+            .mapError { error -> APIError in
+                if let apiError = error as? APIError {
+                    return apiError
+                }
+                return APIError.networkError
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // Fetch user products from backend
+    func fetchUserProductsFromBackend() -> AnyPublisher<[BackendUserProduct], APIError> {
+        guard let userId = AuthService.shared.userId else {
+            return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
+        }
+        
+        let urlString = "\(baseURL)/users/\(userId)/products"
+        guard let url = URL(string: urlString) else {
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        
+        var request = URLRequest(url: url)
         if let token = AuthService.shared.token {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
         return URLSession.shared.dataTaskPublisher(for: request)
-            .map { $0.data }
-            .decode(type: [WishlistItem].self, decoder: JSONDecoder())
-            .mapError { error in
-                if error is URLError {
-                    return APIError.networkError
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    if let httpResponse = response as? HTTPURLResponse,
+                       httpResponse.statusCode == 401 {
+                        throw APIError.authenticationRequired
+                    }
+                    throw APIError.invalidResponse
+                }
+                return data
+            }
+            .decode(type: ProductsResponse.self, decoder: JSONDecoder())
+            .map { $0.data.products }
+            .mapError { error -> APIError in
+                if let apiError = error as? APIError {
+                    return apiError
                 } else if error is DecodingError {
                     return APIError.decodingError
                 } else {
-                    return APIError.customError(error.localizedDescription)
+                    return APIError.networkError
                 }
             }
             .eraseToAnyPublisher()
     }
-    
-    func fetchData<T: Decodable>(endpoint: String, completion: @escaping (Result<T, Error>) -> Void) {
-        guard let url = URL(string: "\(baseURL)/\(endpoint)") else {
-            completion(.failure(NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
-            return
-        }
-        
-        var request = URLRequest(url: url)
-        
-        // Add authentication token if available
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
-            guard let data = data else {
-                completion(.failure(NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
-                return
-            }
-            
-            // Handle HTTP errors
-            if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                completion(.failure(NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(httpResponse.statusCode)"])))
-                return
-            }
-            
-            do {
-                let decodedResponse = try JSONDecoder().decode(T.self, from: data)
-                completion(.success(decodedResponse))
-            } catch {
-                completion(.failure(error))
-            }
-        }.resume()
-    }
-    
-    // Add authentication header to requests
-    private func authorizedRequest(url: URL) -> URLRequest {
-        var request = URLRequest(url: url)
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        return request
-    }
 
-    // Update the fetchWishlist method to reflect your model:
-    func fetchWishlist(completion: @escaping (Result<[WishlistItem], Error>) -> Void) {
-        guard let url = URL(string: "\(baseURL)/users/current/wishlist") else {
-            completion(.failure(APIError.invalidURL))
-            return
-        }
-        
-        // Use authorized request with timeout
-        var request = URLRequest(url: url, timeoutInterval: 15) // Increased timeout
-        if let token = AuthService.shared.token {
-            print("Adding token to wishlist request: \(token)")
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        } else {
-            print("No token available for wishlist request!")
-        }
-        
-        // Print request for debugging
-        print("Request URL: \(request.url?.absoluteString ?? "nil")")
-        print("Request headers: \(request.allHTTPHeaderFields ?? [:])")
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            // First check for network error
-            if let error = error {
-                print("Network error: \(error.localizedDescription)")
-                completion(.failure(error))
-                return
-            }
-            
-            // Log response
-            if let httpResponse = response as? HTTPURLResponse {
-                print("Wishlist API response status: \(httpResponse.statusCode)")
-                
-                // Print response body for debugging
-                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                    print("Response body preview: \(responseString.prefix(100))")
-                }
-                
-                // Status code handling
-                switch httpResponse.statusCode {
-                case 200...299:
-                    // Success - continue to data processing
-                    break
-                case 401:
-                    completion(.failure(APIError.authenticationRequired))
-                    return
-                case 404:
-                    completion(.failure(APIError.customError("Wishlist endpoint not found: \(url.absoluteString)")))
-                    return
-                default:
-                    completion(.failure(APIError.customError("Server error: \(httpResponse.statusCode)")))
-                    return
-                }
-            } else {
-                print("Missing HTTP response")
-                completion(.failure(APIError.customError("Invalid response format")))
-                return
-            }
-            
-            guard let data = data else {
-                completion(.failure(APIError.noData))
-                return
-            }
-            
-            do {
-                // First decode the wrapper structure
-                let decoder = JSONDecoder()
-                
-                // Create a struct to match the API response format
-                struct WishlistResponse: Codable {
-                    let status: String
-                    let results: Int
-                    let data: WishlistData
-                    
-                    struct WishlistData: Codable {
-                        let wishlistItems: [APIWishlistItem]
-                    }
-                }
-                
-                // Decode the response
-                let response = try decoder.decode(WishlistResponse.self, from: data)
-                
-                // Map API items to app model
-                let appItems = response.data.wishlistItems.map { apiItem in
-                    WishlistItem(
-                        id: UUID(uuidString: apiItem.id) ?? UUID(),
-                        productName: apiItem.productName,
-                        productURL: apiItem.productURL,
-                        notes: apiItem.notes,
-                        imageURL: apiItem.imageURL
-                    )
-                }
-                
-                // Return the converted items
-                completion(.success(appItems))
-            } catch {
-                print("Decoding error: \(error)")
-                completion(.failure(APIError.decodingError))
-            }
-        }.resume()  // Don't forget this!
-    }
-
-    func addWishlistItem(_ item: NewWishlistItem, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let url = URL(string: "\(baseURL)/wishlist") else {
-            completion(.failure(APIError.invalidURL))
-            return
-        }
-        
-        // Setup request
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Add auth token
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Encode item
-        do {
-            request.httpBody = try JSONEncoder().encode(item)
-        } catch {
-            completion(.failure(error))
-            return
-        }
-        
-        // Make request
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 401 {
-                    completion(.failure(APIError.authenticationRequired))
-                    return
-                }
-                
-                if httpResponse.statusCode == 201 {
-                    completion(.success(()))
-                    return
-                }
-            }
-            
-            completion(.failure(APIError.unexpectedResponse))
-        }.resume()
-    }
-
-    func deleteWishlistItem(id: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let url = URL(string: "\(baseURL)/wishlist/\(id)") else {
-            completion(.failure(APIError.invalidURL))
-            return
-        }
-        
-        // Setup request
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        
-        // Add auth token
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Make request
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 401 {
-                    completion(.failure(APIError.authenticationRequired))
-                    return
-                }
-                
-                if httpResponse.statusCode == 200 {
-                    completion(.success(()))
-                    return
-                }
-            }
-            
-            completion(.failure(APIError.unexpectedResponse))
-        }.resume()
-    }
-
-    // Add these methods to use the backend API
-
+    // Sync product with backend
     func syncProductWithBackend(product: UserProduct) -> AnyPublisher<Bool, APIError> {
         guard let userId = AuthService.shared.userId else {
             return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
@@ -705,146 +547,6 @@ class APIService {
                 return APIError.networkError
             }
             .eraseToAnyPublisher()
-    }
-
-    func fetchUserProductsFromBackend() -> AnyPublisher<[BackendUserProduct], APIError> {
-        guard let userId = AuthService.shared.userId else {
-            return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
-        }
-        
-        let urlString = "\(baseURL)/users/\(userId)/products"
-        guard let url = URL(string: urlString) else {
-            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
-        }
-        
-        var request = URLRequest(url: url)
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { data, response -> Data in
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse,
-                       httpResponse.statusCode == 401 {
-                        throw APIError.authenticationRequired
-                    }
-                    throw APIError.invalidResponse
-                }
-                return data
-            }
-            .decode(type: ProductsResponse.self, decoder: JSONDecoder())
-            .map { $0.data.products }
-            .mapError { error -> APIError in
-                if let apiError = error as? APIError {
-                    return apiError
-                } else if error is DecodingError {
-                    return APIError.decodingError
-                }
-                return APIError.networkError
-            }
-            .eraseToAnyPublisher()
-    }
-
-    // Token validation endpoint
-    func validateToken() -> AnyPublisher<Bool, APIError> {
-        guard let token = AuthService.shared.token else {
-            return Just(false)
-                .setFailureType(to: APIError.self)
-                .eraseToAnyPublisher()
-        }
-        
-        let urlString = "\(baseURL)/auth/validate-token"
-        guard let url = URL(string: urlString) else {
-            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
-        }
-        
-        var request = URLRequest(url: url)
-        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { data, response -> Bool in
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw APIError.invalidResponse
-                }
-                
-                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                    throw APIError.authenticationRequired
-                }
-                
-                return (200...299).contains(httpResponse.statusCode)
-            }
-            .mapError { error -> APIError in
-                if let apiError = error as? APIError {
-                    return apiError
-                }
-                return APIError.networkError
-            }
-            .eraseToAnyPublisher()
-    }
-
-    // Add this method to APIService class
-
-    // Fetch PAO taxonomy from Open Beauty Facts
-    func fetchPAOTaxonomy() -> AnyPublisher<[PAOTaxonomyItem], APIError> {
-        let urlString = "https://world.openbeautyfacts.org/periods-after-opening.json"
-        guard let url = URL(string: urlString) else {
-            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
-        }
-        
-        return URLSession.shared.dataTaskPublisher(for: url)
-            .tryMap { data, response -> Data in
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    throw APIError.invalidResponse
-                }
-                return data
-            }
-            .decode(type: PAOTaxonomyResponse.self, decoder: JSONDecoder())
-            .map { $0.tags }
-            .mapError { error -> APIError in
-                if let apiError = error as? APIError {
-                    return apiError
-                } else if error is DecodingError {
-                    return APIError.decodingError
-                }
-                return APIError.networkError
-            }
-            .eraseToAnyPublisher()
-    }
-    
-    func addReviewToProduct(userId: String, productId: String, rating: Int, title: String, text: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("users/\(userId)/products/\(productId)")
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "newReview": [
-                "rating": rating,
-                "title": title,
-                "text": text
-            ]
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(APIError.invalidResponse))
-                return
-            }
-            
-            if (200...299).contains(httpResponse.statusCode) {
-                completion(.success(()))
-            } else {
-                completion(.failure(APIError.unexpectedResponse))
-            }
-        }.resume()
     }
 }
 

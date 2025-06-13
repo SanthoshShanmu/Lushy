@@ -72,6 +72,33 @@ class UserProfileViewModel: ObservableObject {
     }
     
     func addProductToWishlist(productId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        APIService.shared.addProductToWishlist(productId: productId, completion: completion)
+        // First get the product details from the current user profile
+        guard let product = products.first(where: { $0.id == productId }) else {
+            completion(.failure(APIError.productNotFound))
+            return
+        }
+        
+        // Create a new wishlist item from the product information
+        let wishlistItem = NewWishlistItem(
+            productName: product.name,
+            productURL: "https://world.openbeautyfacts.org/product/\(productId)", // Use product barcode as URL
+            notes: "Added from \(profile?.name ?? "another user")'s collection",
+            imageURL: nil // You could add product.imageURL if available
+        )
+        
+        // Use the correct API extension method
+        APIService.shared.addWishlistItem(wishlistItem)
+            .receive(on: DispatchQueue.main)
+            .sink { completionResult in
+                switch completionResult {
+                case .finished:
+                    break
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            } receiveValue: { _ in
+                completion(.success(()))
+            }
+            .store(in: &cancellables)
     }
 }
