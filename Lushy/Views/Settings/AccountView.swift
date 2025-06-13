@@ -200,6 +200,21 @@ struct AccountView: View {
             let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
 
             Section(header: Text("Open Beauty Facts")) {
+                Toggle("Auto-contribute new products", isOn: Binding(
+                    get: { 
+                        // Default to true if never set (first time users)
+                        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
+                        return hasSetPreference ? 
+                            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+                            true
+                    },
+                    set: { UserDefaults.standard.set($0, forKey: "auto_contribute_to_obf") }
+                ))
+                
+                Text("Automatically upload products not found in the database to Open Beauty Facts")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
                 Text("You've contributed \(contributionCount) products")
                     .font(.body)
                 

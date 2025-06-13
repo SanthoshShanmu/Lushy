@@ -71,6 +71,26 @@ struct ManualEntryView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+                        
+                        // Show OBF contribution indicator if enabled
+                        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
+                        let autoContributeEnabled = hasSetPreference ? 
+                            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+                            true // Default to enabled for new users
+                        
+                        if autoContributeEnabled {
+                            HStack {
+                                Image(systemName: "globe")
+                                    .foregroundColor(.blue)
+                                Text("Will contribute to Open Beauty Facts")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
                     }
                 }
                 

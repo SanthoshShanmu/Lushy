@@ -102,6 +102,10 @@ class ScannerViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if case .failure(let error) = completion {
+                    // Set productNotFound to true for ANY failure - this means we should contribute to OBF
+                    self?.productNotFound = true
+                    self?.manualBarcode = barcode
+                    
                     switch error {
                     case .invalidURL:
                         self?.errorMessage = "Cannot access product database."
@@ -112,18 +116,21 @@ class ScannerViewModel: ObservableObject {
                     case .networkError:
                         self?.errorMessage = "Network error. Please check your connection."
                     case .productNotFound:
-                        // Product not found in OpenBeautyFacts
-                        self?.productNotFound = true
-                        self?.manualBarcode = barcode
-                        if autoAddIfFound {
-                            self?.showManualEntry = true
-                        }
+                        // Product not found in OpenBeautyFacts - this is the main case we want
+                        print("🔍 Product not found in database - barcode: \(barcode)")
                     default:
                         self?.errorMessage = "An unknown error occurred."
+                    }
+                    
+                    if autoAddIfFound {
+                        self?.showManualEntry = true
                     }
                 }
             }, receiveValue: { [weak self] product in
                 guard let self = self else { return }
+                
+                // Product WAS found - don't contribute to OBF
+                self.productNotFound = false
                 self.scannedProduct = product
                 
                 // Populate manual fields in case needed later
@@ -297,10 +304,11 @@ class ScannerViewModel: ObservableObject {
                 imageUrlString = url.absoluteString
             }
         }
+        
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: manualBarcode,
             productName: manualProductName,
-            brand: manualBrand,
+            brand: manualBrand.isEmpty ? nil : manualBrand,
             imageUrl: imageUrlString,
             purchaseDate: purchaseDate,
             openDate: isProductOpen ? openDate : nil,
@@ -308,12 +316,70 @@ class ScannerViewModel: ObservableObject {
             vegan: ethicsInfo?.vegan ?? false,
             crueltyFree: ethicsInfo?.crueltyFree ?? false
         )
-        if objectID != nil {
+        
+        if let objectID = objectID {
+            // Sync this new product to backend so userproducts & product_added activity get created
+            let ctx = CoreDataManager.shared.viewContext
+            if let userProduct = try? ctx.existingObject(with: objectID) as? UserProduct {
+                SyncService.shared.syncProductToBackend(userProduct)
+            }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .NSManagedObjectContextDidSave, object: nil)
             }
+            
+            // Check if we should contribute to OBF (only if product was not found in database)
+            if shouldContributeToOBF() {
+                print("🌍 Product was not found in database - contributing to Open Beauty Facts")
+                silentlyContributeToOBF(productImage: productImage)
+            }
         }
         return objectID
+    }
+    
+    // Check if we should contribute to Open Beauty Facts
+    private func shouldContributeToOBF() -> Bool {
+        // Only contribute if:
+        // 1. Product was not found in the database (productNotFound = true)
+        // 2. We have all necessary data (product name and barcode)
+        // 3. User has enabled OBF contributions (check user preferences)
+        
+        print("🌍 Checking if should contribute to OBF:")
+        print("🌍 - productNotFound: \(productNotFound)")
+        print("🌍 - manualProductName: '\(manualProductName)'")
+        print("🌍 - manualBarcode: '\(manualBarcode)'")
+        
+        guard productNotFound else {
+            print("🌍 Product was found in database - not contributing to OBF")
+            return false
+        }
+        
+        guard !manualProductName.isEmpty else {
+            print("🌍 Product name is empty - not contributing to OBF")
+            return false
+        }
+        
+        // Check if user has enabled OBF contributions in settings
+        // Default to true if never set (first time users)
+        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
+        let autoContributeEnabled = hasSetPreference ? 
+            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+            true // Default to enabled for new users
+        
+        print("🌍 - hasSetPreference: \(hasSetPreference)")
+        print("🌍 - autoContributeEnabled: \(autoContributeEnabled)")
+        
+        guard autoContributeEnabled else {
+            print("🌍 Auto-contribute to OBF is disabled in settings")
+            return false
+        }
+        
+        // Barcode is optional for OBF - we can still contribute without it
+        if manualBarcode.isEmpty {
+            print("🌍 No barcode provided, but will still contribute to OBF")
+        }
+        
+        print("🌍 ✅ All conditions met - will contribute to OBF")
+        return true
     }
     
     // Format PAO from "12 M" to "12 months" for storage
