@@ -157,9 +157,9 @@ struct AddWishlistItemView: View {
                     }) {
                         Text("Add to Wishlist")
                             .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
                     }
-                    .listRowBackground(Color.blue)
+                    .buttonStyle(LushyButtonStyle(backgroundColor: .lushyPink, foregroundColor: .white, isLarge: true))
+                    .listRowBackground(Color.clear)
                     .disabled(viewModel.newProductName.isEmpty || viewModel.newProductURL.isEmpty)
                 }
             }

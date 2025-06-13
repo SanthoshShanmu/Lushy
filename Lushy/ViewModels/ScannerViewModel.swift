@@ -33,6 +33,7 @@ class ScannerViewModel: ObservableObject {
     @Published var productNotFound = false
     @Published var showProductAddedSuccess = false
     @Published var isContributingToOBF = false
+    @Published var periodsAfterOpening: String = "12 M"
     
     private var barcodeScannerService = BarcodeScannerService()
     private var cancellables = Set<AnyCancellable>()
@@ -134,6 +135,10 @@ class ScannerViewModel: ObservableObject {
                 }
                 if let brand = product.brands {
                     self.manualBrand = brand
+                }
+                // Autofill PAO if available
+                if let pao = product.periodsAfterOpening {
+                    self.periodsAfterOpening = pao
                 }
                 
                 // Auto-add to bag if requested
@@ -256,7 +261,7 @@ class ScannerViewModel: ObservableObject {
             }
         }
         
-        return CoreDataManager.shared.saveUserProduct(
+        let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: product.code,
             productName: product.productName ?? "Unknown Product",
             brand: product.brands,
@@ -268,35 +273,46 @@ class ScannerViewModel: ObservableObject {
             crueltyFree: ethicsInfo?.crueltyFree ?? false,
             expiryOverride: expiryDate
         )
+        if let objectID = objectID {
+            // Sync this new product to backend so userproducts & product_added activity get created
+            let ctx = CoreDataManager.shared.viewContext
+            if let userProduct = try? ctx.existingObject(with: objectID) as? UserProduct {
+                SyncService.shared.syncProductToBackend(userProduct)
+            }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .NSManagedObjectContextDidSave, object: nil)
+            }
+        }
+        return objectID
     }
     
     // Save a manually entered product
     func saveManualProduct(periodsAfterOpening: String? = nil, productImage: UIImage? = nil) -> NSManagedObjectID? {
-        // Save locally
+        var imageUrlString: String? = nil
+        if let image = productImage {
+            if let data = image.jpegData(compressionQuality: 0.8) {
+                let filename = UUID().uuidString + ".jpg"
+                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(filename)
+                try? data.write(to: url)
+                imageUrlString = url.absoluteString
+            }
+        }
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: manualBarcode,
             productName: manualProductName,
             brand: manualBrand,
-            imageUrl: nil,
+            imageUrl: imageUrlString,
             purchaseDate: purchaseDate,
             openDate: isProductOpen ? openDate : nil,
-            periodsAfterOpening: periodsAfterOpening,
-            vegan: false,
-            crueltyFree: false
+            periodsAfterOpening: periodsAfterOpening ?? self.periodsAfterOpening,
+            vegan: ethicsInfo?.vegan ?? false,
+            crueltyFree: ethicsInfo?.crueltyFree ?? false
         )
-        
-        // If saved successfully, always contribute to OBF regardless of lookup status
-        // The API will handle duplicates appropriately
-        if objectID != nil && !manualProductName.isEmpty {
-            print("📱 Product saved locally, now uploading to OBF")
-            
-            // Set this flag to true to show the spinner
-            isContributingToOBF = true
-            
-            // Start the contribution
-            silentlyContributeToOBF(productImage: productImage)
+        if objectID != nil {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .NSManagedObjectContextDidSave, object: nil)
+            }
         }
-        
         return objectID
     }
     
@@ -365,10 +381,10 @@ class ScannerViewModel: ObservableObject {
         
         if lowercaseName.contains("lipstick") || lowercaseName.contains("lip") {
             return "Lip Makeup"
-        } else if lowercaseName.contains("mascara") || lowercaseName.contains("eyeshadow") || 
+        } else if lowercaseName.contains("mascara") || lowercaseName.contains("eyeshadow") ||
                   lowercaseName.contains("eyeliner") || lowercaseName.contains("eye") {
             return "Eye Makeup"
-        } else if lowercaseName.contains("foundation") || lowercaseName.contains("powder") || 
+        } else if lowercaseName.contains("foundation") || lowercaseName.contains("powder") ||
                   lowercaseName.contains("blush") || lowercaseName.contains("concealer") {
             return "Face Makeup"
         } else if lowercaseName.contains("moisturizer") || lowercaseName.contains("cream") ||

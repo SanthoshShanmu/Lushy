@@ -87,6 +87,7 @@ struct RegisterView: View {
                                 .cornerRadius(10)
                             }
                             .disabled(name.isEmpty || email.isEmpty || password.isEmpty || password != confirmPassword || isRegistering)
+                            .buttonStyle(LushyButtonStyle(backgroundColor: .lushyPink, foregroundColor: .white, isLarge: true))
                         }
                         .padding(.horizontal)
                         

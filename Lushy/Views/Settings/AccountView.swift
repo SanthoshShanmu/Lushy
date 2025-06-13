@@ -159,7 +159,7 @@ struct AccountView: View {
                 }
                 
                 Button(action: {
-                    print("Privacy policy button tapped") 
+                    print("Privacy policy button tapped")
                     if let url = URL(string: "https://example.com/privacy") {
                         UIApplication.shared.open(url)
                     }
@@ -196,7 +196,7 @@ struct AccountView: View {
             
             // Update the OBF section
 
-            let contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count") 
+            let contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count")
             let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
 
             Section(header: Text("Open Beauty Facts")) {
@@ -207,7 +207,7 @@ struct AccountView: View {
                     NavigationLink("View My Contributions (\(contributions.count))") {
                         List {
                             ForEach(contributions, id: \.self) { productId in
-                                Link(productId, 
+                                Link(productId,
                                      destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
                             }
                         }
@@ -240,6 +240,14 @@ struct AccountView: View {
         }
         .sheet(isPresented: $showingPasswordChange) {
             ChangePasswordView()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.15), Color.lushyPurple.opacity(0.10)]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .edgesIgnoringSafeArea(.all)
+                )
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowLogin"))) { _ in
             isLoggedIn = false
@@ -249,49 +257,32 @@ struct AccountView: View {
     }
     
     private func fetchUserProfile() {
-        // Reset error message
         errorMessage = nil
         isLoading = true
         
-        // Check if logged in first
         guard AuthService.shared.isAuthenticated else {
             isLoading = false
             userProfile = nil
             return
         }
         
-        // For now, create a placeholder profile since the API might not be fully set up
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            isLoading = false
-            
-            // Check if still logged in after delay
-            if AuthService.shared.isAuthenticated {
-                userProfile = UserProfile(
-                    name: "Demo User", 
-                    email: "user@example.com",
-                    id: AuthService.shared.userId ?? "unknown"
-                )
-            } else {
-                userProfile = nil
-            }
-        }
-        
-        // Uncomment when API is fully implemented
-        /*
-        APIService.shared.fetchUserProfile()
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                isLoading = false
-                
-                if case .failure(let error) = completion {
-                    print("Error fetching profile: \(error)")
-                    errorMessage = "Failed to load profile: \(error)"
+        // Use the correct APIService method
+        if let userId = AuthService.shared.userId {
+            APIService.shared.fetchUserProfile(userId: userId) { result in
+                DispatchQueue.main.async {
+                    isLoading = false
+                    switch result {
+                    case .success(let wrapper):
+                        userProfile = wrapper.user
+                    case .failure(let error):
+                        errorMessage = "Failed to load profile: \(error.localizedDescription)"
+                    }
                 }
-            }, receiveValue: { profile in
-                self.userProfile = profile
-            })
-            .store(in: &AuthService.shared.cancellables)
-        */
+            }
+        } else {
+            isLoading = false
+            userProfile = nil
+        }
     }
     
     private func logout() {
@@ -329,11 +320,4 @@ struct AccountView: View {
             .store(in: &AuthService.shared.cancellables)
         */
     }
-}
-
-// Model for the profile placeholder
-struct UserProfile: Codable {
-    let name: String
-    let email: String
-    let id: String
 }

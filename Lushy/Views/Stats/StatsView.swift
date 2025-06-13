@@ -20,64 +20,71 @@ struct StatsView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Summary Cards
-                    summaryCardsView
-                    
-                    // Chart Section
-                    chartSectionView
-                    
-                    // Finished Products Section
-                    finishedProductsSection
+        ZStack {
+            LinearGradient(
+                gradient: Gradient(colors: [Color.lushyPink.opacity(0.10), Color.lushyPurple.opacity(0.08)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            NavigationView {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Summary Cards
+                        summaryCardsView
+                        
+                        // Chart Section
+                        chartSectionView
+                        
+                        // Finished Products Section
+                        finishedProductsSection
+                    }
+                    .padding(.top, 10)
                 }
-                .padding()
-                .background(Color.lushyBackground.opacity(0.3).edgesIgnoringSafeArea(.all))
-            }
-            .navigationTitle("Beauty Stats")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        ForEach(TimeRange.allCases, id: \.self) { range in
-                            Button(range.rawValue) {
-                                selectedTimeRange = range
-                            }
-                        }
-                        Divider()
-                        // Bag filter
+                .navigationTitle("Beauty Stats")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         Menu {
-                            Button("All Bags", action: { viewModel.setBagFilter(nil) })
-                            ForEach(viewModel.allBags, id: \.self) { bag in
-                                Button(action: { viewModel.setBagFilter(bag) }) {
-                                    Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
+                            ForEach(TimeRange.allCases, id: \.self) { range in
+                                Button(range.rawValue) {
+                                    selectedTimeRange = range
                                 }
                             }
-                        } label: {
-                            Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
-                        }
-                        // Tag filter
-                        Menu {
-                            Button("All Tags", action: { viewModel.setTagFilter(nil) })
-                            ForEach(viewModel.allTags, id: \.self) { tag in
-                                Button(action: { viewModel.setTagFilter(tag) }) {
-                                    Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
+                            Divider()
+                            // Bag filter
+                            Menu {
+                                Button("All Bags", action: { viewModel.setBagFilter(nil) })
+                                ForEach(viewModel.allBags, id: \.self) { bag in
+                                    Button(action: { viewModel.setBagFilter(bag) }) {
+                                        Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
+                                    }
                                 }
+                            } label: {
+                                Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
+                            }
+                            // Tag filter
+                            Menu {
+                                Button("All Tags", action: { viewModel.setTagFilter(nil) })
+                                ForEach(viewModel.allTags, id: \.self) { tag in
+                                    Button(action: { viewModel.setTagFilter(tag) }) {
+                                        Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
+                                    }
+                                }
+                            } label: {
+                                Label(viewModel.selectedTag?.name ?? "All Tags", systemImage: "tag")
                             }
                         } label: {
-                            Label(viewModel.selectedTag?.name ?? "All Tags", systemImage: "tag")
+                            HStack {
+                                Text(selectedTimeRange.rawValue)
+                                Image(systemName: "chevron.down")
+                            }
+                            .foregroundColor(.lushyPurple)
                         }
-                    } label: {
-                        HStack {
-                            Text(selectedTimeRange.rawValue)
-                            Image(systemName: "chevron.down")
-                        }
-                        .foregroundColor(.lushyPurple)
                     }
                 }
-            }
-            .onAppear {
-                viewModel.fetchFinishedProducts()
+                .onAppear {
+                    viewModel.fetchFinishedProducts()
+                }
             }
         }
     }
@@ -92,31 +99,35 @@ struct StatsView: View {
                 .padding(.horizontal, 4)
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                statsCard(title: "Products Used", 
+                statsCard(title: "Products Used",
                           value: "\(viewModel.finishedProducts.count)",
-                          icon: "checkmark.circle.fill", 
+                          icon: "checkmark.circle.fill",
                           color: .lushyPink)
                 
-                statsCard(title: "Avg. Usage Time", 
+                statsCard(title: "Avg. Usage Time",
                           value: viewModel.averageUsageTime(),
-                          icon: "clock.fill", 
+                          icon: "clock.fill",
                           color: .lushyPurple)
                 
-                statsCard(title: "Most Used Brand", 
+                statsCard(title: "Most Used Brand",
                           value: viewModel.mostUsedBrand() ?? "N/A",
-                          icon: "star.fill", 
+                          icon: "star.fill",
                           color: .yellow)
                 
-                statsCard(title: "Product Savings", 
+                statsCard(title: "Product Savings",
                           value: viewModel.calculateProductSavings(),
-                          icon: "dollarsign.circle.fill", 
+                          icon: "dollarsign.circle.fill",
                           color: .green)
             }
         }
         .padding()
-        .background(Color.white)
-        .cornerRadius(15)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .background(
+            BlurView(style: .systemUltraThinMaterial)
+                .background(Color.white.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Color.lushyPink.opacity(0.08), radius: 10, x: 0, y: 4)
     }
     
     // Individual Stat Card
@@ -164,14 +175,22 @@ struct StatsView: View {
             chartContent
                 .frame(height: 250)
                 .padding()
-                .background(Color.white)
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                .background(
+                    BlurView(style: .systemUltraThinMaterial)
+                        .background(Color.white.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: Color.lushyPurple.opacity(0.08), radius: 10, x: 0, y: 4)
         }
         .padding()
-        .background(Color.white)
-        .cornerRadius(15)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .background(
+            BlurView(style: .systemUltraThinMaterial)
+                .background(Color.white.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Color.lushyPurple.opacity(0.08), radius: 10, x: 0, y: 4)
     }
     
     @ViewBuilder
@@ -223,9 +242,13 @@ struct StatsView: View {
             }
         }
         .padding()
-        .background(Color.white)
-        .cornerRadius(15)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .background(
+            BlurView(style: .systemUltraThinMaterial)
+                .background(Color.white.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: Color.lushyPink.opacity(0.08), radius: 10, x: 0, y: 4)
     }
     
     private func finishedProductRow(product: UserProduct) -> some View {
@@ -286,7 +309,7 @@ struct StatsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    if let openDate = product.openDate, 
+                    if let openDate = product.openDate,
                        let finishDate = product.value(forKey: "finishDate") as? Date {
                         Spacer()
                         Text(formattedDateRange(from: openDate, to: finishDate))

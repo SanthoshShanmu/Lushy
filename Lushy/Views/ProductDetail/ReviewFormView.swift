@@ -67,6 +67,14 @@ struct ReviewFormView: View {
                 }
             }
             .navigationTitle("Write a Review")
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.lushyPink.opacity(0.10), Color.lushyPurple.opacity(0.08)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
+            )
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {

@@ -67,10 +67,8 @@ struct LoginView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.lushyPink)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
                         }
+                        .buttonStyle(LushyButtonStyle(backgroundColor: .lushyPink, foregroundColor: .white, isLarge: true))
                         .disabled(email.isEmpty || password.isEmpty || isLoggingIn)
                     }
                     .padding(.horizontal)

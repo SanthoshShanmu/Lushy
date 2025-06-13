@@ -22,7 +22,7 @@ extension APIService {
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse, 
+                    if let httpResponse = response as? HTTPURLResponse,
                        httpResponse.statusCode == 401 {
                         throw APIError.authenticationRequired
                     }
@@ -83,7 +83,7 @@ extension APIService {
             .tryMap { data, response -> Void in
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse, 
+                    if let httpResponse = response as? HTTPURLResponse,
                        httpResponse.statusCode == 401 {
                         throw APIError.authenticationRequired
                     }
@@ -122,7 +122,7 @@ extension APIService {
             .tryMap { data, response -> Void in
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse, 
+                    if let httpResponse = response as? HTTPURLResponse,
                        httpResponse.statusCode == 401 {
                         throw APIError.authenticationRequired
                     }

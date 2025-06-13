@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import CoreData
 
 struct ScannerView: View {
     @ObservedObject var viewModel: ScannerViewModel

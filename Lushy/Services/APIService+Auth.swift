@@ -22,7 +22,7 @@ extension APIService {
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse, 
+                    if let httpResponse = response as? HTTPURLResponse,
                        httpResponse.statusCode == 401 {
                         throw APIError.authenticationRequired
                     }
@@ -32,9 +32,15 @@ extension APIService {
             }
             .decode(type: ProfileResponse.self, decoder: JSONDecoder())
             .map { response in
-                UserProfile(name: response.data.user.name, 
-                           email: response.data.user.email,
-                           id: response.data.user.id)
+                UserProfile(
+                    id: response.data.user.id,
+                    name: response.data.user.name,
+                    email: response.data.user.email,
+                    followers: nil,
+                    following: nil,
+                    bags: nil,
+                    products: nil
+                )
             }
             .mapError { error -> Error in
                 if let apiError = error as? APIError {

@@ -5,133 +5,9 @@ struct ProductRow: View {
     let product: UserProduct
     
     var body: some View {
-        HStack(spacing: 15) {
-            // Product image
-            ZStack {
-                Circle()
-                    .fill(Color.lushyCream)
-                    .frame(width: 65, height: 65)
-                
-                if let imageUrlString = product.imageUrl,
-                   let imageUrl = URL(string: imageUrlString) {
-                    AsyncImage(url: imageUrl) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                                .frame(width: 55, height: 55)
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 55, height: 55)
-                                .clipShape(Circle())
-                        case .failure:
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray.opacity(0.7))
-                                .frame(width: 55, height: 55)
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                } else {
-                    Image(systemName: "photo")
-                        .foregroundColor(.gray.opacity(0.7))
-                        .frame(width: 55, height: 55)
-                }
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.productName ?? "Unknown Product")
-                    .font(.headline)
-                    .lineLimit(1)
-                
-                if let brand = product.brand {
-                    Text(brand)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .lineLimit(1)
-                }
-                
-                HStack(spacing: 10) {
-                    if product.vegan {
-                        HStack(spacing: 2) {
-                            Image(systemName: "leaf.fill")
-                                .foregroundColor(.green)
-                                .font(.system(size: 10))
-                            Text("Vegan")
-                                .font(.system(size: 11))
-                                .foregroundColor(.green)
-                        }
-                        .padding(.vertical, 2)
-                        .padding(.horizontal, 8)
-                        .background(Color.green.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                    
-                    if product.crueltyFree {
-                        HStack(spacing: 2) {
-                            Image(systemName: "heart.fill")
-                                .foregroundColor(.lushyPink)
-                                .font(.system(size: 10))
-                            Text("Cruelty-Free")
-                                .font(.system(size: 11))
-                                .foregroundColor(.lushyPink)
-                        }
-                        .padding(.vertical, 2)
-                        .padding(.horizontal, 8)
-                        .background(Color.lushyPink.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            // Show days until expiry if available
-            if let expireDate = product.expireDate {
-                let daysComponent = Calendar.current.dateComponents([.day], from: Date(), to: expireDate)
-                let days = max(0, daysComponent.day ?? 0) // Ensure non-negative values
-                
-                VStack(spacing: 2) {
-                    if days > 0 {
-                        Text("\(days)")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(days < 14 ? .orange : .lushyPurple)
-                        
-                        Text("days")
-                            .font(.system(size: 12))
-                            .foregroundColor(days < 14 ? .orange : .lushyPurple)
-                    } else {
-                        Text("Expired")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(5)
-                            .background(Color.red.opacity(0.8))
-                            .cornerRadius(8)
-                    }
-                    
-                    if product.favorite {
-                        Image(systemName: "star.fill")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 14))
-                            .padding(.top, 3)
-                    }
-                }
-                .frame(width: 60)
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 5)
+        PrettyProductRow(product: product)
     }
 }
-
-// Add this at the end of your file to create a prettier version
 
 struct PrettyProductRow: View {
     let product: UserProduct
@@ -151,24 +27,39 @@ struct PrettyProductRow: View {
                 
                 if let imageUrlString = product.imageUrl,
                    let imageUrl = URL(string: imageUrlString) {
-                    AsyncImage(url: imageUrl) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                                .frame(width: 58, height: 58)
-                        case .success(let image):
-                            image
+                    if imageUrl.isFileURL {
+                        if let data = try? Data(contentsOf: imageUrl), let uiImage = UIImage(data: data) {
+                            Image(uiImage: uiImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 58, height: 58)
                                 .clipShape(Circle())
-                        case .failure:
+                        } else {
                             Image(systemName: "photo")
                                 .font(.system(size: 24))
                                 .foregroundColor(.gray.opacity(0.7))
                                 .frame(width: 58, height: 58)
-                        @unknown default:
-                            EmptyView()
+                        }
+                    } else {
+                        AsyncImage(url: imageUrl) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                                    .frame(width: 58, height: 58)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 58, height: 58)
+                                    .clipShape(Circle())
+                            case .failure:
+                                Image(systemName: "photo")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.gray.opacity(0.7))
+                                    .frame(width: 58, height: 58)
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
                     }
                 } else {
@@ -313,12 +204,6 @@ struct PrettyProductRow: View {
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 5)
+        // Remove old background, shadow, and padding here
     }
 }

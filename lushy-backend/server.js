@@ -29,13 +29,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(morgan('dev'));
 
+// Disable ETag to prevent 304 Not Modified responses
+app.disable('etag');
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again after 15 minutes'
 });
-app.use('/api', limiter);
+
+// Exclude /api/users/:userId/feed from the global limiter
+app.use('/api', (req, res, next) => {
+  if (/^\/users\/[^/]+\/feed$/.test(req.path)) {
+    return next(); // skip limiter for feed endpoint
+  }
+  limiter(req, res, next);
+});
 
 // Health check route
 app.get('/health', (req, res) => {

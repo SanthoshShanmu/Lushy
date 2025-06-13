@@ -11,8 +11,8 @@ struct ManualEntryView: View {
     
     // Image capture
     @State private var productImage: UIImage? = nil
-    @State private var isShowingImagePicker = false
-    @State private var isShowingCamera = false
+    enum ImageSourceType { case none, camera, library }
+    @State private var imageSource: ImageSourceType = .none
     
     // Period After Opening
     @State private var periodsAfterOpening = "12 M"
@@ -101,14 +101,14 @@ struct ManualEntryView: View {
                         
                         VStack(alignment: .leading) {
                             Button(action: {
-                                isShowingCamera = true
+                                imageSource = .camera
                             }) {
                                 Label("Take Photo", systemImage: "camera")
                             }
                             .padding(.vertical, 5)
                             
                             Button(action: {
-                                isShowingImagePicker = true
+                                imageSource = .library
                             }) {
                                 Label("Select Photo", systemImage: "photo")
                             }
@@ -203,15 +203,15 @@ struct ManualEntryView: View {
                                 Text(color.capitalized)
                             }
                         }
-                        Button("Add") {
-                            if !newTagName.isEmpty {
-                                CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                                allTags = CoreDataManager.shared.fetchProductTags()
-                                newTagName = ""
-                                newTagColor = "blue"
-                            }
-                        }.disabled(newTagName.isEmpty)
                     }
+                    Button("Add") {
+                        if !newTagName.isEmpty {
+                            CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                            allTags = CoreDataManager.shared.fetchProductTags()
+                            newTagName = ""
+                            newTagColor = "blue"
+                        }
+                    }.disabled(newTagName.isEmpty)
                 }
                 
                 // Save Section
@@ -235,11 +235,15 @@ struct ManualEntryView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .sheet(isPresented: $isShowingImagePicker) {
-                ImagePicker(selectedImage: $productImage, sourceType: .photoLibrary)
-            }
-            .sheet(isPresented: $isShowingCamera) {
-                ImagePicker(selectedImage: $productImage, sourceType: .camera)
+            .sheet(isPresented: Binding<Bool>(
+                get: { imageSource != .none },
+                set: { if !$0 { imageSource = .none } }
+            )) {
+                if imageSource == .camera {
+                    ImagePicker(selectedImage: $productImage, sourceType: .camera, onDismiss: { imageSource = .none })
+                } else if imageSource == .library {
+                    ImagePicker(selectedImage: $productImage, sourceType: .photoLibrary, onDismiss: { imageSource = .none })
+                }
             }
 #if compiler(>=5.9) && canImport(SwiftUI)
             // Use new API for iOS 17+
@@ -257,7 +261,7 @@ struct ManualEntryView: View {
                 if viewModel.productNotFound {
                     // The barcode is already filled in by the view model
                 }
-                // Test OBF connectivity  
+                // Test OBF connectivity
                 OBFContributionService.shared.testConnection { isConnected in
                     DispatchQueue.main.async {
                         print("✅ OBF connection test result: \(isConnected ? "Connected" : "Not connected")")
@@ -323,8 +327,8 @@ struct ManualEntryView: View {
                                         .foregroundColor(.green)
                                 }
                                 
-                                Text(viewModel.isContributingToOBF ? 
-                                     "Contributing to Open Beauty Facts..." : 
+                                Text(viewModel.isContributingToOBF ?
+                                     "Contributing to Open Beauty Facts..." :
                                      "Contributed to Open Beauty Facts")
                                     .foregroundColor(.white)
                                     .font(.subheadline)
@@ -465,6 +469,7 @@ struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImage: UIImage?
     var sourceType: UIImagePickerController.SourceType
     @Environment(\.presentationMode) private var presentationMode
+    var onDismiss: (() -> Void)?
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -502,10 +507,12 @@ struct ImagePicker: UIViewControllerRepresentable {
                 parent.selectedImage = originalImage
             }
             parent.presentationMode.wrappedValue.dismiss()
+            parent.onDismiss?()
         }
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.presentationMode.wrappedValue.dismiss()
+            parent.onDismiss?()
         }
     }
 }

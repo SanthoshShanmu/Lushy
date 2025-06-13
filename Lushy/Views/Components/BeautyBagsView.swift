@@ -12,19 +12,30 @@ struct BeautyBagsView: View {
                         HStack {
                             Image(systemName: bag.icon ?? "bag.fill")
                                 .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                .padding(8)
+                                .background(Circle().fill(Color(bag.color ?? "lushyPink").opacity(0.12)))
                             Text(bag.name ?? "Unnamed Bag")
                         }
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .shadow(color: Color.lushyPink.opacity(0.06), radius: 3, x: 0, y: 2)
                     }
                 }
                 .onDelete { indexSet in
                     indexSet.map { viewModel.bags[$0] }.forEach(viewModel.deleteBag)
                 }
             }
+            .listStyle(InsetGroupedListStyle())
+            .background(Color.lushyBackground.opacity(0.2))
             .navigationTitle("Beauty Bags")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingAddBag = true }) {
                         Image(systemName: "plus")
+                            .foregroundColor(.lushyPink)
+                            .padding(8)
+                            .background(Circle().fill(Color.lushyPink.opacity(0.12)))
                     }
                 }
             }

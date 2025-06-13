@@ -19,13 +19,22 @@ struct TagManagerView: View {
                                 .foregroundColor(.red)
                         }
                     }
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.lushyPurple.opacity(0.06), radius: 3, x: 0, y: 2)
                 }
             }
+            .listStyle(InsetGroupedListStyle())
+            .background(Color.lushyBackground.opacity(0.2))
             .navigationTitle("Tags")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingAddTag = true }) {
                         Image(systemName: "plus")
+                            .foregroundColor(.lushyPink)
+                            .padding(8)
+                            .background(Circle().fill(Color.lushyPink.opacity(0.12)))
                     }
                 }
             }

@@ -42,7 +42,7 @@ class AuthService {
     
     private init() {
         // Check if user is already authenticated
-        if let _ = keychain.get(tokenKey), 
+        if let _ = keychain.get(tokenKey),
            let userId = keychain.get(userIdKey) {
             self.isAuthenticated = true
             self.currentUserId = userId

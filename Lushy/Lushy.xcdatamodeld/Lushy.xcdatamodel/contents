@@ -5,6 +5,7 @@
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="icon" optional="YES" attributeType="String"/>
         <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="userId" optional="YES" attributeType="String"/>
         <relationship name="products" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="bags" inverseEntity="UserProduct"/>
     </entity>
     <entity name="Comment" representedClassName="Comment" syncable="YES">
@@ -15,6 +16,7 @@
     <entity name="ProductTag" representedClassName="ProductTag" syncable="YES">
         <attribute name="color" optional="YES" attributeType="String"/>
         <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="userId" optional="YES" attributeType="String"/>
         <relationship name="products" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="tags" inverseEntity="UserProduct"/>
     </entity>
     <entity name="Review" representedClassName="Review" syncable="YES">
@@ -38,6 +40,7 @@
         <attribute name="periodsAfterOpening" optional="YES" attributeType="String"/>
         <attribute name="productName" attributeType="String"/>
         <attribute name="purchaseDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="userId" optional="YES" attributeType="String"/>
         <attribute name="vegan" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="bags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="BeautyBag" inverseName="products" inverseEntity="BeautyBag"/>
         <relationship name="comments" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Comment" inverseName="userProduct" inverseEntity="Comment"/>

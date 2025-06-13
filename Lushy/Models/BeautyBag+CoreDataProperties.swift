@@ -21,6 +21,7 @@ extension BeautyBag {
     @NSManaged public var icon: String?
     @NSManaged public var name: String?
     @NSManaged public var products: NSSet?
+    @NSManaged public var userId: String
 
 }
 

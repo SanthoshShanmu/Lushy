@@ -64,6 +64,14 @@ struct ChangePasswordView: View {
                 }
             }
             .navigationBarTitle("Change Password", displayMode: .inline)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.lushyPink.opacity(0.10), Color.lushyPurple.opacity(0.08)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
+            )
             .navigationBarItems(trailing: Button("Done") {
                 presentationMode.wrappedValue.dismiss()
             })
@@ -71,9 +79,9 @@ struct ChangePasswordView: View {
     }
     
     private var isButtonDisabled: Bool {
-        return currentPassword.isEmpty || 
-               newPassword.isEmpty || 
-               confirmPassword.isEmpty || 
+        return currentPassword.isEmpty ||
+               newPassword.isEmpty ||
+               confirmPassword.isEmpty ||
                newPassword != confirmPassword ||
                isChanging
     }
@@ -97,8 +105,8 @@ struct ChangePasswordView: View {
         errorMessage = nil
         successMessage = nil
         
-        APIService.shared.updatePassword(currentPassword: currentPassword, 
-                                         newPassword: newPassword, 
+        APIService.shared.updatePassword(currentPassword: currentPassword,
+                                         newPassword: newPassword,
                                          passwordConfirm: confirmPassword)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in

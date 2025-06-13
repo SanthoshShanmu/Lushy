@@ -27,20 +27,16 @@ class FavoritesViewModel: ObservableObject {
     // Fetch favorite products from Core Data
     func fetchFavorites() {
         fetchAllBagsAndTags()
-        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-        request.predicate = NSPredicate(format: "favorite == YES")
-        do {
-            var products = try managedObjectContext.fetch(request)
-            if let bag = selectedBag {
-                products = products.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }
-            }
-            if let tag = selectedTag {
-                products = products.filter { ($0.tags as? Set<ProductTag>)?.contains(tag) == true }
-            }
-            favoriteProducts = products
-        } catch {
-            print("Error fetching favorites: \(error)")
+        let allProducts = CoreDataManager.shared.fetchUserProducts()
+        let favorites = allProducts.filter { $0.favorite }
+        var products = favorites
+        if let bag = selectedBag {
+            products = products.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }
         }
+        if let tag = selectedTag {
+            products = products.filter { ($0.tags as? Set<ProductTag>)?.contains(tag) == true }
+        }
+        favoriteProducts = products
     }
 
     func fetchAllBagsAndTags() {

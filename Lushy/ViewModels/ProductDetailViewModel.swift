@@ -66,6 +66,7 @@ class ProductDetailViewModel: ObservableObject {
     func submitReview() {
         guard !reviewTitle.isEmpty && !reviewText.isEmpty else { return }
         
+        // Save review locally - CoreDataManager handles backend sync and activity creation
         CoreDataManager.shared.addReview(
             to: product.objectID,
             rating: reviewRating,
@@ -86,11 +87,8 @@ class ProductDetailViewModel: ObservableObject {
     // Mark product as opened
     func markAsOpened() {
         CoreDataManager.shared.markProductAsOpened(id: product.objectID, openDate: Date())
-        
-        // Schedule expiry notification
+        // Remove backend sync - CoreDataManager already handles this
         NotificationService.shared.scheduleExpiryNotification(for: product)
-        
-        // Refresh the product with updated data
         refreshProduct()
     }
     
@@ -112,8 +110,7 @@ class ProductDetailViewModel: ObservableObject {
     // Toggle favorite status
     func toggleFavorite() {
         CoreDataManager.shared.toggleFavorite(id: product.objectID)
-        
-        // Refresh the product with updated data
+        // Remove backend sync - CoreDataManager handles this
         refreshProduct()
     }
     
@@ -188,7 +185,7 @@ class ProductDetailViewModel: ObservableObject {
         
         // Post notification so lists can update
         NotificationCenter.default.post(
-            name: NSNotification.Name("ProductDeleted"), 
+            name: NSNotification.Name("ProductDeleted"),
             object: product.objectID
         )
     }

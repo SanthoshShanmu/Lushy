@@ -59,4 +59,84 @@ struct BackendWishlistItem: Codable, Identifiable {
     let notes: String?
     let imageURL: String?
     let createdAt: TimeInterval
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case productName
+        case productURL
+        case notes
+        case imageURL
+        case createdAt
+    }
+}
+
+struct UserSummary: Identifiable, Codable, Hashable {
+    let id: String
+    let name: String
+    let email: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case name
+        case email
+    }
+}
+
+struct UserProfile: Identifiable, Codable {
+    let id: String
+    let name: String
+    let email: String
+    let followers: [UserSummary]?
+    let following: [UserSummary]?
+    let bags: [BeautyBagSummary]?
+    let products: [UserProductSummary]?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case name
+        case email
+        case followers
+        case following
+        case bags
+        case products
+    }
+}
+
+struct BeautyBagSummary: Identifiable, Codable {
+    let id: String
+    let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case name
+    }
+}
+
+struct UserProductSummary: Identifiable, Codable {
+    let id: String
+    let name: String
+    let brand: String?
+    let isFavorite: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case name
+        case brand
+        case isFavorite
+    }
+}
+
+struct Activity: Codable, Identifiable {
+    let id: String
+    let user: UserSummary
+    let type: String
+    let targetId: String?
+    let targetType: String?
+    let description: String?
+    let createdAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case user, type, targetId, targetType, description, createdAt
+    }
 }

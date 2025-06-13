@@ -24,7 +24,7 @@ class CoreDataManager {
                 print("Persistent store loading error: \(error), \(error.userInfo)")
                 
                 // Handle corrupted store by recreating it
-                if error.code == NSPersistentStoreIncompatibleVersionHashError || 
+                if error.code == NSPersistentStoreIncompatibleVersionHashError ||
                    error.code == 256 || // The file couldn't be opened
                    error.domain == NSSQLiteErrorDomain {
                     
@@ -61,6 +61,11 @@ class CoreDataManager {
         }
     }
     
+    // Helper to get current userId
+    private func currentUserId() -> String {
+        return AuthService.shared.userId ?? "guest"
+    }
+
     // MARK: - UserProduct Operations
     
     // Update the saveUserProduct function to accept explicit expiry date
@@ -94,6 +99,7 @@ class CoreDataManager {
             product.periodsAfterOpening = periodsAfterOpening
             product.vegan = vegan
             product.crueltyFree = crueltyFree
+            product.userId = currentUserId()
             
             // Set expiry date - either from override or calculate from PAO
             if let expiryOverride = expiryOverride {
@@ -108,6 +114,18 @@ class CoreDataManager {
             do {
                 try context.save()
                 objectID = product.objectID
+                
+                print("Product saved locally: \(productName)")
+                
+                // Sync to backend immediately after saving locally
+                DispatchQueue.main.async {
+                    print("Triggering immediate sync for new product")
+                    // Convert to main context object for sync
+                    if let mainContextProduct = try? self.viewContext.existingObject(with: product.objectID) as? UserProduct {
+                        SyncService.shared.syncProductImmediately(mainContextProduct)
+                    }
+                }
+                
             } catch {
                 print("Failed to save user product: \(error)")
                 // Error handling logic...
@@ -134,6 +152,30 @@ class CoreDataManager {
                 
                 do {
                     try context.save()
+                    
+                    // Sync open date to backend to create opened_product activity
+                    if let userId = AuthService.shared.userId, let backendId = userProduct.backendId {
+                        DispatchQueue.main.async {
+                            let url = APIService.shared.baseURL.appendingPathComponent("users/")
+                                .appendingPathComponent(userId)
+                                .appendingPathComponent("products/")
+                                .appendingPathComponent(backendId)
+                            var request = URLRequest(url: url)
+                            request.httpMethod = "PUT"
+                            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                            if let token = AuthService.shared.token {
+                                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                            }
+                            let body: [String: Any] = ["openDate": openDate.timeIntervalSince1970]
+                            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                            URLSession.shared.dataTask(with: request) { _, _, _ in
+                                // Refresh feed after opening product
+                                DispatchQueue.main.async {
+                                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                                }
+                            }.resume()
+                        }
+                    }
                 } catch {
                     print("Error updating UserProduct: \(error)")
                 }
@@ -176,6 +218,36 @@ class CoreDataManager {
                 
                 do {
                     try context.save()
+                    
+                    // Sync review to backend to create review_added activity
+                    if let userId = AuthService.shared.userId, let backendId = userProduct.backendId {
+                        DispatchQueue.main.async {
+                            let url = APIService.shared.baseURL.appendingPathComponent("users/")
+                                .appendingPathComponent(userId)
+                                .appendingPathComponent("products/")
+                                .appendingPathComponent(backendId)
+                            var request = URLRequest(url: url)
+                            request.httpMethod = "PUT"
+                            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                            if let token = AuthService.shared.token {
+                                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                            }
+                            let body: [String: Any] = [
+                                "newReview": [
+                                    "rating": rating,
+                                    "title": title,
+                                    "text": text
+                                ]
+                            ]
+                            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                            URLSession.shared.dataTask(with: request) { _, _, _ in
+                                // Refresh feed after adding review
+                                DispatchQueue.main.async {
+                                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                                }
+                            }.resume()
+                        }
+                    }
                 } catch {
                     print("Failed to save review: \(error)")
                 }
@@ -193,10 +265,33 @@ class CoreDataManager {
             }
             
             // Toggle the favorite status
-            product.favorite = !product.favorite
+            let newFavoriteStatus = !product.favorite
+            product.favorite = newFavoriteStatus
             
             // Save the context immediately
             try? context.save()
+            
+            // Sync favorite status to backend to create activity
+            if let userId = AuthService.shared.userId, let backendId = product.backendId {
+                let url = APIService.shared.baseURL.appendingPathComponent("users/")
+                    .appendingPathComponent(userId)
+                    .appendingPathComponent("products/")
+                    .appendingPathComponent(backendId)
+                var request = URLRequest(url: url)
+                request.httpMethod = "PUT"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                if let token = AuthService.shared.token {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+                let body: [String: Any] = ["favorite": newFavoriteStatus]
+                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                URLSession.shared.dataTask(with: request) { _, _, _ in
+                    // Refresh feed after favorite toggle
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    }
+                }.resume()
+            }
         }
     }
     
@@ -282,8 +377,8 @@ class CoreDataManager {
             let intervals = products.compactMap { product -> TimeInterval? in
                 guard let barcode = product.barcode,
                       let openDate = product.openDate,
-                      let finishDate = finishedProducts[barcode] else { 
-                    return nil 
+                      let finishDate = finishedProducts[barcode] else {
+                    return nil
                 }
                 return finishDate.timeIntervalSince(openDate)
             }
@@ -323,12 +418,34 @@ class CoreDataManager {
             do {
                 try context.save()
                 
+                // Sync to backend to create finished_product activity
+                if let userId = AuthService.shared.userId, let backendId = product.backendId {
+                    let url = APIService.shared.baseURL.appendingPathComponent("users/")
+                        .appendingPathComponent(userId)
+                        .appendingPathComponent("products/")
+                        .appendingPathComponent(backendId)
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "PUT"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    if let token = AuthService.shared.token {
+                        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    }
+                    let body: [String: Any] = [
+                        "isFinished": true,
+                        "finishDate": Date().timeIntervalSince1970
+                    ]
+                    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                    URLSession.shared.dataTask(with: request).resume()
+                }
+                
                 // Notify on the main thread after successful save
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(
                         name: .NSManagedObjectContextDidSave,
                         object: context
                     )
+                    // Refresh feed to show the finished product activity
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
                 }
             } catch {
                 print("Error updating product: \(error)")
@@ -345,11 +462,13 @@ class CoreDataManager {
         bag.color = color
         bag.icon = icon
         bag.createdAt = Date()
+        bag.userId = currentUserId()
         try? context.save()
     }
     
     func fetchBeautyBags() -> [BeautyBag] {
         let request: NSFetchRequest<BeautyBag> = BeautyBag.fetchRequest()
+        request.predicate = NSPredicate(format: "userId == %@", currentUserId())
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
         return (try? viewContext.fetch(request)) ?? []
     }
@@ -363,6 +482,24 @@ class CoreDataManager {
     func addProduct(_ product: UserProduct, toBag bag: BeautyBag) {
         bag.addToProducts(product)
         try? viewContext.save()
+        
+        // Sync to backend with bag activity
+        if let userId = AuthService.shared.userId, let backendId = product.backendId {
+            let url = APIService.shared.baseURL.appendingPathComponent("users/")
+                .appendingPathComponent(userId)
+                .appendingPathComponent("products/")
+                .appendingPathComponent(backendId)
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let token = AuthService.shared.token {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            // Include the bag ID so backend can create add_to_bag activity
+            let body: [String: Any] = ["addToBagId": bag.objectID.uriRepresentation().absoluteString]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            URLSession.shared.dataTask(with: request).resume()
+        }
     }
     
     func removeProduct(_ product: UserProduct, fromBag bag: BeautyBag) {
@@ -381,11 +518,13 @@ class CoreDataManager {
         let tag = ProductTag(context: context)
         tag.name = name
         tag.color = color
+        tag.userId = currentUserId()
         try? context.save()
     }
     
     func fetchProductTags() -> [ProductTag] {
         let request: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
+        request.predicate = NSPredicate(format: "userId == %@", currentUserId())
         request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
         return (try? viewContext.fetch(request)) ?? []
     }
@@ -408,5 +547,12 @@ class CoreDataManager {
     
     func products(withTag tag: ProductTag) -> [UserProduct] {
         (tag.products as? Set<UserProduct>)?.sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
+    }
+
+    // Fetch only products for the current user
+    func fetchUserProducts() -> [UserProduct] {
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        request.predicate = NSPredicate(format: "userId == %@", currentUserId())
+        return (try? viewContext.fetch(request)) ?? []
     }
 }

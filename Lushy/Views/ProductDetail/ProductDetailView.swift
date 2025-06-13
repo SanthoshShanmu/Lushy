@@ -88,6 +88,9 @@ struct ProductDetailView: View {
                 secondaryButton: .cancel()
             )
         }
+        .sheet(isPresented: $viewModel.showReviewForm) {
+            ReviewFormView(viewModel: viewModel)
+        }
     }
     
     // Utility functions used by multiple components

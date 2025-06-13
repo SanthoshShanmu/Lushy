@@ -1,5 +1,6 @@
 const UserProduct = require('../models/userProduct');
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 // Helper function to proxy external API calls
 async function fetchProductDetails(barcode) {
@@ -80,7 +81,7 @@ function getExpiryGuideline(region) {
 // Get all products for a user
 exports.getUserProducts = async (req, res) => {
   try {
-    const products = await UserProduct.find({ userId: req.params.userId });
+    const products = await UserProduct.find({ user: new mongoose.Types.ObjectId(req.params.userId) });
     res.status(200).json({
       status: 'success',
       results: products.length,
@@ -99,7 +100,7 @@ exports.getUserProduct = async (req, res) => {
   try {
     const product = await UserProduct.findOne({
       _id: req.params.id,
-      userId: req.params.userId
+      user: new mongoose.Types.ObjectId(req.params.userId)
     });
 
     if (!product) {
@@ -136,10 +137,12 @@ exports.getUserProduct = async (req, res) => {
 // Create a new product
 exports.createUserProduct = async (req, res) => {
   try {
+    console.log('Creating product for user:', req.params.userId);
+    
     // Add user ID to product data
     const productData = {
       ...req.body,
-      userId: req.params.userId
+      user: new mongoose.Types.ObjectId(req.params.userId) // Fixed: added 'new'
     };
 
     // If barcode is provided but no product details, fetch from Open Beauty Facts
@@ -174,18 +177,6 @@ exports.createUserProduct = async (req, res) => {
       }
     }
 
-    // If no PAO but batch code is available, use fallback
-    if (!productData.periodsAfterOpening && externalData?.product?.batch_code) {
-      const batchInfo = decodeBatchCode(externalData.product.batch_code);
-      if (batchInfo && batchInfo.manufactureDate) {
-        // Default to 36 months if no PAO specified
-        productData.manufactureDate = batchInfo.manufactureDate;
-        
-        // Set a generic PAO of 36 months as fallback
-        productData.periodsAfterOpening = "36 months";
-      }
-    }
-
     // Calculate expiry date if open date and periods_after_opening are set
     if (productData.openDate && productData.periodsAfterOpening) {
       const months = extractMonths(productData.periodsAfterOpening);
@@ -195,13 +186,54 @@ exports.createUserProduct = async (req, res) => {
       }
     }
 
+    console.log('Product data prepared:', {
+      productName: productData.productName,
+      user: productData.user
+    });
+
     const newProduct = await UserProduct.create(productData);
+    console.log('Product created successfully:', newProduct._id);
+
+    // Activity: Product added - ENHANCED WITH BETTER ERROR HANDLING
+    try {
+      const Activity = require('../models/activity');
+      const User = require('../models/user');
+      
+      // Verify user exists
+      const user = await User.findById(req.params.userId);
+      if (!user) {
+        console.error('User not found for activity creation:', req.params.userId);
+        throw new Error('User not found');
+      }
+      
+      console.log('Creating activity for user:', user.name, 'product:', newProduct.productName);
+      
+      const activityData = {
+        user: new mongoose.Types.ObjectId(req.params.userId),
+        type: 'product_added',
+        targetId: newProduct._id,
+        targetType: 'UserProduct',
+        description: `Added ${newProduct.productName} to their collection`,
+        createdAt: new Date()
+      };
+      
+      console.log('Activity data:', activityData);
+      
+      const activity = await Activity.create(activityData);
+      console.log('Activity created successfully:', activity._id);
+      
+    } catch (activityError) { 
+      console.error('ACTIVITY CREATION ERROR:', activityError);
+      console.error('Error stack:', activityError.stack);
+      // Don't fail the product creation if activity fails
+    }
 
     res.status(201).json({
       status: 'success',
       data: { product: newProduct }
     });
   } catch (error) {
+    console.error('Product creation error:', error);
     res.status(400).json({
       status: 'fail',
       message: error.message
@@ -228,7 +260,7 @@ exports.updateUserProduct = async (req, res) => {
       // Fetch existing product to get periodsAfterOpening
       const existingProduct = await UserProduct.findOne({
         _id: req.params.id,
-        userId: req.params.userId
+        user: new mongoose.Types.ObjectId(req.params.userId)
       });
       
       if (existingProduct && existingProduct.periodsAfterOpening) {
@@ -240,37 +272,149 @@ exports.updateUserProduct = async (req, res) => {
       }
     }
 
+    // Toggle favorite status
+    if (typeof req.body.favorite === 'boolean') {
+      // Find the product
+      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
+      if (product) {
+        // Only create activity if favorite status is actually changing
+        if (product.favorite !== req.body.favorite) {
+          const Activity = require('../models/activity');
+          await Activity.create({
+            user: new mongoose.Types.ObjectId(req.params.userId),
+            type: req.body.favorite ? 'favorite_product' : 'unfavorite_product',
+            targetId: product._id, // already ObjectId
+            targetType: 'UserProduct',
+            description: `${req.body.favorite ? 'Favorited' : 'Unfavorited'} product: ${product.productName}`,
+            createdAt: new Date()
+          });
+        }
+      }
+    }
+
+    // Handle openDate activity
+    if (req.body.openDate) {
+      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
+      if (product && (!product.openDate || product.openDate.getTime() !== new Date(req.body.openDate).getTime())) {
+        try {
+          const Activity = require('../models/activity');
+          await Activity.create({
+            user: new mongoose.Types.ObjectId(req.params.userId),
+            type: 'opened_product',
+            targetId: product._id,
+            targetType: 'UserProduct',
+            description: `Opened product: ${product.productName}`,
+            createdAt: new Date()
+          });
+        } catch (e) {}
+      }
+    }
+
+    // Handle finish date activity
+    if (req.body.finishDate || req.body.isFinished) {
+      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
+      if (product && !product.isFinished) {
+        try {
+          const Activity = require('../models/activity');
+          await Activity.create({
+            user: new mongoose.Types.ObjectId(req.params.userId),
+            type: 'finished_product',
+            targetId: product._id,
+            targetType: 'UserProduct',
+            description: `Finished using ${product.productName}`,
+            createdAt: new Date()
+          });
+          console.log('Activity created: finished_product for user', req.params.userId, 'product:', product.productName);
+        } catch (e) {
+          console.error('Finished product activity creation error:', e);
+        }
+      }
+    }
+
     // Handle comment or review addition
     if (req.body.newComment) {
       const comment = {
         text: req.body.newComment,
         date: new Date()
       };
-      
       await UserProduct.findOneAndUpdate(
-        { _id: req.params.id, userId: req.params.userId },
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $push: { comments: comment } }
       );
-      
+      // Activity: Comment added
+      try {
+        const Activity = require('../models/activity');
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'comment',
+          targetId: new mongoose.Types.ObjectId(req.params.id), // ensure ObjectId
+          targetType: 'UserProduct',
+          description: `Commented on product`,
+          createdAt: new Date()
+        });
+      } catch (e) {}
       delete req.body.newComment;
     }
 
     if (req.body.newReview) {
+      const { rating, title, text } = req.body.newReview;
+      if (typeof rating !== 'number' || !title || !text) {
+        return res.status(400).json({ status: 'fail', message: 'Missing review fields' });
+      }
+      
+      // Get the product first for the activity description
+      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
+      
       const review = {
-        ...req.body.newReview,
+        rating,
+        title,
+        text,
         date: new Date()
       };
-      
       await UserProduct.findOneAndUpdate(
-        { _id: req.params.id, userId: req.params.userId },
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $push: { reviews: review } }
       );
-      
+      // Activity: Review added
+      try {
+        const Activity = require('../models/activity');
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'review_added',
+          targetId: new mongoose.Types.ObjectId(req.params.id), // ensure ObjectId
+          targetType: 'UserProduct',
+          description: `Reviewed ${product.productName} and gave it ${rating} stars`,
+          createdAt: new Date()
+        });
+        console.log('Activity created: review_added for user', req.params.userId);
+      } catch (e) {
+        console.error('Review activity creation error:', e);
+      }
       delete req.body.newReview;
     }
 
+    // Add to bag activity (if bagId is present in request)
+    if (req.body.addToBagId) {
+      try {
+        const Activity = require('../models/activity');
+        const product = await UserProduct.findById(req.params.id);
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'add_to_bag',
+          targetId: new mongoose.Types.ObjectId(req.body.addToBagId),
+          targetType: 'BeautyBag',
+          description: `Added ${product.productName} to their beauty bag`,
+          createdAt: new Date()
+        });
+        console.log('Activity created: add_to_bag for user', req.params.userId);
+      } catch (e) { 
+        console.error('Add to bag activity creation error:', e);
+      }
+      delete req.body.addToBagId;
+    }
+
     const product = await UserProduct.findOneAndUpdate(
-      { _id: req.params.id, userId: req.params.userId },
+      { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
       req.body,
       { new: true, runValidators: true }
     );
@@ -299,7 +443,7 @@ exports.deleteUserProduct = async (req, res) => {
   try {
     const product = await UserProduct.findOneAndDelete({
       _id: req.params.id,
-      userId: req.params.userId
+      user: new mongoose.Types.ObjectId(req.params.userId)
     });
 
     if (!product) {
