@@ -8,49 +8,66 @@ struct ProductDetailView: View {
     
     var body: some View {
         ZStack {
-            Color.lushyBackground.opacity(0.3).edgesIgnoringSafeArea(.all)
+            // Dreamy gradient background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.lushyPink.opacity(0.1),
+                    Color.lushyPurple.opacity(0.05),
+                    Color.white
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .edgesIgnoringSafeArea(.all)
             
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    // Product header
+                VStack(alignment: .leading, spacing: 25) {
+                    // Product header with dreamy styling
                     _PrettyProductHeader(viewModel: viewModel)
                     
-                    // Usage info
+                    // Usage info with soft cards
                     _PrettyUsageInfo(viewModel: viewModel)
                     
-                    // Actions
+                    // Actions with bubbly buttons
                     _PrettyActionButtons(viewModel: viewModel)
                     
-                    // Comments
+                    // Comments with soft styling
                     _PrettyCommentsSection(viewModel: viewModel)
                     
-                    // Reviews
+                    // Reviews with girly theme
                     _PrettyReviewsSection(viewModel: viewModel)
                     
-                    // Bags & Tags
+                    // Bags & Tags with soft design
                     _PrettyBagsSection(viewModel: viewModel)
                     _PrettyTagsSection(viewModel: viewModel)
                     
-                    // Add a less prominent delete option at the very bottom
+                    // Soft delete option
                     Button(action: {
                         showingDeleteAlert = true
                     }) {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: "trash")
-                                .font(.system(size: 14))
+                                .font(.system(size: 14, weight: .medium))
                             Text("Remove from beauty bag")
                                 .font(.footnote)
+                                .fontWeight(.medium)
                         }
                         .foregroundColor(.secondary)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 15)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.gray.opacity(0.1))
+                        )
                     }
-                    .padding(.top, 16)
+                    .padding(.top, 10)
+                    .padding(.horizontal)
                 }
                 .padding(.bottom, 30)
             }
         }
-        .navigationTitle("Product Details")
+        .navigationTitle("Beauty Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -58,7 +75,7 @@ struct ProductDetailView: View {
                     Button(role: .destructive) {
                         showingDeleteAlert = true
                     } label: {
-                        Label("Delete Product", systemImage: "trash")
+                        Label("Remove Product", systemImage: "trash")
                     }
                     
                     Button {
@@ -70,25 +87,24 @@ struct ProductDetailView: View {
                         )
                     }
                 } label: {
-                    // Make the icon more visible and larger
                     Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.blue) // Use a more visible color
+                        .font(.system(size: 20))
+                        .foregroundColor(.lushyPink)
                 }
             }
         }
         .alert(isPresented: $showingDeleteAlert) {
             Alert(
-                title: Text("Delete Product"),
-                message: Text("Are you sure you want to delete this product? This action cannot be undone."),
-                primaryButton: .destructive(Text("Delete")) {
+                title: Text("Remove Product"),
+                message: Text("Are you sure you want to remove this beauty item? This action cannot be undone."),
+                primaryButton: .destructive(Text("Remove")) {
                     viewModel.deleteProduct()
                     presentationMode.wrappedValue.dismiss()
                 },
                 secondaryButton: .cancel()
             )
         }
-        .sheet(isPresented: $viewModel.showReviewForm) {
+        .sheet(isPresented: Binding(get: { viewModel.showReviewForm }, set: { viewModel.showReviewForm = $0 })) {
             ReviewFormView(viewModel: viewModel)
         }
     }
@@ -109,281 +125,227 @@ struct ProductDetailView: View {
 
 // Create prettier components for product detail
 
-private struct _PrettyProductHeader: View {
+// MARK: - Pretty Product Header
+struct _PrettyProductHeader: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
-        VStack(alignment: .center, spacing: 15) {
-            if let imageUrlString = viewModel.product.imageUrl,
-               let imageUrl = URL(string: imageUrlString) {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(width: 180, height: 180)
-                    case .success(let image):
+        VStack(alignment: .leading, spacing: 20) {
+            // Product image with soft shadow
+            if let imageUrl = viewModel.product.imageUrl {
+                // Center the image
+                HStack {
+                    Spacer()
+                    AsyncImage(url: URL(string: imageUrl)) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 180, height: 180)
-                            .cornerRadius(20)
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-                    case .failure:
-                        Image(systemName: "photo")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                            .frame(width: 180, height: 180)
-                    @unknown default:
-                        EmptyView()
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 25)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.lushyPink.opacity(0.1), Color.lushyPurple.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.lushyPink.opacity(0.3))
+                            )
                     }
+                    .frame(height: 250)
+                    .clipShape(RoundedRectangle(cornerRadius: 25))
+                    .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
+                    Spacer()
                 }
-            } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 60))
-                    .foregroundColor(.gray)
-                    .frame(width: 180, height: 180)
             }
             
-            VStack(spacing: 5) {
-                Text(viewModel.product.productName ?? "Unknown Product")
-                    .font(.system(size: 24, weight: .bold))
-                    .multilineTextAlignment(.center)
+            // Product info with dreamy styling
+            VStack(alignment: .leading, spacing: 6) {
+                Text(viewModel.product.brand ?? "")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.lushyPurple)
+                    .textCase(.uppercase)
+                    .tracking(1)
                 
-                if let brand = viewModel.product.brand {
-                    Text(brand)
-                        .font(.system(size: 18))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.top, 10)
-            
-            HStack(spacing: 20) {
-                if viewModel.product.vegan {
-                    VStack(spacing: 5) {
-                        Image(systemName: "leaf.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 22))
-                        
-                        Text("Vegan")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 20)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(15)
-                }
+                Text(viewModel.product.productName ?? "Unnamed Product")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
                 
-                if viewModel.product.crueltyFree {
-                    VStack(spacing: 5) {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.lushyPink)
-                            .font(.system(size: 22))
-                        
-                        Text("Cruelty-Free")
-                            .font(.caption)
-                            .foregroundColor(.lushyPink)
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 20)
-                    .background(Color.lushyPink.opacity(0.1))
-                    .cornerRadius(15)
+                // Expiry countdown
+                if let days = viewModel.daysUntilExpiry {
+                    Text(days > 0 ? "Expires in \(days) days" : "Expired")
+                        .font(.subheadline)
+                        .foregroundColor(days > 7 ? .green : (days > 0 ? .orange : .red))
                 }
             }
-            .padding(.top, 5)
+            .padding(.horizontal)
+        }
+    }
+}
+
+// MARK: - Pretty Usage Info
+struct _PrettyUsageInfo: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            HStack {
+                Image(systemName: "heart.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.lushyPink)
+                Text("Usage Stats")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            .padding(.horizontal)
             
-            Button(action: {
-                viewModel.toggleFavorite()
-            }) {
-                HStack(spacing: 10) {
-                    Image(systemName: viewModel.product.favorite ? "star.fill" : "star")
-                        .foregroundColor(viewModel.product.favorite ? .yellow : .gray)
-                    
-                    Text(viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites")
-                        .font(.system(size: 16))
-                        .foregroundColor(viewModel.product.favorite ? .yellow : .gray)
-                }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 20)
-                .background(
-                    RoundedRectangle(cornerRadius: 15)
-                        .stroke(viewModel.product.favorite ? Color.yellow : Color.gray, lineWidth: 1)
+            HStack(spacing: 15) {
+                _PrettyStatCard(
+                    title: "Times Used",
+                    value: "\(viewModel.product.timesUsed)",
+                    icon: "wand.and.stars",
+                    color: .lushyPink
+                )
+                
+                _PrettyStatCard(
+                    title: "Love Rating",
+                    value: String(format: "%.1f", viewModel.rating),
+                    icon: "heart.fill",
+                    color: .lushyPurple
                 )
             }
-            .padding(.top, 10)
+            .padding(.horizontal)
+        }
+    }
+}
+
+// MARK: - Pretty Stat Card
+struct _PrettyStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 25)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 15, x: 0, y: 5)
+            RoundedRectangle(cornerRadius: 20)
+                .fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.05), Color.white],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(color.opacity(0.1), lineWidth: 1)
+                )
         )
-        .padding(.horizontal)
     }
 }
 
-// MARK: - Usage Info Component
-private struct _PrettyUsageInfo: View {
+// MARK: - Pretty Action Buttons
+struct _PrettyActionButtons: View {
     @ObservedObject var viewModel: ProductDetailViewModel
-    @AppStorage("userRegion") private var userRegion: String = "GLOBAL"
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Usage Information")
-                .font(.headline)
+        VStack(spacing: 15) {
+            HStack(spacing: 15) {
+                Button(action: { viewModel.toggleFavorite() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(viewModel.product.favorite ? "Loved" : "Love It")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(viewModel.product.favorite ? .white : .lushyPink)
+                    .padding(.vertical, 15)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                viewModel.product.favorite ?
+                                    LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing) :
+                                    LinearGradient(colors: [.white, .white], startPoint: .leading, endPoint: .trailing)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(.lushyPink.opacity(0.3), lineWidth: viewModel.product.favorite ? 0 : 1.5)
+                            ))
+                }
+
+                Button(action: { viewModel.incrementUsage() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Used It")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 15)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(colors: [.lushyMint, .lushyPeach], startPoint: .leading, endPoint: .trailing)
+                            )
+                    )
+                }
+            }
+            .padding(.horizontal)
             
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Purchased")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text(formatDate(viewModel.product.purchaseDate ?? Date()))
+            Button(action: {
+                viewModel.showReviewForm = true
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "star.bubble")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Write a Review")
                         .font(.subheadline)
-                }
-                
-                Spacer()
-                
-                if let openDate = viewModel.product.openDate {
-                    VStack(alignment: .leading) {
-                        Text("Opened")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text(formatDate(openDate))
-                            .font(.subheadline)
-                    }
-                    
-                    Spacer()
-                }
-                
-                if let expireDate = viewModel.product.expireDate {
-                    VStack(alignment: .leading) {
-                        Text("Expires")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text(formatDate(expireDate))
-                            .font(.subheadline)
-                            .foregroundColor(isExpiringSoon(expireDate) ? .orange : .primary)
-                    }
-                }
-            }
-            
-            if let daysUntilExpiry = viewModel.daysUntilExpiry {
-                if daysUntilExpiry > 0 {
-                    HStack {
-                        Spacer()
-                        Text("\(daysUntilExpiry) days until expiry")
-                            .font(.caption)
-                            .padding(8)
-                            .foregroundColor(daysUntilExpiry < 14 ? .orange : .blue)
-                            .background(daysUntilExpiry < 14 ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
-                            .cornerRadius(8)
-                        Spacer()
-                    }
-                } else {
-                    HStack {
-                        Spacer()
-                        Text("Product has expired")
-                            .font(.caption)
-                            .padding(8)
-                            .foregroundColor(.red)
-                            .background(Color.red.opacity(0.2))
-                            .cornerRadius(8)
-                        Spacer()
-                    }
-                }
-            }
-            
-            // Add compliance advisory section
-            if viewModel.product.openDate != nil {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Compliance Information")
-                        .font(.callout)
                         .fontWeight(.semibold)
-                    
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "info.circle.fill")
-                            .foregroundColor(.blue)
-                        
-                        Text(viewModel.complianceAdvisory)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // Region selector
-                    Menu {
-                        Button("Global") { userRegion = "GLOBAL" }
-                        Button("European Union") { userRegion = "EU" }
-                        Button("United States") { userRegion = "US" }
-                        Button("Japan") { userRegion = "JP" }
-                    } label: {
-                        HStack {
-                            Text("Region: \(userRegion)")
-                                .font(.caption)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
-                        }
-                        .foregroundColor(.blue)
-                    }
-                    .padding(.top, 2)
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 5)
+                .foregroundColor(.lushyPurple)
+                .padding(.vertical, 15)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.lushyPurple.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(.lushyPurple.opacity(0.2), lineWidth: 1)
+                        )
+                )
             }
+            .padding(.horizontal)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
-    }
-    
-    private func isExpiringSoon(_ date: Date) -> Bool {
-        let now = Date()
-        let twoWeeks = 14 * 24 * 60 * 60
-        return date.timeIntervalSince(now) < Double(twoWeeks)
-    }
-}
-
-// MARK: - Action Buttons Component
-private struct _PrettyActionButtons: View {
-    @ObservedObject var viewModel: ProductDetailViewModel
-    
-    var body: some View {
-        HStack {
-            if viewModel.product.openDate == nil {
-                Button(action: {
-                    viewModel.markAsOpened()
-                }) {
-                    Label("Mark as Opened", systemImage: "seal.fill")
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-            } else {
-                Button(action: {
-                    viewModel.markAsEmpty()
-                }) {
-                    Label("Mark as Empty", systemImage: "trash.fill")
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-            }
-        }
-        .padding(.horizontal)
     }
 }
 
@@ -622,6 +584,7 @@ private struct _PrettyTagsSection: View {
                                     .frame(width: 10, height: 10)
                                 Text(tag.name ?? "")
                                     .font(.caption)
+                                    .foregroundColor(.primary)
                                 Button(action: { viewModel.removeTagFromProduct(tag) }) {
                                     Image(systemName: "xmark.circle.fill")
                                         .foregroundColor(.gray)

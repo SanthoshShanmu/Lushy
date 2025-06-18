@@ -72,6 +72,8 @@ exports.getUserProfile = async (req, res) => {
     try {
       const BeautyBag = require('../models/beautyBag');
       bags = await BeautyBag.find({ user: userId }).select('name');
+      // Remove duplicate bag entries by name
+      bags = bags.filter((bag, idx) => bags.findIndex(b => b.name === bag.name) === idx);
     } catch (e) {}
     try {
       const UserProduct = require('../models/userProduct');
@@ -103,5 +105,38 @@ exports.searchUsers = async (req, res) => {
     res.json({ users });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Create a new beauty bag
+exports.createBag = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { name } = req.body;
+    const BeautyBag = require('../models/beautyBag');
+    // Prevent duplicate bag names per user
+    const existing = await BeautyBag.findOne({ user: userId, name });
+    if (existing) {
+      return res.status(200).json({ bag: existing });
+    }
+    const newBag = await BeautyBag.create({ user: userId, name });
+    res.status(201).json({ bag: newBag });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to create bag.', error: err.message });
+  }
+};
+
+// Delete a beauty bag
+exports.deleteBag = async (req, res) => {
+  try {
+    const { userId, bagId } = req.params;
+    const BeautyBag = require('../models/beautyBag');
+    const deleted = await BeautyBag.findOneAndDelete({ _id: bagId, user: userId });
+    if (!deleted) {
+      return res.status(404).json({ message: 'Bag not found.' });
+    }
+    res.json({ message: 'Bag deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete bag.', error: err.message });
   }
 };

@@ -59,7 +59,7 @@ struct LoginView: View {
                             Group {
                                 if isLoggingIn {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Color.white))
                                 } else {
                                     Text("Sign In")
                                         .fontWeight(.semibold)
@@ -68,7 +68,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                         }
-                        .buttonStyle(LushyButtonStyle(backgroundColor: .lushyPink, foregroundColor: .white, isLarge: true))
+                        .lushyButtonStyle(.primary, size: .large)
                         .disabled(email.isEmpty || password.isEmpty || isLoggingIn)
                     }
                     .padding(.horizontal)

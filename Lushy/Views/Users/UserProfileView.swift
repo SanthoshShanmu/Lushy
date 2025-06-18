@@ -51,12 +51,39 @@ struct UserProfileView: View {
                         // Profile Header
                         ProfileHeaderView(profile: profile, viewModel: viewModel)
                         
-                        // Stats Section
-                        StatsSection(profile: profile)
+                        // Stats Section (customized)
+                        HStack(spacing: 30) {
+                            StatItem(
+                                icon: "heart.fill",
+                                count: profile.followers?.count ?? 0,
+                                label: "Followers",
+                                color: .lushyPink
+                            )
+                            
+                            StatItem(
+                                icon: "person.2.fill",
+                                count: profile.following?.count ?? 0,
+                                label: "Following",
+                                color: .lushyPurple
+                            )
+                            
+                            StatItem(
+                                icon: "bag.fill",
+                                count: viewModel.bags.count,
+                                label: "Bags",
+                                color: .lushyMint
+                            )
+                        }
+                        .padding(.horizontal)
                         
+                        // Favorites Section
+                        if !viewModel.favorites.isEmpty {
+                            FavoritesSection(favorites: viewModel.favorites)
+                        }
+
                         // Beauty Bags Section
-                        if let bags = profile.bags, !bags.isEmpty {
-                            BeautyBagsSection(bags: bags)
+                        if !viewModel.bags.isEmpty {
+                            BeautyBagsSection(bags: viewModel.bags)
                         }
                         
                         // Products Section
@@ -231,6 +258,64 @@ struct StatItem: View {
     }
 }
 
+// MARK: - Favorites Section
+struct FavoritesSection: View {
+    let favorites: [UserProductSummary]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "star.fill")
+                    .foregroundColor(.lushyPink)
+                Text("Favorites")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(favorites) { product in
+                    FavoriteCard(product: product)
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+struct FavoriteCard: View {
+    let product: UserProductSummary
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.title2)
+                .foregroundColor(.lushyPink)
+            Text(product.name)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.1), Color.lushyCream.opacity(0.2)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+    }
+}
+
 // MARK: - Beauty Bags Section
 struct BeautyBagsSection: View {
     let bags: [BeautyBagSummary]
@@ -319,16 +404,9 @@ struct ProductsSection: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                ForEach(products.prefix(6)) { product in
+                ForEach(products) { product in
                     ProductCard(product: product, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
                 }
-            }
-            
-            if products.count > 6 {
-                Text("And \(products.count - 6) more products...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding()

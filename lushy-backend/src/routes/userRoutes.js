@@ -9,6 +9,10 @@ router.post('/:userId/follow', userController.followUser);
 router.post('/:userId/unfollow', userController.unfollowUser);
 // Get user profile (with bags and products)
 router.get('/:userId/profile', userController.getUserProfile);
+// Create a new beauty bag for the user
+router.post('/:userId/bags', userController.createBag);
+// Delete a beauty bag for the user
+router.delete('/:userId/bags/:bagId', userController.deleteBag);
 // Search users
 router.get('/search', userController.searchUsers);
 // Get activity feed for a user

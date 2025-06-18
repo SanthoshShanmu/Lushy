@@ -28,6 +28,8 @@ extension UserProduct {
     @NSManaged public var tags: NSSet?
     @NSManaged public var userId: String
     @NSManaged public var backendId: String?
+    @objc(timesUsed)
+    @NSManaged public dynamic var timesUsed: Int32
 
 }
 

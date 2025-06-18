@@ -555,4 +555,15 @@ class CoreDataManager {
         request.predicate = NSPredicate(format: "userId == %@", currentUserId())
         return (try? viewContext.fetch(request)) ?? []
     }
+    
+    // Increment usage count for a product
+    func incrementUsage(id: NSManagedObjectID) {
+        let context = container.newBackgroundContext()
+        context.performAndWait {
+            if let userProduct = try? context.existingObject(with: id) as? UserProduct {
+                userProduct.timesUsed += 1
+                try? context.save()
+            }
+        }
+    }
 }

@@ -15,8 +15,8 @@ class AuthManager: ObservableObject {
         // Don't set isCheckingAuth to true here to avoid UI conflicts with splash
         
         // Check if a token exists
-        if let token = AuthService.shared.token {
-            validateToken(token)
+        if AuthService.shared.token != nil {
+            validateToken()
         } else {
             DispatchQueue.main.async {
                 self.isAuthenticated = false
@@ -30,11 +30,11 @@ class AuthManager: ObservableObject {
         authError = nil
         
         // Check if token exists and is valid
-        if let token = AuthService.shared.token {
-            print("Found existing token: \(String(describing: token.prefix(10)))...")
+        if AuthService.shared.token != nil {
+            print("Found existing token: \(String(describing: AuthService.shared.token!.prefix(10)))...")
             
             // Validate token with backend
-            validateToken(token)
+            validateToken()
         } else {
             print("No existing token found")
             DispatchQueue.main.async {
@@ -44,7 +44,7 @@ class AuthManager: ObservableObject {
         }
     }
     
-    private func validateToken(_ token: String) {
+    private func validateToken() {
         APIService.shared.validateToken()
             .receive(on: DispatchQueue.main) // Ensure UI updates on main thread
             .sink { completion in

@@ -445,24 +445,63 @@ class APIService {
             }
             .eraseToAnyPublisher()
     }
+    
+    // Create a new beauty bag for a user
+    func createBag(userId: String, name: String) -> AnyPublisher<BeautyBagSummary, APIError> {
+        let url = baseURL.appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("bags")
+         var request = URLRequest(url: url)
+         request.httpMethod = "POST"
+         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+         if let token = AuthService.shared.token {
+             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+         }
+         let body = ["name": name]
+         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+         return URLSession.shared.dataTaskPublisher(for: request)
+             .tryMap { data, response -> BeautyBagSummary in
+                 guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                     throw APIError.invalidResponse
+                 }
+                 let wrapper = try JSONDecoder().decode(BagResponse.self, from: data)
+                 let bag = wrapper.bag
+                 return BeautyBagSummary(id: bag._id, name: bag.name)
+             }
+             .mapError { error in
+                 (error as? APIError) ?? .networkError
+             }
+             .eraseToAnyPublisher()
+    }
 
-    // Sync product with backend
+    // Response wrapper for createBag
+    private struct BagResponse: Codable {
+        let bag: BagData
+        struct BagData: Codable {
+            let _id: String
+            let name: String
+        }
+    }
+    
+    // Sync a single product to the backend to create a new UserProduct and activity
     func syncProductWithBackend(product: UserProduct) -> AnyPublisher<Bool, APIError> {
         guard let userId = AuthService.shared.userId else {
-            return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
+            return Fail(error: .authenticationRequired).eraseToAnyPublisher()
         }
-        
-        let urlString = "\(baseURL)/users/\(userId)/products"
-        guard let url = URL(string: urlString) else {
-            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
-        // Convert CoreData product to backend format
-        let openDateValue = product.openDate?.timeIntervalSince1970
-        
-        var productData: [String: Any] = [
+        // Prepare payload
+        let payload: [String: Any] = [
             "barcode": product.barcode ?? "",
-            "productName": product.productName ?? "Unknown Product",
+            "productName": product.productName ?? "",
             "brand": product.brand ?? "",
             "imageUrl": product.imageUrl ?? "",
             "purchaseDate": product.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
@@ -470,82 +509,40 @@ class APIService {
             "crueltyFree": product.crueltyFree,
             "favorite": product.favorite
         ]
-        
-        // Only add optional fields if they exist
-        if let openDateValue = openDateValue {
-            productData["openDate"] = openDateValue
-        }
-        
-        if let periodsAfterOpening = product.periodsAfterOpening {
-            productData["periodsAfterOpening"] = periodsAfterOpening
-        }
-        
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Bool in
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return true
+            }
+            .mapError { error in (error as? APIError) ?? .networkError }
+            .eraseToAnyPublisher()
+    }
+    
+    // Delete a beauty bag for a user
+    func deleteBag(userId: String, bagId: String) -> AnyPublisher<Void, APIError> {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("bags")
+            .appendingPathComponent(bagId)
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+        request.httpMethod = "DELETE"
         if let token = AuthService.shared.token {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: productData)
-            print("🚀 Syncing product to backend: \(productData["productName"] ?? "Unknown")")
-        } catch {
-            return Fail(error: APIError.encodingError).eraseToAnyPublisher()
-        }
-        
         return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { data, response -> Bool in
-                guard let httpResponse = response as? HTTPURLResponse else {
+            .tryMap { _, response in
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode) else {
                     throw APIError.invalidResponse
                 }
-                
-                print("📡 Backend sync response status: \(httpResponse.statusCode)")
-                
-                // Log the response body for debugging 400 errors
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("📄 Backend response body: \(responseString)")
-                }
-                
-                if httpResponse.statusCode == 401 {
-                    throw APIError.authenticationRequired
-                } else if httpResponse.statusCode == 400 {
-                    // Parse the error message from the response
-                    if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let message = errorData["message"] as? String {
-                        print("❌ Backend 400 error: \(message)")
-                        throw APIError.customError("Backend error: \(message)")
-                    } else {
-                        throw APIError.customError("Bad request - invalid data format")
-                    }
-                } else if (200...299).contains(httpResponse.statusCode) {
-                    // Parse response to get the backend ID
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let dataDict = json["data"] as? [String: Any],
-                       let productDict = dataDict["product"] as? [String: Any],
-                       let backendId = productDict["_id"] as? String {
-                        
-                        // Store the backend ID in the local product
-                        DispatchQueue.main.async {
-                            product.backendId = backendId
-                            try? CoreDataManager.shared.viewContext.save()
-                            print("✅ Product synced successfully! Backend ID: \(backendId)")
-                        }
-                    }
-                    
-                    return true
-                } else {
-                    throw APIError.invalidResponse
-                }
+                return ()
             }
-            .mapError { error -> APIError in
-                print("❌ Product sync failed: \(error)")
-                if let apiError = error as? APIError {
-                    return apiError
-                }
-                return APIError.networkError
-            }
+            .mapError { error in (error as? APIError) ?? .networkError }
             .eraseToAnyPublisher()
     }
 }

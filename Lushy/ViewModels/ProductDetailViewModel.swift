@@ -149,9 +149,7 @@ class ProductDetailViewModel: ObservableObject {
         guard let expireDate = product.expireDate else { return nil }
         let today = Calendar.current.startOfDay(for: Date())
         let expiry = Calendar.current.startOfDay(for: expireDate)
-        
-        let components = Calendar.current.dateComponents([.day], from: today, to: expiry)
-        return components.day
+        return Calendar.current.dateComponents([.day], from: today, to: expiry).day
     }
     
     // Formatted expire date string
@@ -221,6 +219,20 @@ class ProductDetailViewModel: ObservableObject {
 
     func removeTagFromProduct(_ tag: ProductTag) {
         CoreDataManager.shared.removeTag(tag, fromProduct: product)
+        refreshProduct()
+    }
+    
+    // Calculate average rating from reviews
+    var rating: Double {
+        let reviews = (product.reviews as? Set<Review>) ?? []
+        guard !reviews.isEmpty else { return 0.0 }
+        let total = reviews.reduce(0.0) { $0 + Double($1.rating) }
+        return total / Double(reviews.count)
+    }
+
+    // Increment usage count
+    func incrementUsage() {
+        CoreDataManager.shared.incrementUsage(id: product.objectID)
         refreshProduct()
     }
 }

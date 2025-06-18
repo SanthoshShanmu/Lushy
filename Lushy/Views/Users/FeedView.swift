@@ -89,10 +89,9 @@ struct FeedView: View {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(viewModel.activities) { activity in
-                                ActivityCard(activity: activity, currentUserId: currentUserId)
-                                    .onTapGesture {
-                                        selectedUser = activity.user
-                                    }
+                                NavigationLink(value: activity.user) {
+                                    ActivityCard(activity: activity, currentUserId: currentUserId)
+                                }
                             }
                         }
                         .padding(.horizontal)
