@@ -1,6 +1,6 @@
 import SwiftUI
 import PhotosUI
-import CoreData  // Add this import
+import CoreData
 
 struct ManualEntryView: View {
     @ObservedObject var viewModel: ScannerViewModel
@@ -8,261 +8,57 @@ struct ManualEntryView: View {
     @State private var showingErrorAlert = false
     @State private var errorMessage = "Failed to add product. Please ensure product name is filled in."
     @Environment(\.presentationMode) var presentationMode
-    
+
     // Image capture
     @State private var productImage: UIImage? = nil
     enum ImageSourceType { case none, camera, library }
     @State private var imageSource: ImageSourceType = .none
-    
+
     // Period After Opening
     @State private var periodsAfterOpening = "12 M"
-    
-    // Common PAO options (using correct OBF format)
-    private let paoOptions = ["3 M", "6 M", "9 M", "12 M", "18 M", "24 M", "30 M", "36 M", "48 M"]
-    
-    @State private var showingOBFSuccessToast = false
-    @State private var showingProcessingToast = false
-    
-    // Bag and tag selection
+    private let paoOptions = ["3 M","6 M","9 M","12 M","18 M","24 M","30 M","36 M","48 M"]
+
+    // Bag & Tag selection
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
     @State private var allBags: [BeautyBag] = []
     @State private var allTags: [ProductTag] = []
     @State private var newTagName: String = ""
     @State private var newTagColor: String = "blue"
-    
+
+    @State private var showingOBFSuccessToast = false
+    @State private var showingProcessingToast = false
+
     var body: some View {
         NavigationView {
-            Form {
-                // Product Lookup Section
-                Section(header: Text("Product Lookup")) {
-                    HStack {
-                        TextField("Barcode", text: $viewModel.manualBarcode)
-                            .keyboardType(.numberPad)
-                        
-                        Button(action: {
-                            if !viewModel.manualBarcode.isEmpty {
-                                viewModel.fetchProduct(barcode: viewModel.manualBarcode)
-                            } else {
-                                errorMessage = "Please enter a barcode to look up"
-                                showingErrorAlert = true
-                            }
-                        }) {
-                            Text("Look Up")
-                                .bold()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(viewModel.manualBarcode.isEmpty)
+            ZStack {
+                Color.clear.pastelBackground()
+                ScrollView {
+                    VStack(spacing: 20) {
+                        productLookupSection()
+                        productInformationSection()
+                        usageInformationSection()
+                        bagSelectionSection()
+                        tagSelectionSection()
+                        saveButtonsSection()
                     }
-                    
-                    if viewModel.isLoading {
-                        HStack {
-                            Spacer()
-                            ProgressView("Searching...")
-                            Spacer()
-                        }
-                    }
-                    
-                    if viewModel.productNotFound {
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.orange)
-                            Text("Product not in database. You're adding a new product!")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        // Show OBF contribution indicator if enabled
-                        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-                        let autoContributeEnabled = hasSetPreference ? 
-                            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
-                            true // Default to enabled for new users
-                        
-                        if autoContributeEnabled {
-                            HStack {
-                                Image(systemName: "globe")
-                                    .foregroundColor(.blue)
-                                Text("Will contribute to Open Beauty Facts")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(8)
-                        }
-                    }
-                }
-                
-                // Product Information Section
-                Section(header: Text("Product Information")) {
-                    TextField("Product Name (Required)", text: $viewModel.manualProductName)
-                    
-                    TextField("Brand (Optional)", text: $viewModel.manualBrand)
-                    
-                    // Image selection
-                    HStack {
-                        if let image = productImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 100, height: 100)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        } else {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.gray.opacity(0.2))
-                                .frame(width: 100, height: 100)
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.gray)
-                                )
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Button(action: {
-                                imageSource = .camera
-                            }) {
-                                Label("Take Photo", systemImage: "camera")
-                            }
-                            .padding(.vertical, 5)
-                            
-                            Button(action: {
-                                imageSource = .library
-                            }) {
-                                Label("Select Photo", systemImage: "photo")
-                            }
-                            .padding(.vertical, 5)
-                        }
-                        .padding(.leading, 10)
-                    }
-                    .padding(.vertical, 5)
-                }
-                
-                // Usage Information Section
-                Section(header: Text("Usage Information")) {
-                    DatePicker(
-                        "Purchase Date",
-                        selection: $viewModel.purchaseDate,
-                        displayedComponents: .date
-                    )
-                    
-                    Toggle("Product is already opened", isOn: $viewModel.isProductOpen)
-                    
-                    if viewModel.isProductOpen {
-                        DatePicker(
-                            "Open Date",
-                            selection: Binding(
-                                get: { viewModel.openDate ?? Date() },
-                                set: { viewModel.openDate = $0 }
-                            ),
-                            displayedComponents: .date
-                        )
-                    }
-                    
-                    // Period After Opening selection
-                    Picker("Period After Opening", selection: $periodsAfterOpening) {
-                        ForEach(paoOptions, id: \.self) {
-                            Text($0)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                }
-                
-                // Bag selection section
-                Section(header: Text("Add to Beauty Bags")) {
-                    if allBags.isEmpty {
-                        Text("No bags yet. Create one from the Bags tab.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(allBags, id: \.objectID) { bag in
-                            MultipleSelectionRow(
-                                title: bag.name ?? "Unnamed Bag",
-                                isSelected: selectedBagIDs.contains(bag.objectID),
-                                icon: bag.icon,
-                                color: bag.color
-                            ) {
-                                if selectedBagIDs.contains(bag.objectID) {
-                                    selectedBagIDs.remove(bag.objectID)
-                                } else {
-                                    selectedBagIDs.insert(bag.objectID)
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Tag selection section
-                Section(header: Text("Add Tags")) {
-                    if allTags.isEmpty {
-                        Text("No tags yet. Create one below.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(allTags, id: \.objectID) { tag in
-                            MultipleSelectionRow(
-                                title: tag.name ?? "Unnamed Tag",
-                                isSelected: selectedTagIDs.contains(tag.objectID),
-                                icon: "tag",
-                                color: tag.color
-                            ) {
-                                if selectedTagIDs.contains(tag.objectID) {
-                                    selectedTagIDs.remove(tag.objectID)
-                                } else {
-                                    selectedTagIDs.insert(tag.objectID)
-                                }
-                            }
-                        }
-                    }
-                    // Quick add new tag
-                    HStack {
-                        TextField("New Tag", text: $newTagName)
-                        Picker("Color", selection: $newTagColor) {
-                            ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"], id: \.self) { color in
-                                Text(color.capitalized)
-                            }
-                        }
-                    }
-                    Button("Add") {
-                        if !newTagName.isEmpty {
-                            CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                            allTags = CoreDataManager.shared.fetchProductTags()
-                            newTagName = ""
-                            newTagColor = "blue"
-                        }
-                    }.disabled(newTagName.isEmpty)
-                }
-                
-                // Save Section
-                Section {
-                    Button(action: {
-                        saveProduct()
-                    }) {
-                        Text("Save Product")
-                            .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
-                    }
-                    .listRowBackground(Color.blue)
-                    .disabled(viewModel.manualProductName.isEmpty)
+                    .padding()
                 }
             }
             .navigationTitle("Add Product")
             .alert(isPresented: $showingErrorAlert) {
-                Alert(
-                    title: Text("Error"),
-                    message: Text(errorMessage),
-                    dismissButton: .default(Text("OK"))
-                )
+                Alert(title: Text("Error"),
+                      message: Text(errorMessage),
+                      dismissButton: .default(Text("OK")))
             }
             .sheet(isPresented: Binding<Bool>(
                 get: { imageSource != .none },
                 set: { if !$0 { imageSource = .none } }
             )) {
                 if imageSource == .camera {
-                    ImagePicker(selectedImage: $productImage, sourceType: .camera, onDismiss: { imageSource = .none })
+                    ImagePicker(selectedImage: $productImage, sourceType: .camera)
                 } else if imageSource == .library {
-                    ImagePicker(selectedImage: $productImage, sourceType: .photoLibrary, onDismiss: { imageSource = .none })
+                    ImagePicker(selectedImage: $productImage, sourceType: .photoLibrary)
                 }
             }
 #if compiler(>=5.9) && canImport(SwiftUI)
@@ -350,8 +146,8 @@ struct ManualEntryView: View {
                                 Text(viewModel.isContributingToOBF ?
                                      "Contributing to Open Beauty Facts..." :
                                      "Contributed to Open Beauty Facts")
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
+                                .foregroundColor(.white)
+                                .font(.subheadline)
                             }
                             .padding()
                             .background(Color.black.opacity(0.7))
@@ -402,85 +198,152 @@ struct ManualEntryView: View {
             }
         }
     }
-    
-    private func saveProduct() {
-        if viewModel.manualProductName.isEmpty {
-            errorMessage = "Product name is required"
-            showingErrorAlert = true
-            return
+
+    @ViewBuilder private func productLookupSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Product Lookup").font(.headline)
+            HStack(spacing: 12) {
+                TextField("Barcode", text: $viewModel.manualBarcode)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                Button("Look Up") {
+                    if viewModel.manualBarcode.isEmpty {
+                        errorMessage = "Please enter a barcode to look up"
+                        showingErrorAlert = true
+                    } else {
+                        viewModel.fetchProduct(barcode: viewModel.manualBarcode)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.manualBarcode.isEmpty)
+            }
         }
-        
-        // Add indicator that we're processing
-        let processingToast = showProcessingToast()
-        
-        // Save locally and contribute to OBF if needed
-        if let objectID = viewModel.saveManualProduct(periodsAfterOpening: periodsAfterOpening, productImage: productImage) {
-            // Assign bags and tags
-            let context = CoreDataManager.shared.viewContext
-            if let product = try? context.existingObject(with: objectID) as? UserProduct {
-                for bagID in selectedBagIDs {
-                    if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
-                        product.addToBags(bag)
-                    }
-                }
-                for tagID in selectedTagIDs {
-                    if let tag = try? context.existingObject(with: tagID) as? ProductTag {
-                        product.addToTags(tag)
-                    }
-                }
-                try? context.save()
-            }
-            print("Product saved locally with ID: \(objectID)")
-            
-            // Wait for OBF contribution to complete before dismissing
-            // Only dismiss after 2 seconds to ensure upload has time to start
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                processingToast()  // Dismiss processing toast
-                
-                if self.viewModel.isContributingToOBF {
-                    print("OBF upload in progress - waiting to complete")
-                    
-                    // Show uploading indicator
-                    self.showingOBFSuccessToast = true
-                    
-                    // Check every second if uploading is complete
-                    var checkCount = 0
-                    Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-                        checkCount += 1
-                        
-                        if !self.viewModel.isContributingToOBF || checkCount > 10 {
-                            timer.invalidate()
-                            DispatchQueue.main.async {
-                                self.viewModel.reset()
-                                self.presentationMode.wrappedValue.dismiss()
-                            }
-                        }
-                    }
+        .glassCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func productInformationSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Product Information").font(.headline)
+            TextField("Product Name (Required)", text: $viewModel.manualProductName)
+                .textFieldStyle(.roundedBorder)
+            TextField("Brand (Optional)", text: $viewModel.manualBrand)
+                .textFieldStyle(.roundedBorder)
+            HStack(spacing: 20) {
+                if let img = productImage {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 100, height: 100)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else {
-                    // No contribution needed, just dismiss
-                    self.viewModel.reset()
-                    self.presentationMode.wrappedValue.dismiss()
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                        .overlay(Image(systemName: "photo").font(.largeTitle).foregroundColor(.gray))
+                }
+                VStack(spacing: 8) {
+                    Button("Take Photo") { imageSource = .camera }
+                    Button("Select Photo") { imageSource = .library }
                 }
             }
-        } else {
-            processingToast()  // Dismiss processing toast
-            errorMessage = "Failed to save product"
-            showingErrorAlert = true
+        }
+        .glassCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func usageInformationSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Usage Information").font(.headline)
+            DatePicker("Purchase Date", selection: $viewModel.purchaseDate, displayedComponents: .date)
+            Toggle("Product is already opened", isOn: $viewModel.isProductOpen)
+            if viewModel.isProductOpen {
+                DatePicker("Open Date",
+                           selection: Binding(get: { viewModel.openDate ?? Date() },
+                                               set: { viewModel.openDate = $0 }),
+                           displayedComponents: .date)
+                Picker("PAO", selection: $periodsAfterOpening) {
+                    ForEach(paoOptions, id: \.self) { Text($0) }
+                }
+                .pickerStyle(MenuPickerStyle())
+            }
+        }
+        .glassCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func bagSelectionSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add to Beauty Bags").font(.headline)
+            if allBags.isEmpty {
+                Text("No bags yet. Create one from the Bags tab.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(allBags, id: \.objectID) { bag in
+                    MultipleSelectionRow(title: bag.name ?? "Unnamed Bag",
+                                         isSelected: selectedBagIDs.contains(bag.objectID),
+                                         icon: bag.icon,
+                                         color: bag.color) {
+                        selectedBagIDs.toggleMembership(of: bag.objectID)
+                    }
+                }
+            }
+        }
+        .glassCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func tagSelectionSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add Tags").font(.headline)
+            if allTags.isEmpty {
+                Text("No tags yet. Create one below.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(allTags, id: \.objectID) { tag in
+                    MultipleSelectionRow(title: tag.name ?? "Unnamed Tag",
+                                         isSelected: selectedTagIDs.contains(tag.objectID),
+                                         icon: "tag",
+                                         color: tag.color) {
+                        selectedTagIDs.toggleMembership(of: tag.objectID)
+                    }
+                }
+            }
+            HStack {
+                TextField("New Tag", text: $newTagName)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Color", selection: $newTagColor) {
+                    ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach","blue","green"], id: \.self) {
+                        Text($0.capitalized)
+                    }
+                }
+                Button("Add") {
+                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                    allTags = CoreDataManager.shared.fetchProductTags()
+                    newTagName = ""
+                }
+                .disabled(newTagName.isEmpty)
+            }
+        }
+        .glassCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func saveButtonsSection() -> some View {
+        HStack(spacing: 20) {
+            Button("Save") {
+                _ = viewModel.saveManualProduct()
+            }
+            .neumorphicButtonStyle()
+            Button("Cancel") {
+                viewModel.showManualEntry = false
+            }
+            .neumorphicButtonStyle()
         }
     }
-    
-    // Add this helper function to show a temporary processing toast
-    private func showProcessingToast() -> (() -> Void) {
-        let key = "processing-toast"
-        let notification = NotificationCenter.default
-        
-        // Post notification to show processing
-        notification.post(name: NSNotification.Name("ShowProcessingToast"), object: nil, userInfo: ["key": key])
-        
-        // Return a function that can dismiss this specific toast
-        return {
-            notification.post(name: NSNotification.Name("HideProcessingToast"), object: nil, userInfo: ["key": key])
-        }
+}
+
+// Helper for toggling membership in a Set
+fileprivate extension Set where Element: Hashable {
+    mutating func toggleMembership(of element: Element) {
+        if contains(element) { remove(element) } else { insert(element) }
     }
 }
 

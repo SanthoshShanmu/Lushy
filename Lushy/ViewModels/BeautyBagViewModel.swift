@@ -21,17 +21,25 @@ class BeautyBagViewModel: ObservableObject {
 
     func createBag() {
         guard !newBagName.isEmpty else { return }
-        // Save locally
-        CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon)
+        // Create locally and get its objectID
+        guard let bagID = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) else { return }
         fetchBags()
-        // Sync to backend
+        // Create remotely and store backendId
         if let userId = AuthService.shared.userId {
             APIService.shared.createBag(userId: userId, name: newBagName)
-                .sink(receiveCompletion: { _ in }, receiveValue: { _ in
+                .receive(on: RunLoop.main)
+                .sink(receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to create bag remotely: \(error)")
+                    }
+                }, receiveValue: { summary in
+                    // Link local bag to remote
+                    CoreDataManager.shared.updateBeautyBagBackendId(id: bagID, backendId: summary.id)
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
                 })
                 .store(in: &cancellables)
         }
+ 
         // Reset form
         newBagName = ""
         newBagIcon = "bag.fill"
@@ -42,23 +50,27 @@ class BeautyBagViewModel: ObservableObject {
         guard let userId = AuthService.shared.userId else {
             return
         }
-        // Use remote id if available, otherwise fallback to local objectID
-        let bagId: String
-        if let remoteId = (bag.value(forKey: "backendId") as? String) ?? (bag.value(forKey: "id") as? String) {
-            bagId = remoteId
+        // Attempt remote deletion first
+        if let backendId = bag.backendId {
+            APIService.shared.deleteBag(userId: userId, bagId: backendId)
+                .receive(on: RunLoop.main)
+                .sink(receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to delete bag remotely: \(error)")
+                    }
+                }, receiveValue: {
+                    // Remove locally upon success
+                    CoreDataManager.shared.deleteBeautyBag(bag)
+                    self.fetchBags()
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                })
+                .store(in: &cancellables)
         } else {
-            bagId = bag.objectID.uriRepresentation().absoluteString
+            // Fallback to local only
+            CoreDataManager.shared.deleteBeautyBag(bag)
+            fetchBags()
+            NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
         }
-        // Delete locally
-        CoreDataManager.shared.deleteBeautyBag(bag)
-        fetchBags()
-        // Delete remotely
-        APIService.shared.deleteBag(userId: userId, bagId: bagId)
-            .sink(receiveCompletion: { _ in }, receiveValue: { _ in
-                // Refresh profile view after removal
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
-            })
-            .store(in: &cancellables)
     }
 
     func addProduct(_ product: UserProduct, to bag: BeautyBag) {

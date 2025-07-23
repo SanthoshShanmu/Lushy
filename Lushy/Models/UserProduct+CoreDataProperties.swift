@@ -20,6 +20,7 @@ extension UserProduct {
     @NSManaged public var openDate: Date?
     @NSManaged public var periodsAfterOpening: String?
     @NSManaged public var productName: String?
+    @NSManaged public var shade: String?
     @NSManaged public var purchaseDate: Date?
     @NSManaged public var vegan: Bool
     @NSManaged public var comments: NSSet?

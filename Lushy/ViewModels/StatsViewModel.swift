@@ -79,4 +79,10 @@ class StatsViewModel: ObservableObject {
         let average = Double(totalDays) / Double(products.count)
         return String(format: "%.1f days", average)
     }
+    
+    // Count of unique shades used: fallback since no 'shade' property exists
+    func uniqueShades() -> Int {
+        // Fallback to total finished products count
+        return finishedProducts.count
+    }
 }

@@ -259,7 +259,7 @@ class CoreDataManager {
     func toggleFavorite(id: NSManagedObjectID) {
         let context = viewContext
         
-        context.perform {
+        context.performAndWait {
             guard let product = try? context.existingObject(with: id) as? UserProduct else {
                 return
             }
@@ -455,7 +455,8 @@ class CoreDataManager {
 
     // MARK: - BeautyBag Operations
     
-    func createBeautyBag(name: String, color: String, icon: String) {
+    // Create a new beauty bag locally, returns its objectID
+    func createBeautyBag(name: String, color: String, icon: String) -> NSManagedObjectID? {
         let context = viewContext
         let bag = BeautyBag(context: context)
         bag.name = name
@@ -463,9 +464,27 @@ class CoreDataManager {
         bag.icon = icon
         bag.createdAt = Date()
         bag.userId = currentUserId()
-        try? context.save()
+        // backendId remains nil until remote creation
+        do {
+            try context.save()
+            return bag.objectID
+        } catch {
+            print("Failed to create beauty bag: \(error)")
+            return nil
+        }
     }
-    
+
+    // Update the backendId for a beauty bag
+    func updateBeautyBagBackendId(id: NSManagedObjectID, backendId: String) {
+        let context = container.newBackgroundContext()
+        context.performAndWait {
+            if let bag = try? context.existingObject(with: id) as? BeautyBag {
+                bag.backendId = backendId
+                try? context.save()
+            }
+        }
+    }
+
     func fetchBeautyBags() -> [BeautyBag] {
         let request: NSFetchRequest<BeautyBag> = BeautyBag.fetchRequest()
         request.predicate = NSPredicate(format: "userId == %@", currentUserId())

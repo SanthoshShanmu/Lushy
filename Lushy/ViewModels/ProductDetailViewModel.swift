@@ -230,8 +230,13 @@ class ProductDetailViewModel: ObservableObject {
         return total / Double(reviews.count)
     }
 
-    // Increment usage count
+    // Increment usage count, marking as opened if first use
     func incrementUsage() {
+        if product.openDate == nil {
+            // First use also marks as opened
+            markAsOpened()
+        }
+        // Increment usage count
         CoreDataManager.shared.incrementUsage(id: product.objectID)
         refreshProduct()
     }

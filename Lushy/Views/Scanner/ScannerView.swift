@@ -114,42 +114,34 @@ struct ScannerView: View {
             
             // Show error message if any
             if let errorMessage = viewModel.errorMessage {
-                VStack {
-                    Spacer()
+                VStack(spacing: 16) {
                     Text(errorMessage)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.red.opacity(0.8))
-                        .cornerRadius(10)
-                        .padding()
+                        .foregroundColor(.lushyPink)
                     
-                    Button(action: {
-                        viewModel.errorMessage = nil
-                        viewModel.startScanning()
-                    }) {
-                        Text("Try Again")
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.blue)
-                            .cornerRadius(10)
+                    Button("Try Again") {
+                        viewModel.reset()
                     }
-                    .padding(.bottom)
+                    .neumorphicButtonStyle()
                 }
+                .glassCard(cornerRadius: 18)
+                .padding(.bottom)
             }
-            
+
             // Product not found view
             if viewModel.productNotFound {
                 ProductNotFoundView(viewModel: viewModel)
+                    .glassCard(cornerRadius: 18)
             }
-            
+
             // Show product found screen
             if viewModel.scannedProduct != nil && !viewModel.productNotFound {
                 ProductFoundView(viewModel: viewModel)
+                    .glassCard(cornerRadius: 18)
             }
-            
+
             // Product successfully added message
             if viewModel.showProductAddedSuccess {
-                VStack {
+                VStack(spacing: 20) {
                     Spacer()
                     VStack(spacing: 20) {
                         Image(systemName: "checkmark.circle.fill")
@@ -169,23 +161,11 @@ struct ScannerView: View {
                             viewModel.reset()
                         }) {
                             Text("Done")
-                                .fontWeight(.medium)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 30)
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
                         }
-                        .padding(.top)
+                        .neumorphicButtonStyle()
                     }
-                    .padding()
-                    .background(Color.black.opacity(0.85))
-                    .cornerRadius(15)
-                    .padding()
-                    Spacer()
+                    .glassCard(cornerRadius: 18)
                 }
-                .transition(.opacity)
-                .animation(.easeInOut, value: viewModel.showProductAddedSuccess)
             }
         }
         .edgesIgnoringSafeArea(.all)

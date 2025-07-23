@@ -104,6 +104,7 @@ struct UserProfileView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            // Always fetch profile data (including own account)
             viewModel.fetchProfile()
         }
         .alert("Wishlist", isPresented: $showingWishlistAlert) {
@@ -420,9 +421,14 @@ struct ProductsSection: View {
 
 struct ProductCard: View {
     let product: UserProductSummary
-    @ObservedObject var viewModel: UserProfileViewModel
+    var viewModel: UserProfileViewModel
     @Binding var wishlistMessage: String?
     @Binding var showingWishlistAlert: Bool
+
+    // Computed property for wishlist status
+    private var isAdded: Bool {
+        viewModel.addedWishlistIds.contains(product.id)
+    }
     
     var body: some View {
         VStack(spacing: 8) {
@@ -444,6 +450,7 @@ struct ProductCard: View {
             
             if !viewModel.isViewingOwnProfile {
                 Button(action: {
+                    guard !isAdded else { return }
                     viewModel.addProductToWishlist(productId: product.id) { result in
                         switch result {
                         case .success:
@@ -457,8 +464,7 @@ struct ProductCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "heart.fill")
                             .font(.caption)
-                        Text("Add to Wishlist")
-                            .font(.caption)
+                        Text(isAdded ? "Added" : "Add to Wishlist")
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 8)
@@ -472,6 +478,7 @@ struct ProductCard: View {
                     )
                     .cornerRadius(12)
                 }
+                .disabled(isAdded)
             }
         }
         .padding(12)
@@ -487,6 +494,8 @@ struct ProductCard: View {
                         endPoint: .bottomTrailing
                     )
                 )
+                .cornerRadius(12)
+                .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
         )
     }
 }

@@ -19,17 +19,18 @@ struct OBFCredentialsView: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Open Beauty Facts Account")) {
-                    TextField("User ID", text: $userId)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                        .keyboardType(.emailAddress)
+            ZStack {
+                Color.clear
+                    .pastelBackground()
+                VStack(spacing: 16) {
+                    VStack(spacing: 12) {
+                        TextField("User ID", text: $userId)
+                            .textFieldStyle(.roundedBorder)
+                        SecureField("Password", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .glassCard()
                     
-                    SecureField("Password", text: $password)
-                }
-                
-                Section(footer: Text("Your credentials help expand the beauty product database. They're stored securely on your device only.")) {
                     Button("Save Credentials") {
                         if !userId.isEmpty && !password.isEmpty {
                             OBFContributionService.shared.setCredentials(userId: userId, password: password)
@@ -38,36 +39,38 @@ struct OBFCredentialsView: View {
                             showingErrorAlert = true
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                }
-                
-                Section {
+                    .neumorphicButtonStyle()
+                    .padding(.horizontal)
+                    
                     Link("Create an OBF Account", destination: URL(string: "https://world.openbeautyfacts.org/cgi/user.pl")!)
+                        .foregroundColor(LushyPalette.pink)
                 }
-            }
-            .navigationTitle("OBF Credentials")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                .padding()
+             }
+             .navigationTitle("OBF Credentials")
+             .toolbar {
+                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         isPresented = false
                     }
-                }
-            }
-            .onAppear {
-                loadExistingCredentials()
-            }
-            .alert("Credentials Saved", isPresented: $showingSuccessAlert) {
-                Button("OK") {
-                    isPresented = false
-                }
-            } message: {
-                Text("Your Open Beauty Facts credentials have been saved.")
-            }
-            .alert("Invalid Credentials", isPresented: $showingErrorAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("Please enter both user ID and password.")
-            }
+                    .neumorphicButtonStyle()
+                 }
+             }
+             .onAppear {
+                 loadExistingCredentials()
+             }
+             .alert("Credentials Saved", isPresented: $showingSuccessAlert) {
+                 Button("OK") {
+                     isPresented = false
+                 }
+             } message: {
+                 Text("Your Open Beauty Facts credentials have been saved.")
+             }
+             .alert("Invalid Credentials", isPresented: $showingErrorAlert) {
+                 Button("OK", role: .cancel) { }
+             } message: {
+                 Text("Please enter both user ID and password.")
+             }
         }
     }
 }

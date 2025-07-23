@@ -9,6 +9,7 @@ class UserProfileViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var isFollowing: Bool = false
+    @Published var addedWishlistIds: Set<String> = []
     
     private var cancellables = Set<AnyCancellable>()
     let currentUserId: String
@@ -21,11 +22,21 @@ class UserProfileViewModel: ObservableObject {
     init(currentUserId: String, targetUserId: String) {
         self.currentUserId = currentUserId
         self.targetUserId = targetUserId
-        // Refresh profile on bag changes
         NotificationCenter.default.publisher(for: NSNotification.Name("RefreshProfile"))
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.fetchProfile()
+                guard let self = self else { return }
+                if self.isViewingOwnProfile {
+                    let localBags = CoreDataManager.shared.fetchBeautyBags()
+                    self.bags = localBags.map { bag in
+                        BeautyBagSummary(
+                            id: bag.objectID.uriRepresentation().absoluteString,
+                            name: bag.name ?? ""
+                        )
+                    }
+                } else {
+                    self.fetchProfile()
+                }
             }
             .store(in: &cancellables)
     }
@@ -39,11 +50,10 @@ class UserProfileViewModel: ObservableObject {
                 switch result {
                 case .success(let wrapper):
                     self?.profile = wrapper.user
-                    // Always use backend bags for any profile
                     self?.bags = wrapper.user.bags ?? []
                     self?.products = wrapper.user.products ?? []
                     self?.favorites = wrapper.user.products?.filter { $0.isFavorite == true } ?? []
-                    self?.isFollowing = wrapper.user.followers?.contains(where: { $0.id == self?.currentUserId }) ?? false
+                    self?.isFollowing = wrapper.user.followers?.contains { $0.id == self?.currentUserId } ?? false
                 case .failure(let error):
                     self?.error = error.localizedDescription
                 }
@@ -82,21 +92,16 @@ class UserProfileViewModel: ObservableObject {
     }
     
     func addProductToWishlist(productId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        // First get the product details from the current user profile
         guard let product = products.first(where: { $0.id == productId }) else {
             completion(.failure(APIError.productNotFound))
             return
         }
-        
-        // Create a new wishlist item from the product information
         let wishlistItem = NewWishlistItem(
             productName: product.name,
-            productURL: "https://world.openbeautyfacts.org/product/\(productId)", // Use product barcode as URL
+            productURL: "https://world.openbeautyfacts.org/product/\(productId)",
             notes: "Added from \(profile?.name ?? "another user")'s collection",
-            imageURL: nil // You could add product.imageURL if available
+            imageURL: nil
         )
-        
-        // Use the correct API extension method
         APIService.shared.addWishlistItem(wishlistItem)
             .receive(on: DispatchQueue.main)
             .sink { completionResult in
@@ -107,6 +112,7 @@ class UserProfileViewModel: ObservableObject {
                     completion(.failure(error))
                 }
             } receiveValue: { _ in
+                self.addedWishlistIds.insert(productId)
                 completion(.success(()))
             }
             .store(in: &cancellables)

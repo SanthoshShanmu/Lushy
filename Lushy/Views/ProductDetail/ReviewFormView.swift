@@ -3,85 +3,68 @@ import SwiftUI
 struct ReviewFormView: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     @Environment(\.presentationMode) var presentationMode
-    
+
     var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Rating")) {
-                    HStack {
+        ZStack {
+            Color.clear.pastelBackground()
+            VStack(spacing: 24) {
+                Text("Write a Review")
+                    .lushyTitle()
+                VStack(spacing: 20) {
+                    // Rating stars
+                    HStack(spacing: 12) {
                         ForEach(1...5, id: \.self) { rating in
                             Image(systemName: rating <= viewModel.reviewRating ? "star.fill" : "star")
                                 .foregroundColor(.yellow)
-                                .font(.title)
-                                .onTapGesture {
-                                    viewModel.reviewRating = rating
-                                }
+                                .font(.title2)
+                                .onTapGesture { viewModel.reviewRating = rating }
                         }
-                        
                         Spacer()
-                        
                         Text("\(viewModel.reviewRating) / 5")
                             .foregroundColor(.secondary)
                     }
-                    .padding(.vertical, 5)
-                }
-                
-                Section(header: Text("Review")) {
+                    // Review title
                     TextField("Title", text: $viewModel.reviewTitle)
-                    
+                        .padding(12)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(12)
+                    // Review text
                     ZStack(alignment: .topLeading) {
                         if viewModel.reviewText.isEmpty {
-                            Text("Share your experience with this product...")
+                            Text("Share your experience...")
                                 .foregroundColor(.gray)
-                                .padding(.top, 8)
-                                .padding(.leading, 4)
+                                .padding(14)
                         }
-                        
                         TextEditor(text: $viewModel.reviewText)
                             .frame(minHeight: 100)
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(12)
                     }
                 }
-                
-                Section {
-                    Button(action: {
+                .padding()
+                .glassCard(cornerRadius: 20)
+                // Action buttons
+                HStack(spacing: 16) {
+                    Button("Submit Review") {
                         viewModel.submitReview()
                         presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Text("Submit Review")
-                            .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
                     }
-                    .listRowBackground(Color.blue)
+                    .neumorphicButtonStyle()
                     .disabled(viewModel.reviewTitle.isEmpty || viewModel.reviewText.isEmpty)
-                    
-                    Button(action: {
-                        // Mark as empty without review
+                    Button("Skip & Finish") {
                         CoreDataManager.shared.markProductAsFinished(id: viewModel.product.objectID)
                         presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Text("Skip Review & Mark as Used Up")
-                            .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
                     }
-                    .listRowBackground(Color.orange)
+                    .neumorphicButtonStyle()
                 }
-            }
-            .navigationTitle("Write a Review")
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.lushyPink.opacity(0.10), Color.lushyPurple.opacity(0.08)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .edgesIgnoringSafeArea(.all)
-            )
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+                .padding(.horizontal)
+                Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
                 }
+                .foregroundColor(.lushyPink)
             }
+            .padding(20)
         }
     }
 }

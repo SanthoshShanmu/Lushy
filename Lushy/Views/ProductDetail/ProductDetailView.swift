@@ -345,6 +345,27 @@ struct _PrettyActionButtons: View {
                 )
             }
             .padding(.horizontal)
+            
+            // Finish product button
+            Button(action: { viewModel.markAsEmpty() }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Finish Product")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 15)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(colors: [.lushyPeach, .lushyMint], startPoint: .leading, endPoint: .trailing)
+                        )
+                )
+            }
+            .padding(.horizontal)
         }
     }
 }

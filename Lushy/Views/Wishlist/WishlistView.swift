@@ -10,189 +10,68 @@ struct WishlistView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Girly gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.lushyPink.opacity(0.1),
-                        Color.lushyCream.opacity(0.3),
-                        Color.white
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
+                Color.clear.pastelBackground()
+
                 VStack {
                     if !authManager.isAuthenticated {
-                        // Show login prompt if not authenticated
                         VStack(spacing: 24) {
-                            // Sparkly heart animation
                             ZStack {
                                 Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.2), Color.lushyPurple.opacity(0.1)]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
+                                    .fill(LushyPalette.gradientSecondary)
                                     .frame(width: 120, height: 120)
-                                
+
                                 Image(systemName: "heart.circle.fill")
                                     .font(.system(size: 60))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
+                                    .foregroundStyle(LushyPalette.gradientPrimary)
                             }
                             
                             VStack(spacing: 12) {
                                 Text("💕 Login Required 💕")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
+                                    .lushyTitle()
                                 
                                 Text("Please log in to view your dreamy wishlist ✨")
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .font(.subheadline)
+                                    .lushySubheadline()
                             }
                             
-                            Button("Login") {
-                                showingLoginPrompt = true
-                            }
-                            .lushyButtonStyle(.primary, size: .large)
+                            Button("Login") { showingLoginPrompt = true }
+                                .neumorphicButtonStyle()
                         }
+                        .glassCard()
                         .padding(32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.lushyPink.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                        .padding(.horizontal, 20)
+                         .padding(.horizontal, 20)
                     } else if viewModel.isLoading {
                         VStack(spacing: 16) {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                                .progressViewStyle(CircularProgressViewStyle(tint: LushyPalette.pink))
                                 .scaleEffect(1.2)
                             Text("Loading your wishlist... ✨")
-                                .foregroundColor(.secondary)
-                                .font(.subheadline)
+                                .lushyCaption()
                         }
-                        .padding(40)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(.ultraThinMaterial)
-                        )
+                        .glassCard(cornerRadius: 16)
                     } else if let errorMessage = viewModel.errorMessage {
                         VStack(spacing: 20) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 50))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.orange, Color.red.opacity(0.8)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                                .foregroundStyle(LinearGradient(colors: [.orange, .red.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing))
                             
                             VStack(spacing: 8) {
                                 Text("Oops! 😅")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.lushyPurple)
+                                    .lushyTitle()
                                 
                                 Text(errorMessage)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .font(.subheadline)
+                                    .lushyCaption()
                             }
                             
-                            Button("Try Again") {
-                                viewModel.fetchWishlist()
-                            }
-                            .lushyButtonStyle(.accent, size: .medium)
+                            Button("Try Again") { viewModel.fetchWishlist() }
+                                .neumorphicButtonStyle()
                         }
+                        .glassCard()
                         .padding(32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                        .padding(.horizontal, 20)
                     } else if viewModel.wishlistItems.isEmpty {
-                        // Enhanced empty state view
-                        VStack(spacing: 24) {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.2), Color.lushyMint.opacity(0.1)]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 120, height: 120)
-                                
-                                Image(systemName: "heart.fill")
-                                    .font(.system(size: 50))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyMint]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                            }
-                            
-                            VStack(spacing: 12) {
-                                Text("💖 Your Wishlist is Empty 💖")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                
-                                Text("Start adding your dream beauty products! ✨")
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .font(.subheadline)
-                            }
-                            
-                            Button("Add First Item") {
-                                showingAddItem = true
-                            }
-                            .lushyButtonStyle(.primary, size: .large)
-                        }
-                        .padding(32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.lushyPink.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                        .padding(.horizontal, 20)
+                        Text("Your wishlist is empty 💖")
+                            .lushyHeadline()
+                            .glassCard()
+                            .padding(20)
                     } else {
                         // Enhanced wishlist items display
                         ScrollView {

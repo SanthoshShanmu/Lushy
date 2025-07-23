@@ -21,23 +21,23 @@ struct StatsView: View {
     
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.lushyPink.opacity(0.10), Color.lushyPurple.opacity(0.08)]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color.clear
+                .pastelBackground()
+
             NavigationView {
                 ScrollView {
                     VStack(spacing: 20) {
                         // Summary Cards
                         summaryCardsView
+                            .glassCard(cornerRadius: 22)
                         
                         // Chart Section
                         chartSectionView
+                            .glassCard(cornerRadius: 22)
                         
                         // Finished Products Section
                         finishedProductsSection
+                            .glassCard(cornerRadius: 22)
                     }
                     .padding(.top, 10)
                 }
@@ -78,7 +78,7 @@ struct StatsView: View {
                                 Text(selectedTimeRange.rawValue)
                                 Image(systemName: "chevron.down")
                             }
-                            .foregroundColor(.lushyPurple)
+                            .foregroundColor(LushyPalette.purple)
                         }
                     }
                 }
@@ -118,6 +118,12 @@ struct StatsView: View {
                           value: viewModel.calculateProductSavings(),
                           icon: "dollarsign.circle.fill",
                           color: .green)
+                
+                // New Shades Used card
+                statsCard(title: "Shades Used",
+                          value: "\(viewModel.uniqueShades())",
+                          icon: "paintpalette.fill",
+                          color: .lushyPeach)
             }
         }
         .padding()

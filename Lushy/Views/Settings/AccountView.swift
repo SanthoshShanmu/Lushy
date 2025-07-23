@@ -23,221 +23,236 @@ struct AccountView: View {
     @State private var contributionCount = 0 // This would be loaded from local storage or API
     
     var body: some View {
-        List {
-            // Debug section for troubleshooting
-            Section(header: Text("Debug Info")) {
-                Toggle("Show Debug Info", isOn: $showDebugInfo)
-                
-                if showDebugInfo {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Auth Status: \(AuthService.shared.isAuthenticated ? "Logged In" : "Logged Out")")
-                        Text("Token: \(AuthService.shared.token ?? "No token")")
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        
-                        if let errorMessage = errorMessage {
-                            Text("Error: \(errorMessage)")
-                                .foregroundColor(.red)
+        ScrollView {
+            Color.clear.pastelBackground()
+            VStack(spacing: 16) {
+                // Debug section for troubleshooting
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Debug Info").font(.headline)
+                    Toggle("Show Debug Info", isOn: $showDebugInfo)
+                    
+                    if showDebugInfo {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Auth Status: \(AuthService.shared.isAuthenticated ? "Logged In" : "Logged Out")")
+                            Text("Token: \(AuthService.shared.token ?? "No token")")
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            
+                            if let errorMessage = errorMessage {
+                                Text("Error: \(errorMessage)")
+                                    .foregroundColor(.red)
+                            }
+                            
+                            Button("Refresh Page") {
+                                fetchUserProfile()
+                            }
+                            .foregroundColor(.blue)
                         }
-                        
-                        Button("Refresh Page") {
-                            fetchUserProfile()
-                        }
-                        .foregroundColor(.blue)
+                        .font(.caption)
                     }
-                    .font(.caption)
                 }
-            }
+                .glassCard(cornerRadius: 20)
 
-            Section(header: Text("Account Information")) {
-                if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                    .padding()
-                } else if let profile = userProfile {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(profile.name)
-                                .font(.headline)
-                            Text(profile.email)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                // Account Information
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Account Information").font(.headline)
+                    
+                    if isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
                         }
-                        
-                        Spacer()
-                        
-                        Circle()
-                            .fill(Color.lushyPink)
-                            .frame(width: 50, height: 50)
-                            .overlay(
-                                Text(profile.name.prefix(1).uppercased())
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 20, weight: .semibold))
-                            )
+                        .padding()
+                    } else if let profile = userProfile {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(profile.name)
+                                    .font(.headline)
+                                Text(profile.email)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Circle()
+                                .fill(Color.lushyPink)
+                                .frame(width: 50, height: 50)
+                                .overlay(
+                                    Text(profile.name.prefix(1).uppercased())
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 20, weight: .semibold))
+                                )
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        // Not logged in state
+                        VStack(alignment: .leading) {
+                            Text("Not logged in")
+                                .font(.headline)
+                            
+                            Button(action: {
+                                // Show login
+                                NotificationCenter.default.post(name: NSNotification.Name("ShowLogin"), object: nil)
+                            }) {
+                                Text("Log in to sync your products")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 8)
-                } else {
-                    // Not logged in state
-                    VStack(alignment: .leading) {
-                        Text("Not logged in")
-                            .font(.headline)
+                }
+                .glassCard(cornerRadius: 20)
+
+                if isLoggedIn {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Security").font(.headline)
                         
                         Button(action: {
-                            // Show login
-                            NotificationCenter.default.post(name: NSNotification.Name("ShowLogin"), object: nil)
+                            showingPasswordChange = true
+                            print("Password change button tapped")
                         }) {
-                            Text("Log in to sync your products")
-                                .foregroundColor(.blue)
+                            Label("Change Password", systemImage: "lock.rotation")
+                        }
+                        
+                        Button(action: {
+                            showingLogoutConfirm = true
+                            print("Logout button tapped")
+                        }) {
+                            Label("Log Out", systemImage: "arrow.right.square")
+                                .foregroundColor(.red)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .glassCard(cornerRadius: 20)
                 }
-            }
-            
-            // Only show these sections if logged in
-            if isLoggedIn {
-                Section(header: Text("Security")) {
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Data Management").font(.headline)
+                    
                     Button(action: {
-                        showingPasswordChange = true
-                        print("Password change button tapped")
+                        print("Sync data button tapped")
+                        syncData()
                     }) {
-                        Label("Change Password", systemImage: "lock.rotation")
+                        HStack {
+                            Label("Sync Data Now", systemImage: "arrow.triangle.2.circlepath")
+                            
+                            if isSyncing {
+                                Spacer()
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+                        }
                     }
                     
                     Button(action: {
-                        showingLogoutConfirm = true
-                        print("Logout button tapped")
+                        print("Privacy settings button tapped")
+                        // Show privacy settings (placeholder for now)
                     }) {
-                        Label("Log Out", systemImage: "arrow.right.square")
-                            .foregroundColor(.red)
+                        Label("Privacy Settings", systemImage: "hand.raised")
                     }
                 }
-            }
-            
-            Section(header: Text("Data Management")) {
-                Button(action: {
-                    print("Sync data button tapped")
-                    syncData()
-                }) {
+                .glassCard(cornerRadius: 20)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("About").font(.headline)
+                    
                     HStack {
-                        Label("Sync Data Now", systemImage: "arrow.triangle.2.circlepath")
-                        
-                        if isSyncing {
-                            Spacer()
-                            ProgressView()
-                                .scaleEffect(0.7)
+                        Text("App Version")
+                        Spacer()
+                        Text("1.0.0")
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Button(action: {
+                        print("Terms of service button tapped")
+                        if let url = URL(string: "https://example.com/terms") {
+                            UIApplication.shared.open(url)
                         }
+                    }) {
+                        Label("Terms of Service", systemImage: "doc.text")
+                    }
+                    
+                    Button(action: {
+                        print("Privacy policy button tapped")
+                        if let url = URL(string: "https://example.com/privacy") {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        Label("Privacy Policy", systemImage: "shield.checkerboard")
                     }
                 }
-                
-                Button(action: {
-                    print("Privacy settings button tapped")
-                    // Show privacy settings (placeholder for now)
-                }) {
-                    Label("Privacy Settings", systemImage: "hand.raised")
-                }
-            }
-            
-            Section(header: Text("About")) {
-                HStack {
-                    Text("App Version")
-                    Spacer()
-                    Text("1.0.0")
+                .glassCard(cornerRadius: 20)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Product Compliance").font(.headline)
+                    
+                    Picker("Region", selection: $selectedRegion) {
+                        Text("Global").tag("GLOBAL")
+                        Text("European Union").tag("EU")
+                        Text("United States").tag("US")
+                        Text("Japan").tag("JP")
+                    }
+                    // Replace deprecated onChange with the new version
+                    #if compiler(>=5.9) && canImport(SwiftUI)
+                    // Use new API for iOS 17+
+                    .onChange(of: selectedRegion) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: "userRegion")
+                    }
+                    #else
+                    // Use old API for iOS 16 and earlier
+                    .onChange(of: selectedRegion) { newValue in
+                        UserDefaults.standard.set(newValue, forKey: "userRegion")
+                    }
+                    #endif
+                    
+                    Text("Region setting affects product compliance information")
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
-                Button(action: {
-                    print("Terms of service button tapped")
-                    if let url = URL(string: "https://example.com/terms") {
-                        UIApplication.shared.open(url)
-                    }
-                }) {
-                    Label("Terms of Service", systemImage: "doc.text")
-                }
-                
-                Button(action: {
-                    print("Privacy policy button tapped")
-                    if let url = URL(string: "https://example.com/privacy") {
-                        UIApplication.shared.open(url)
-                    }
-                }) {
-                    Label("Privacy Policy", systemImage: "shield.checkerboard")
-                }
-            }
-            
-            // Add this section to your settings view
-            Section(header: Text("Product Compliance")) {
-                Picker("Region", selection: $selectedRegion) {
-                    Text("Global").tag("GLOBAL")
-                    Text("European Union").tag("EU")
-                    Text("United States").tag("US")
-                    Text("Japan").tag("JP")
-                }
-                // Replace deprecated onChange with the new version
-                #if compiler(>=5.9) && canImport(SwiftUI)
-                // Use new API for iOS 17+
-                .onChange(of: selectedRegion) { _, newValue in
-                    UserDefaults.standard.set(newValue, forKey: "userRegion")
-                }
-                #else
-                // Use old API for iOS 16 and earlier
-                .onChange(of: selectedRegion) { newValue in
-                    UserDefaults.standard.set(newValue, forKey: "userRegion")
-                }
-                #endif
-                
-                Text("Region setting affects product compliance information")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Update the OBF section
+                .glassCard(cornerRadius: 20)
 
-            let contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count")
-            let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
-
-            Section(header: Text("Open Beauty Facts")) {
-                Toggle("Auto-contribute new products", isOn: Binding(
-                    get: { 
-                        // Default to true if never set (first time users)
-                        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-                        return hasSetPreference ? 
-                            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
-                            true
-                    },
-                    set: { UserDefaults.standard.set($0, forKey: "auto_contribute_to_obf") }
-                ))
-                
-                Text("Automatically upload products not found in the database to Open Beauty Facts")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Text("You've contributed \(contributionCount) products")
-                    .font(.body)
-                
-                if !contributions.isEmpty {
-                    NavigationLink("View My Contributions (\(contributions.count))") {
-                        List {
-                            ForEach(contributions, id: \.self) { productId in
-                                Link(productId,
-                                     destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Open Beauty Facts").font(.headline)
+                    
+                    Toggle("Auto-contribute new products", isOn: Binding(
+                        get: { 
+                            // Default to true if never set (first time users)
+                            let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
+                            return hasSetPreference ? 
+                                UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+                                true
+                        },
+                        set: { UserDefaults.standard.set($0, forKey: "auto_contribute_to_obf") }
+                    ))
+                    
+                    Text("Automatically upload products not found in the database to Open Beauty Facts")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("You've contributed \(contributionCount) products")
+                        .font(.body)
+                    
+                    let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
+                    if !contributions.isEmpty {
+                        NavigationLink("View My Contributions (\(contributions.count))") {
+                            List {
+                                ForEach(contributions, id: \.self) { productId in
+                                    Link(productId,
+                                         destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
+                                }
                             }
+                            .navigationTitle("My Contributions")
                         }
-                        .navigationTitle("My Contributions")
                     }
+                    
+                    Link("View Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
+                        .foregroundColor(.blue)
                 }
-                
-                Link("View Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
-                    .foregroundColor(.blue)
+                .glassCard(cornerRadius: 20)
             }
-            .sheet(isPresented: $showingOBFCredentialsSheet) {
-                OBFCredentialsView(isPresented: $showingOBFCredentialsSheet)
-            }
+            .padding()
         }
-        .listStyle(InsetGroupedListStyle())
         .navigationTitle("Settings")
         .onAppear {
             print("AccountView appeared")

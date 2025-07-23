@@ -3,98 +3,75 @@ import SwiftUI
 struct FeedView: View {
     @StateObject var viewModel: FeedViewModel
     let currentUserId: String
+    @StateObject private var userSearchViewModel = UserSearchViewModel()
     @State private var selectedUser: UserSummary?
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Girly background gradient
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.lushyPink.opacity(0.1),
-                        Color.lushyPurple.opacity(0.05),
-                        Color.white
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
+                Color.clear
+                    .pastelBackground()
+
                 if viewModel.isLoading {
                     VStack(spacing: 20) {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                            .progressViewStyle(CircularProgressViewStyle(tint: LushyPalette.pink))
                             .scaleEffect(1.5)
                         Text("Loading your feed...")
-                            .font(.subheadline)
-                            .foregroundColor(.lushyPink)
+                            .lushyCaption()
                     }
+                    .glassCard()
+
                 } else if let error = viewModel.error {
                     VStack(spacing: 16) {
                         Image(systemName: "heart.slash.fill")
                             .font(.system(size: 50))
-                            .foregroundColor(.lushyPink.opacity(0.6))
+                            .foregroundStyle(LushyPalette.gradientPrimary.opacity(0.6))
                         Text("Oops! Something went wrong")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.lushyPink)
+                            .lushyTitle()
                         Text(error)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .lushyCaption()
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
-                    .padding()
+                    .glassCard()
+
                 } else if viewModel.activities.isEmpty {
                     VStack(spacing: 24) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 60))
-                            .foregroundColor(.lushyPink)
+                            .foregroundStyle(LushyPalette.gradientPrimary)
                         
                         VStack(spacing: 8) {
                             Text("Your feed is empty! ✨")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.lushyPink)
+                                .lushyTitle()
                             
                             Text("Follow friends to see their beauty journey")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .lushyCaption()
                                 .multilineTextAlignment(.center)
                         }
                         
-                        NavigationLink(destination: UserSearchView(currentUserId: currentUserId)) {
-                            HStack {
+                        NavigationLink(destination: UserSearchView(viewModel: userSearchViewModel, currentUserId: currentUserId)) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "person.badge.plus")
                                 Text("Find Friends")
                             }
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(25)
-                            .shadow(color: Color.lushyPink.opacity(0.3), radius: 8, x: 0, y: 4)
+                            .neumorphicButtonStyle()
                         }
                     }
-                    .padding()
+                    .glassCard()
+
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(viewModel.activities) { activity in
                                 NavigationLink(value: activity.user) {
                                     ActivityCard(activity: activity, currentUserId: currentUserId)
+                                        .glassCard()
+                                        .padding(.horizontal)
                                 }
                             }
                         }
-                        .padding(.horizontal)
                         .padding(.top)
                     }
                     .refreshable {
