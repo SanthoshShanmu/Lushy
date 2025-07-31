@@ -29,6 +29,7 @@ exports.getUserFeed = async (req, res) => {
     // Only fetch relevant activity types for the feed
     const relevantActivityTypes = [
       'product_added',
+      'add_tag',           // include tag additions in feed
       'review_added',
       'favorite_product',
       'unfavorite_product', 

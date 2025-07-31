@@ -91,16 +91,72 @@ struct AddBagSheet: View {
 struct BeautyBagDetailView: View {
     let bag: BeautyBag
     @StateObject private var viewModel = BeautyBagViewModel()
+    @State private var isGridView: Bool = false
+
+    private let gridColumns = [
+        GridItem(.flexible()),
+        GridItem(.flexible())
+    ]
 
     var body: some View {
-        List {
-            ForEach(viewModel.products(in: bag), id: \.self) { product in
-                Text(product.productName ?? "Unnamed Product")
+        VStack {
+            Picker("", selection: $isGridView) {
+                Label("List", systemImage: "list.bullet").tag(false)
+                Label("Grid", systemImage: "square.grid.2x2.fill").tag(true)
             }
-        }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+
+            if isGridView {
+                ScrollView {
+                    LazyVGrid(columns: gridColumns, spacing: 16) {
+                        ForEach(viewModel.products(in: bag), id: \.self) { product in
+                            NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: product))) {
+                                VStack(spacing: 8) {
+                                    // Optional thumbnail image
+                                    if let imageUrl = product.imageUrl,
+                                       let url = URL(string: imageUrl), url.isFileURL,
+                                       let uiImage = UIImage(contentsOfFile: url.path) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(height: 60)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }
+                                    Text(product.productName ?? "Unnamed Product")
+                                        .font(.caption)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                }
+                                .frame(height: 100)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(.systemBackground))
+                                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(viewModel.products(in: bag), id: \.self) { product in
+                            NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: product))) {
+                                PrettyProductRow(product: product)
+                                    .frame(height: 80)
+                                    .padding(.horizontal)
+                            }
+                        }
+                    }
+                }
+            }
+         }
         .navigationTitle(bag.name ?? "Bag")
-        .onAppear {
-            viewModel.fetchBags()
-        }
-    }
-}
+        .navigationBarTitleDisplayMode(.inline)
+         .onAppear {
+             viewModel.fetchBags()
+         }
+     }
+ }

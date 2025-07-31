@@ -45,13 +45,66 @@ class ProductDetailViewModel: ObservableObject {
     init(product: UserProduct) {
         self.product = product
         
-        // Complete the notification subscription that was left incomplete
+        // Subscribe to Core Data saves to refresh product
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshProduct()
-            }
+            .sink { [weak self] _ in self?.refreshProduct() }
             .store(in: &cancellables)
+        // Subscribe to profile refresh to reload available bags
+        NotificationCenter.default.publisher(for: NSNotification.Name("RefreshProfile"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.fetchBagsAndTags() }
+            .store(in: &cancellables)
+        // Subscribe to tags sync to reload tags
+        NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTags"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.fetchBagsAndTags() }
+            .store(in: &cancellables)
+        // Initial load of bags, tags, and refresh product relationships
+        fetchBagsAndTags()
+        // Fetch backend detail to sync tags and bags associations
+        refreshRemoteDetail()
+        // Load latest product including relationships (tags, bags)
+        refreshProduct()
+    }
+    
+    /// Fetch a single product from backend and update local Core Data relationships
+    private func refreshRemoteDetail() {
+        guard let userId = AuthService.shared.userId,
+              let prodBackendId = product.backendId else { return }
+        APIService.shared.fetchUserProduct(userId: userId, productId: prodBackendId) { [weak self] result in
+            switch result {
+            case .success(let backendProd):
+                DispatchQueue.main.async {
+                    let ctx = CoreDataManager.shared.viewContext
+                    ctx.performAndWait {
+                        // Update tag relationships only if backend returned any
+                        if let fetchedTags = backendProd.tags, !fetchedTags.isEmpty {
+                            // Clear existing and attach new
+                            (self?.product.tags as? Set<ProductTag> ?? []).forEach { self?.product.removeFromTags($0) }
+                            for summary in fetchedTags {
+                                if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
+                                    self?.product.addToTags(tag)
+                                }
+                            }
+                        }
+                        // Update bag relationships only if backend returned any
+                        if let fetchedBags = backendProd.bags, !fetchedBags.isEmpty {
+                            (self?.product.bags as? Set<BeautyBag> ?? []).forEach { self?.product.removeFromBags($0) }
+                            for summary in fetchedBags {
+                                if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
+                                    self?.product.addToBags(bag)
+                                }
+                            }
+                        }
+                        try? ctx.save()
+                    }
+                    self?.refreshProduct()
+                }
+            case .failure:
+                break
+            }
+        }
     }
     
     // Add a comment to the product
@@ -190,8 +243,58 @@ class ProductDetailViewModel: ObservableObject {
 
     // MARK: - Beauty Bags & Tags
     func fetchBagsAndTags() {
-        allBags = CoreDataManager.shared.fetchBeautyBags()
+        // Load current local tags first
         allTags = CoreDataManager.shared.fetchProductTags()
+        if let userId = AuthService.shared.userId {
+            APIService.shared.fetchUserTags(userId: userId) { [weak self] result in
+                switch result {
+                case .success(let summaries):
+                    // Merge remote tag definitions: update existing or add new
+                    let localTags = CoreDataManager.shared.fetchProductTags()
+                    for summary in summaries {
+                        if let tag = localTags.first(where: { $0.backendId == summary.id }) {
+                            // update name/color if changed
+                            tag.name = summary.name
+                            tag.color = summary.color
+                        } else {
+                            _ = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id)
+                        }
+                    }
+                case .failure:
+                    break
+                }
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    // Deduplicate bags as before
+                    let rawBags = CoreDataManager.shared.fetchBeautyBags()
+                    var uniqueBags: [BeautyBag] = []
+                    var seenKeys = Set<String>()
+                    for bag in rawBags {
+                        let key = bag.backendId ?? bag.objectID.uriRepresentation().absoluteString
+                        if !seenKeys.contains(key) {
+                            seenKeys.insert(key)
+                            uniqueBags.append(bag)
+                        }
+                    }
+                    self.allBags = uniqueBags
+                    self.allTags = CoreDataManager.shared.fetchProductTags()
+                }
+            }
+        } else {
+            // Local-only mode
+            let rawBags = CoreDataManager.shared.fetchBeautyBags()
+            var uniqueBags: [BeautyBag] = []
+            var seenKeys = Set<String>()
+            for bag in rawBags {
+                let key = bag.backendId ?? bag.objectID.uriRepresentation().absoluteString
+                if !seenKeys.contains(key) {
+                    seenKeys.insert(key)
+                    uniqueBags.append(bag)
+                }
+            }
+            allBags = uniqueBags
+            allTags = CoreDataManager.shared.fetchProductTags()
+        }
     }
 
     func bagsForProduct() -> [BeautyBag] {

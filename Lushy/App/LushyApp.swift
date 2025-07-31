@@ -6,7 +6,9 @@ struct LushyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var authManager = AuthManager.shared
     @State private var showSplash = true
-    
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var lastBackgroundDate: Date?
+
     var body: some Scene {
         WindowGroup {
             if showSplash {
@@ -25,6 +27,22 @@ struct LushyApp: App {
                 ContentView()
                     .environment(\.managedObjectContext, CoreDataManager.shared.viewContext)
                     .environmentObject(authManager)
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            switch newPhase {
+            case .background:
+                lastBackgroundDate = Date()
+            case .active:
+                if let backgroundDate = lastBackgroundDate {
+                    let elapsed = Date().timeIntervalSince(backgroundDate)
+                    // Only logout if inactive for more than 30 minutes
+                    if elapsed > 1800 {
+                        authManager.logout()
+                    }
+                }
+            default:
+                break
             }
         }
     }

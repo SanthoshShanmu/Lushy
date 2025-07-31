@@ -81,7 +81,10 @@ function getExpiryGuideline(region) {
 // Get all products for a user
 exports.getUserProducts = async (req, res) => {
   try {
-    const products = await UserProduct.find({ user: new mongoose.Types.ObjectId(req.params.userId) });
+    const products = await UserProduct.find({ user: new mongoose.Types.ObjectId(req.params.userId) })
+       .populate('tags', 'name color')
+       .populate('bags', 'name');
+
     res.status(200).json({
       status: 'success',
       results: products.length,
@@ -101,7 +104,9 @@ exports.getUserProduct = async (req, res) => {
     const product = await UserProduct.findOne({
       _id: req.params.id,
       user: new mongoose.Types.ObjectId(req.params.userId)
-    });
+    })
+      .populate('tags', 'name color')
+      .populate('bags', 'name');
 
     if (!product) {
       return res.status(404).json({
@@ -192,46 +197,69 @@ exports.createUserProduct = async (req, res) => {
     });
 
     const newProduct = await UserProduct.create(productData);
-    console.log('Product created successfully:', newProduct._id);
-
-    // Activity: Product added - ENHANCED WITH BETTER ERROR HANDLING
+    
+    // Activity: Product added should be first
     try {
       const Activity = require('../models/activity');
       const User = require('../models/user');
-      
-      // Verify user exists
       const user = await User.findById(req.params.userId);
-      if (!user) {
-        console.error('User not found for activity creation:', req.params.userId);
-        throw new Error('User not found');
+      if (user) {
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'product_added',
+          targetId: newProduct._id,
+          targetType: 'UserProduct',
+          description: `Added ${newProduct.productName} to their collection`,
+          createdAt: new Date()
+        });
       }
-      
-      console.log('Creating activity for user:', user.name, 'product:', newProduct.productName);
-      
-      const activityData = {
-        user: new mongoose.Types.ObjectId(req.params.userId),
-        type: 'product_added',
-        targetId: newProduct._id,
-        targetType: 'UserProduct',
-        description: `Added ${newProduct.productName} to their collection`,
-        createdAt: new Date()
-      };
-      
-      console.log('Activity data:', activityData);
-      
-      const activity = await Activity.create(activityData);
-      console.log('Activity created successfully:', activity._id);
-      
-    } catch (activityError) { 
-      console.error('ACTIVITY CREATION ERROR:', activityError);
-      console.error('Error stack:', activityError.stack);
-      // Don't fail the product creation if activity fails
-    }
+    } catch (err) { console.error('Product added activity error:', err); }
 
-    res.status(201).json({
-      status: 'success',
-      data: { product: newProduct }
-    });
+    // Handle initial tag and bag associations if provided
+    if (req.body.tags && Array.isArray(req.body.tags) && req.body.tags.length) {
+         await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { tags: { $each: req.body.tags } } });
+         const Activity = require('../models/activity');
+         for (const tagId of req.body.tags) {
+             // Create add_tag activity with tag name
+             const tag = await require('../models/productTag').findById(tagId);
+             await Activity.create({
+                 user: new mongoose.Types.ObjectId(req.params.userId),
+                 type: 'add_tag',
+                 targetId: newProduct._id,
+                 targetType: 'UserProduct',
+                 description: `Added tag ${tag?.name || tagId} to product ${newProduct.productName}`,
+                 createdAt: new Date()
+             });
+         }
+     }
+     if (req.body.bags && Array.isArray(req.body.bags) && req.body.bags.length) {
+         await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { bags: { $each: req.body.bags } } });
+         const Activity = require('../models/activity');
+         for (const bagId of req.body.bags) {
+            // Create add_to_bag activity with bag name
+            const BeautyBag = require('../models/beautyBag');
+            const bag = await BeautyBag.findById(bagId);
+            await Activity.create({
+                user: new mongoose.Types.ObjectId(req.params.userId),
+                type: 'add_to_bag',
+                targetId: new mongoose.Types.ObjectId(bagId),
+                targetType: 'BeautyBag',
+                description: `Added product ${newProduct.productName} to bag ${bag?.name || bagId}`,
+                createdAt: new Date()
+            });
+         }
+     }
+
+    console.log('Product created successfully:', newProduct._id);
+    
+    // After associations, return the newly created product
+     const populatedNewProduct = await UserProduct.findById(newProduct._id)
+       .populate('tags', 'name color')
+       .populate('bags', 'name');
+     res.status(201).json({
+       status: 'success',
+       data: { product: populatedNewProduct }
+     });
   } catch (error) {
     console.error('Product creation error:', error);
     res.status(400).json({
@@ -393,8 +421,14 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.newReview;
     }
 
-    // Add to bag activity (if bagId is present in request)
+    // Handle adding a product to a beauty bag
     if (req.body.addToBagId) {
+      // Persist bag association
+      await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $addToSet: { bags: req.body.addToBagId } }
+      );
+      // Create activity for adding to bag
       try {
         const Activity = require('../models/activity');
         const product = await UserProduct.findById(req.params.id);
@@ -407,17 +441,64 @@ exports.updateUserProduct = async (req, res) => {
           createdAt: new Date()
         });
         console.log('Activity created: add_to_bag for user', req.params.userId);
-      } catch (e) { 
+      } catch (e) {
         console.error('Add to bag activity creation error:', e);
       }
       delete req.body.addToBagId;
     }
 
+    // Handle tag addition
+    if (req.body.addTagId) {
+      const tagId = req.body.addTagId;
+      console.log(`Received addTagId ${tagId} for product ${req.params.id}`);
+      const result = await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $addToSet: { tags: tagId } },
+        { new: true }
+      );
+      console.log(`Post-update tags for product ${req.params.id}:`, result.tags);
+       try {
+         const Activity = require('../models/activity');
+         await Activity.create({
+           user: new mongoose.Types.ObjectId(req.params.userId),
+           type: 'add_tag',
+           targetId: req.params.id,
+           targetType: 'UserProduct',
+           description: `Added a tag to product`,
+           createdAt: new Date()
+         });
+       } catch (e) {}
+      delete req.body.addTagId;
+    }
+    // Handle tag removal
+    if (req.body.removeTagId) {
+      const tagId = req.body.removeTagId;
+      await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $pull: { tags: tagId } }
+      );
+      try {
+        const Activity = require('../models/activity');
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'remove_tag',
+          targetId: req.params.id,
+          targetType: 'UserProduct',
+          description: `Removed a tag from product`,
+          createdAt: new Date()
+        });
+      } catch (e) {}
+      delete req.body.removeTagId;
+    }
+
+    // Update and return the product with populated tags and bags
     const product = await UserProduct.findOneAndUpdate(
       { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
       req.body,
       { new: true, runValidators: true }
-    );
+    )
+      .populate('tags', 'name color')
+      .populate('bags', 'name');
 
     if (!product) {
       return res.status(404).json({

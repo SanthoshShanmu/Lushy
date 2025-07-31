@@ -12,15 +12,15 @@ struct AccountView: View {
     // Add this line to access AuthManager
     @EnvironmentObject var authManager: AuthManager
     
-    // Add state for sync button
-    @State private var isSyncing = false
-    
     // Add state for region picker
     @State private var selectedRegion = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
     
     // Add these state properties at the top of AccountView:
     @State private var showingOBFCredentialsSheet = false
     @State private var contributionCount = 0 // This would be loaded from local storage or API
+    
+    // Add state to track if profile has been fetched
+    @State private var hasFetchedProfile = false
     
     var body: some View {
         ScrollView {
@@ -130,25 +130,8 @@ struct AccountView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Data Management").font(.headline)
                     
-                    Button(action: {
-                        print("Sync data button tapped")
-                        syncData()
-                    }) {
-                        HStack {
-                            Label("Sync Data Now", systemImage: "arrow.triangle.2.circlepath")
-                            
-                            if isSyncing {
-                                Spacer()
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            }
-                        }
-                    }
-                    
-                    Button(action: {
-                        print("Privacy settings button tapped")
-                        // Show privacy settings (placeholder for now)
-                    }) {
+                    // Privacy settings
+                    Button(action: { print("Privacy settings button tapped") }) {
                         Label("Privacy Settings", systemImage: "hand.raised")
                     }
                 }
@@ -256,7 +239,10 @@ struct AccountView: View {
         .navigationTitle("Settings")
         .onAppear {
             print("AccountView appeared")
-            fetchUserProfile()
+            if !hasFetchedProfile {
+                hasFetchedProfile = true
+                fetchUserProfile()
+            }
         }
         .alert(isPresented: $showingLogoutConfirm) {
             Alert(
@@ -321,33 +307,5 @@ struct AccountView: View {
         NotificationCenter.default.post(name: NSNotification.Name("UserLoggedOut"), object: nil)
         // Then perform the actual logout
         authManager.logout()
-    }
-    
-    private func syncData() {
-        isSyncing = true
-        print("Starting data sync")
-        
-        // Simulate sync process
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            isSyncing = false
-            print("Data sync complete")
-        }
-        
-        // Uncomment when SyncService is fully implemented
-        /*
-        SyncService.shared.performInitialSync()
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                isSyncing = false
-                
-                if case .failure(let error) = completion {
-                    print("Sync error: \(error)")
-                    errorMessage = "Sync failed: \(error)"
-                }
-            }, receiveValue: { _ in
-                print("Sync completed successfully")
-            })
-            .store(in: &AuthService.shared.cancellables)
-        */
     }
 }

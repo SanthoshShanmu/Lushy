@@ -11,6 +11,19 @@ struct ProductsResponse: Codable {
     }
 }
 
+// Tag model for backend responses
+struct TagSummary: Codable, Identifiable {
+    let id: String
+    let name: String
+    let color: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case name
+        case color
+    }
+}
+
 // Backend user product model
 struct BackendUserProduct: Codable, Identifiable {
     let id: String
@@ -18,25 +31,29 @@ struct BackendUserProduct: Codable, Identifiable {
     let productName: String
     let brand: String?
     let imageUrl: String?
-    let purchaseDate: TimeInterval
-    let openDate: TimeInterval?
+    let purchaseDate: Date
+    let openDate: Date?
     let periodsAfterOpening: String?
     let vegan: Bool
     let crueltyFree: Bool
     let favorite: Bool
-    let comments: [Comment]?
-    let reviews: [Review]?
-    
-    struct Comment: Codable {
-        let text: String
-        let date: TimeInterval
-    }
-    
-    struct Review: Codable {
-        let rating: Int
-        let title: String
-        let text: String
-        let date: TimeInterval
+    let tags: [TagSummary]?  // Tag associations
+    let bags: [BeautyBagSummary]?  // Bag associations
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case barcode
+        case productName
+        case brand
+        case imageUrl
+        case purchaseDate
+        case openDate
+        case periodsAfterOpening
+        case vegan
+        case crueltyFree
+        case favorite
+        case tags
+        case bags
     }
 }
 
@@ -119,12 +136,16 @@ struct UserProductSummary: Identifiable, Codable {
     let name: String
     let brand: String?
     let isFavorite: Bool?
+    let tags: [TagSummary]?  // added to decode tag associations
+    let bags: [BeautyBagSummary]?  // added to decode bag associations
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case name = "productName"  // Map productName from backend to name in iOS
         case brand
         case isFavorite = "favorite"  // Map favorite from backend to isFavorite in iOS
+        case tags
+        case bags
     }
 }
 

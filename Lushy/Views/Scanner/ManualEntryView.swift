@@ -1,12 +1,13 @@
 import SwiftUI
 import PhotosUI
 import CoreData
+import Combine
 
 struct ManualEntryView: View {
     @ObservedObject var viewModel: ScannerViewModel
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
-    @State private var errorMessage = "Failed to add product. Please ensure product name is filled in."
+    @State private var errorMessage = ""
     @Environment(\.presentationMode) var presentationMode
 
     // Image capture
@@ -15,19 +16,35 @@ struct ManualEntryView: View {
     @State private var imageSource: ImageSourceType = .none
 
     // Period After Opening
-    @State private var periodsAfterOpening = "12 M"
-    private let paoOptions = ["3 M","6 M","9 M","12 M","18 M","24 M","30 M","36 M","48 M"]
+    @State private var periodsAfterOpening = ""
+    @State private var paoOptions: [String] = []
+    @State private var paoLabels: [String: String] = [:]
+    @State private var paoCancellable: AnyCancellable?
 
     // Bag & Tag selection
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
-    @State private var allBags: [BeautyBag] = []
-    @State private var allTags: [ProductTag] = []
+    @StateObject private var tagViewModel = TagViewModel()
     @State private var newTagName: String = ""
     @State private var newTagColor: String = "blue"
+    @State private var tagCancellables = Set<AnyCancellable>()
 
     @State private var showingOBFSuccessToast = false
     @State private var showingProcessingToast = false
+    @State private var isSaving = false  // Block UI during save
+
+    // Manual lookup states
+    @State private var manualFetchedProduct: Product? = nil
+    @State private var manualLookupError: String = ""
+    @State private var showManualLookupError = false
+    @State private var lookupCancellable: AnyCancellable? = nil
+
+    // Add bag view model and sheet state
+    @StateObject private var bagViewModel = BeautyBagViewModel()
+    @State private var showAddBagSheet = false
+
+    // At top of ManualEntryView, add syncCancellable state
+    @State private var syncCancellable: AnyCancellable?  // for product sync
 
     var body: some View {
         NavigationView {
@@ -44,8 +61,20 @@ struct ManualEntryView: View {
                     }
                     .padding()
                 }
+                .disabled(isSaving)
             }
             .navigationTitle("Add Product")
+            .overlay(
+                Group {
+                    if isSaving {
+                        Color.black.opacity(0.5).edgesIgnoringSafeArea(.all)
+                        ProgressView("Saving...")
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(10)
+                    }
+                }
+            )
             .alert(isPresented: $showingErrorAlert) {
                 Alert(title: Text("Error"),
                       message: Text(errorMessage),
@@ -83,8 +112,35 @@ struct ManualEntryView: View {
                         print("✅ OBF connection test result: \(isConnected ? "Connected" : "Not connected")")
                     }
                 }
-                allBags = CoreDataManager.shared.fetchBeautyBags()
-                allTags = CoreDataManager.shared.fetchProductTags()
+                // Load bags and tags for selection
+                bagViewModel.fetchBags()
+                tagViewModel.fetchTags()
+
+               // Fetch PAO taxonomy for period-after-opening options
+               paoCancellable = APIService.shared.fetchPAOTaxonomy()
+                   .receive(on: DispatchQueue.main)
+                   .sink(receiveCompletion: { _ in }, receiveValue: { dict in
+                       paoLabels = dict
+                       // Sort by numeric month value
+                       let sortedKeys = dict.keys.sorted { lhs, rhs in
+                           let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                           let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                           return lhsNum < rhsNum
+                       }
+                       paoOptions = sortedKeys
+                       if periodsAfterOpening.isEmpty, let first = sortedKeys.first {
+                           periodsAfterOpening = first
+                       }
+                   })
+                // Subscribe to refresh notifications to handle remote sync and DB clears
+                NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTags"))
+                    .receive(on: RunLoop.main)
+                    .sink { _ in tagViewModel.fetchTags() }
+                    .store(in: &tagCancellables)
+                NotificationCenter.default.publisher(for: NSNotification.Name("RefreshBags"))
+                    .receive(on: RunLoop.main)
+                    .sink { _ in bagViewModel.fetchBags() }
+                    .store(in: &tagCancellables)
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -211,11 +267,30 @@ struct ManualEntryView: View {
                         errorMessage = "Please enter a barcode to look up"
                         showingErrorAlert = true
                     } else {
-                        viewModel.fetchProduct(barcode: viewModel.manualBarcode)
+                        // Perform manual lookup without affecting scanner
+                        lookupCancellable = APIService.shared.fetchProduct(barcode: viewModel.manualBarcode)
+                            .receive(on: DispatchQueue.main)
+                            .sink(receiveCompletion: { completion in
+                                if case .failure(let error) = completion {
+                                    manualLookupError = error.localizedDescription
+                                    showManualLookupError = true
+                                }
+                            }, receiveValue: { product in
+                                manualFetchedProduct = product
+                                // prefill manual fields
+                                viewModel.manualProductName = product.productName ?? ""
+                                viewModel.manualBrand = product.brands ?? ""
+                                if let pao = product.periodsAfterOpening {
+                                    periodsAfterOpening = pao
+                                }
+                            })
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.manualBarcode.isEmpty)
+                .alert(isPresented: $showManualLookupError) {
+                    Alert(title: Text("Lookup Error"), message: Text(manualLookupError), dismissButton: .default(Text("OK")))
+                }
             }
         }
         .glassCard(cornerRadius: 20)
@@ -229,12 +304,34 @@ struct ManualEntryView: View {
             TextField("Brand (Optional)", text: $viewModel.manualBrand)
                 .textFieldStyle(.roundedBorder)
             HStack(spacing: 20) {
+                // Display local image if selected, else show fetched product image
                 if let img = productImage {
                     Image(uiImage: img)
                         .resizable()
                         .scaledToFill()
                         .frame(width: 100, height: 100)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else if let urlString = manualFetchedProduct?.imageUrl,
+                          let url = URL(string: urlString) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 100, height: 100)
+                        case .success(let image):
+                            image.resizable()
+                                .scaledToFill()
+                                .frame(width: 100, height: 100)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 100, height: 100)
+                                .overlay(Image(systemName: "photo").font(.largeTitle).foregroundColor(.gray))
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
                 } else {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))
@@ -261,7 +358,9 @@ struct ManualEntryView: View {
                                                set: { viewModel.openDate = $0 }),
                            displayedComponents: .date)
                 Picker("PAO", selection: $periodsAfterOpening) {
-                    ForEach(paoOptions, id: \.self) { Text($0) }
+                    ForEach(paoOptions, id: \.self) { code in
+                        Text(paoLabels[code] ?? code).tag(code)
+                    }
                 }
                 .pickerStyle(MenuPickerStyle())
             }
@@ -271,34 +370,55 @@ struct ManualEntryView: View {
 
     @ViewBuilder private func bagSelectionSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add to Beauty Bags").font(.headline)
-            if allBags.isEmpty {
-                Text("No bags yet. Create one from the Bags tab.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(allBags, id: \.objectID) { bag in
-                    MultipleSelectionRow(title: bag.name ?? "Unnamed Bag",
-                                         isSelected: selectedBagIDs.contains(bag.objectID),
-                                         icon: bag.icon,
-                                         color: bag.color) {
-                        selectedBagIDs.toggleMembership(of: bag.objectID)
+            HStack {
+                Text("Add to Beauty Bags").font(.headline)
+                Spacer()
+                Button(action: { showAddBagSheet = true }) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(.lushyPink)
+                }
+            }
+            .padding(.bottom, 4)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    if bagViewModel.bags.isEmpty {
+                        Text("No bags yet.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    ForEach(bagViewModel.bags, id: \.objectID) { bag in
+                        MultipleSelectionRow(
+                            title: bag.name ?? "Unnamed Bag",
+                            isSelected: selectedBagIDs.contains(bag.objectID),
+                            icon: bag.icon,
+                            color: bag.color
+                        ) {
+                            selectedBagIDs.toggleMembership(of: bag.objectID)
+                        }
                     }
                 }
             }
         }
         .glassCard(cornerRadius: 20)
+        .onAppear {
+            bagViewModel.fetchBags()
+        }
+        .sheet(isPresented: $showAddBagSheet, onDismiss: {
+            bagViewModel.fetchBags()
+        }) {
+            AddBagSheet(viewModel: bagViewModel)
+        }
     }
 
     @ViewBuilder private func tagSelectionSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add Tags").font(.headline)
-            if allTags.isEmpty {
+            if tagViewModel.tags.isEmpty {
                 Text("No tags yet. Create one below.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
-                ForEach(allTags, id: \.objectID) { tag in
+                ForEach(tagViewModel.tags, id: \.objectID) { tag in
                     MultipleSelectionRow(title: tag.name ?? "Unnamed Tag",
                                          isSelected: selectedTagIDs.contains(tag.objectID),
                                          icon: "tag",
@@ -316,9 +436,14 @@ struct ManualEntryView: View {
                     }
                 }
                 Button("Add") {
-                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                    allTags = CoreDataManager.shared.fetchProductTags()
+                    guard !newTagName.isEmpty else { return }
+                    // Delegate creation to TagViewModel (handles remote & local sync)
+                    tagViewModel.newTagName = newTagName
+                    tagViewModel.newTagColor = newTagColor
+                    tagViewModel.createTag()
+                    // Clear local form
                     newTagName = ""
+                    newTagColor = "blue"
                 }
                 .disabled(newTagName.isEmpty)
             }
@@ -329,11 +454,108 @@ struct ManualEntryView: View {
     @ViewBuilder private func saveButtonsSection() -> some View {
         HStack(spacing: 20) {
             Button("Save") {
-                _ = viewModel.saveManualProduct()
+                isSaving = true
+                let context = CoreDataManager.shared.viewContext
+                // 1) Save locally
+                guard let objectID = viewModel.saveManualProduct(productImage: productImage) else {
+                    isSaving = false
+                    errorMessage = "Failed to save product locally."
+                    showingErrorAlert = true
+                    return
+                }
+                guard let userProduct = try? context.existingObject(with: objectID) as? UserProduct else {
+                    isSaving = false
+                    errorMessage = "Failed to fetch saved product."
+                    showingErrorAlert = true
+                    return
+                }
+                // 2) Attach selected tags locally so payload will include them
+                for tagID in selectedTagIDs {
+                    if let tag = try? context.existingObject(with: tagID) as? ProductTag {
+                        userProduct.addToTags(tag)
+                    }
+                }
+                // 3) Attach selected bags locally
+                for bagID in selectedBagIDs {
+                    if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
+                        userProduct.addToBags(bag)
+                    }
+                }
+                try? context.save()
+                // 4) Create user product on backend with tags & bags
+                let userId = AuthService.shared.userId ?? ""
+                let url = APIService.shared.baseURL
+                    .appendingPathComponent("users")
+                    .appendingPathComponent(userId)
+                    .appendingPathComponent("products")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                if let token = AuthService.shared.token {
+                    request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+                // Build body payload
+                let productTags = selectedTagIDs.compactMap { try? context.existingObject(with: $0) as? ProductTag }.compactMap { $0.backendId }
+                let productBags = selectedBagIDs.compactMap { try? context.existingObject(with: $0) as? BeautyBag }.compactMap { $0.backendId }
+                var body: [String: Any] = [
+                    "barcode": userProduct.barcode ?? "",
+                    "productName": userProduct.productName ?? "",
+                    "brand": userProduct.brand ?? "",
+                    "imageUrl": userProduct.imageUrl ?? "",
+                    "purchaseDate": userProduct.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
+                    "vegan": userProduct.vegan,
+                    "crueltyFree": userProduct.crueltyFree,
+                    "favorite": userProduct.favorite
+                ]
+                if !productTags.isEmpty { body["tags"] = productTags }
+                if !productBags.isEmpty { body["bags"] = productBags }
+                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                struct CreateResponse: Decodable {
+                    let status: String
+                    let data: DataContainer
+                    struct DataContainer: Decodable { let product: BackendUserProduct }
+                }
+                URLSession.shared.dataTaskPublisher(for: request)
+                    .tryMap { data, response -> String in
+                        guard let http = response as? HTTPURLResponse,
+                              (200...299).contains(http.statusCode) else {
+                            throw APIError.invalidResponse
+                        }
+                        // Parse JSON for the new product ID
+                        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let dataObj = json["data"] as? [String: Any],
+                              let prod = dataObj["product"] as? [String: Any],
+                              let id = prod["_id"] as? String else {
+                            throw APIError.decodingError
+                        }
+                        return id
+                    }
+                    .mapError { error in (error as? APIError) ?? .customError(error.localizedDescription) }
+                    .receive(on: RunLoop.main)
+                    .sink(receiveCompletion: { completion in
+                        isSaving = false
+                        if case .failure(let err) = completion {
+                            errorMessage = err.localizedDescription
+                            showingErrorAlert = true
+                        }
+                    }, receiveValue: { backendId in
+                        // Persist backendId locally
+                        userProduct.backendId = backendId
+                        try? context.save()
+                        // Dismiss and navigate
+                        NotificationCenter.default.post(name: .init("RefreshProfile"), object: nil)
+                        NotificationCenter.default.post(name: .init("RefreshFeed"), object: nil)
+                        presentationMode.wrappedValue.dismiss()
+                        viewModel.selectedUserProduct = userProduct
+                        viewModel.showProductDetail = true
+                    })
+                    .store(in: &tagCancellables)
             }
+            .disabled(isSaving)
             .neumorphicButtonStyle()
+
             Button("Cancel") {
-                viewModel.showManualEntry = false
+                presentationMode.wrappedValue.dismiss()
             }
             .neumorphicButtonStyle()
         }

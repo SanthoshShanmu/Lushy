@@ -82,11 +82,17 @@ class CoreDataManager {
         crueltyFree: Bool,
         expiryOverride: Date? = nil
     ) -> NSManagedObjectID? {
-        // Create a new context for this operation
-        let context = container.newBackgroundContext()
+        // Save in main viewContext for consistent updates
+        let context = viewContext
         var objectID: NSManagedObjectID?
-        
         context.performAndWait {
+            // Avoid creating duplicates: if a product with same barcode and user exists, return it
+            let fetchReq: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+            fetchReq.predicate = NSPredicate(format: "barcode == %@ AND userId == %@", barcode, currentUserId())
+            if let existing = (try? context.fetch(fetchReq))?.first {
+                objectID = existing.objectID
+                return
+            }
             let product = UserProduct(context: context)
             
             // Set properties
@@ -112,26 +118,15 @@ class CoreDataManager {
             }
             
             do {
-                try context.save()
+                try context.save()  // persist on main context to viewContext
                 objectID = product.objectID
                 
                 print("Product saved locally: \(productName)")
                 
-                // Sync to backend immediately after saving locally
-                DispatchQueue.main.async {
-                    print("Triggering immediate sync for new product")
-                    // Convert to main context object for sync
-                    if let mainContextProduct = try? self.viewContext.existingObject(with: product.objectID) as? UserProduct {
-                        SyncService.shared.syncProductImmediately(mainContextProduct)
-                    }
-                }
-                
             } catch {
                 print("Failed to save user product: \(error)")
-                // Error handling logic...
             }
         }
-        
         return objectID
     }
     
@@ -457,16 +452,16 @@ class CoreDataManager {
     
     // Create a new beauty bag locally, returns its objectID
     func createBeautyBag(name: String, color: String, icon: String) -> NSManagedObjectID? {
-        let context = viewContext
+        // Use a private context to avoid validation on incomplete products
+        let context = container.newBackgroundContext()
         let bag = BeautyBag(context: context)
         bag.name = name
         bag.color = color
         bag.icon = icon
         bag.createdAt = Date()
         bag.userId = currentUserId()
-        // backendId remains nil until remote creation
         do {
-            try context.save()
+            try context.save()  // only saves bag
             return bag.objectID
         } catch {
             print("Failed to create beauty bag: \(error)")
@@ -499,26 +494,33 @@ class CoreDataManager {
     }
     
     func addProduct(_ product: UserProduct, toBag bag: BeautyBag) {
+        // Avoid duplicate assignment
+        if let existing = (bag.products as? Set<UserProduct>)?.contains(product), existing {
+            return
+        }
         bag.addToProducts(product)
         try? viewContext.save()
         
         // Sync to backend with bag activity
-        if let userId = AuthService.shared.userId, let backendId = product.backendId {
-            let url = APIService.shared.baseURL.appendingPathComponent("users/")
-                .appendingPathComponent(userId)
-                .appendingPathComponent("products/")
-                .appendingPathComponent(backendId)
-            var request = URLRequest(url: url)
-            request.httpMethod = "PUT"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            if let token = AuthService.shared.token {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-            // Include the bag ID so backend can create add_to_bag activity
-            let body: [String: Any] = ["addToBagId": bag.objectID.uriRepresentation().absoluteString]
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-            URLSession.shared.dataTask(with: request).resume()
-        }
+        if let userId = AuthService.shared.userId,
+           let productBackendId = product.backendId,
+           let bagBackendId = bag.backendId {
+             let url = APIService.shared.baseURL.appendingPathComponent("users")
+                 .appendingPathComponent(userId)
+                 .appendingPathComponent("products")
+                 .appendingPathComponent(productBackendId)
+             var request = URLRequest(url: url)
+             request.httpMethod = "PUT"
+             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+             if let token = AuthService.shared.token {
+                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+             }
+             // Include the bag's backend ID so backend can create activity
+             let body: [String: Any] = ["addToBagId": bagBackendId]
+             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+             // Send request to sync bag assignment
+             URLSession.shared.dataTask(with: request).resume()
+         }
     }
     
     func removeProduct(_ product: UserProduct, fromBag bag: BeautyBag) {
@@ -532,15 +534,49 @@ class CoreDataManager {
 
     // MARK: - ProductTag Operations
     
-    func createProductTag(name: String, color: String) {
-        let context = viewContext
+    // Create a new product tag locally, returns its objectID
+    @discardableResult
+    func createProductTag(name: String, color: String, backendId: String? = nil) -> NSManagedObjectID? {
+        // Use a private context so we don't trigger validation on unsaved products
+        let context = container.newBackgroundContext()
         let tag = ProductTag(context: context)
         tag.name = name
         tag.color = color
         tag.userId = currentUserId()
-        try? context.save()
+        tag.backendId = backendId
+        var objectID: NSManagedObjectID?
+        do {
+            try context.save()  // only saves tag
+            objectID = tag.objectID
+            // If this tag was created locally (no backendId), persist to server
+            if backendId == nil, let userId = AuthService.shared.userId {
+                APIService.shared.createTag(userId: userId, name: name, color: color)
+                    .receive(on: DispatchQueue.main)
+                    .sink(receiveCompletion: { _ in }, receiveValue: { summary in
+                        self.updateProductTagBackendId(id: objectID!, backendId: summary.id)
+                    })
+                    .store(in: &self.tagCancellables)
+            }
+        } catch {
+            print("Failed to create product tag: \(error)")
+        }
+        return objectID
     }
     
+    // Update the backendId for a product tag
+    func updateProductTagBackendId(id: NSManagedObjectID, backendId: String) {
+        let context = container.newBackgroundContext()
+        context.performAndWait {
+            if let tag = try? context.existingObject(with: id) as? ProductTag {
+                tag.backendId = backendId
+                try? context.save()
+            }
+        }
+    }
+
+    // Storage for Combine subscribers to API calls
+    private var tagCancellables = Set<AnyCancellable>()
+
     func fetchProductTags() -> [ProductTag] {
         let request: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
         request.predicate = NSPredicate(format: "userId == %@", currentUserId())
@@ -555,13 +591,27 @@ class CoreDataManager {
     }
     
     func addTag(_ tag: ProductTag, toProduct product: UserProduct) {
+        // Associate locally
         product.addToTags(tag)
         try? viewContext.save()
+        // Persist to backend
+        if let userId = AuthService.shared.userId,
+           let prodId = product.backendId,
+           let tagId = tag.backendId {
+            APIService.shared.updateProductTags(userId: userId, productId: prodId, addTagId: tagId)
+        }
     }
     
     func removeTag(_ tag: ProductTag, fromProduct product: UserProduct) {
+        // Disassociate locally
         product.removeFromTags(tag)
         try? viewContext.save()
+        // Persist removal to backend
+        if let userId = AuthService.shared.userId,
+           let prodId = product.backendId,
+           let tagId = tag.backendId {
+            APIService.shared.removeProductTags(userId: userId, productId: prodId, removeTagId: tagId)
+        }
     }
     
     func products(withTag tag: ProductTag) -> [UserProduct] {
@@ -582,6 +632,61 @@ class CoreDataManager {
             if let userProduct = try? context.existingObject(with: id) as? UserProduct {
                 userProduct.timesUsed += 1
                 try? context.save()
+            }
+        }
+    }
+    
+    // Fetch a single UserProduct by its backend ID
+    func fetchUserProduct(backendId: String) -> UserProduct? {
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        request.predicate = NSPredicate(format: "backendId == %@", backendId)
+        return (try? viewContext.fetch(request))?.first
+    }
+    
+    // Clear all local UserProduct objects
+    func clearUserProducts() {
+        let context = viewContext
+        context.performAndWait {
+            let fetchReq: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+            if let products = try? context.fetch(fetchReq) {
+                products.forEach { context.delete($0) }
+            }
+            do {
+                try context.save()
+            } catch {
+                print("Failed to clear UserProducts: \(error)")
+            }
+        }
+    }
+    
+    // Clear all local BeautyBag objects
+    func clearBeautyBags() {
+        let context = viewContext
+        context.performAndWait {
+            let fetchReq: NSFetchRequest<BeautyBag> = BeautyBag.fetchRequest()
+            if let bags = try? context.fetch(fetchReq) {
+                bags.forEach { context.delete($0) }
+            }
+            do {
+                try context.save()
+            } catch {
+                print("Failed to clear BeautyBags: \(error)")
+            }
+        }
+    }
+
+    // Clear all local ProductTag objects
+    func clearProductTags() {
+        let context = viewContext
+        context.performAndWait {
+            let fetchReq: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
+            if let tags = try? context.fetch(fetchReq) {
+                tags.forEach { context.delete($0) }
+            }
+            do {
+                try context.save()
+            } catch {
+                print("Failed to clear ProductTags: \(error)")
             }
         }
     }

@@ -107,7 +107,10 @@ struct PrettyProductRow: View {
                                 Text(tag.name ?? "")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                             }
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(Color(tag.color ?? "blue").opacity(0.10))

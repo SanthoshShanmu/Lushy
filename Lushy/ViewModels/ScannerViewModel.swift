@@ -33,12 +33,36 @@ class ScannerViewModel: ObservableObject {
     @Published var productNotFound = false
     @Published var showProductAddedSuccess = false
     @Published var isContributingToOBF = false
-    @Published var periodsAfterOpening: String = "12 M"
-    
+    @Published var periodsAfterOpening: String = ""
+    @Published var paoOptions: [String] = []
+    @Published var paoLabels: [String: String] = [:]
+
+    // New navigation state
+    @Published var selectedUserProduct: UserProduct? = nil
+    @Published var showProductDetail = false
+
     private var barcodeScannerService = BarcodeScannerService()
     private var cancellables = Set<AnyCancellable>()
     
     init() {
+        // Fetch PAO taxonomy for dynamic options
+        APIService.shared.fetchPAOTaxonomy()
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] dict in
+                guard let self = self else { return }
+                self.paoLabels = dict
+                let sortedKeys = dict.keys.sorted { lhs, rhs in
+                    let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                    let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                    return lhsNum < rhsNum
+                }
+                self.paoOptions = sortedKeys
+                if self.periodsAfterOpening.isEmpty, let first = sortedKeys.first {
+                    self.periodsAfterOpening = first
+                }
+            })
+            .store(in: &cancellables)
+
         // Subscribe to barcode scanner result
         barcodeScannerService.$scannedBarcode
             .compactMap { $0 } // Filter out nil values
@@ -268,6 +292,15 @@ class ScannerViewModel: ObservableObject {
             }
         }
         
+        // Avoid duplicate adds: if product with same barcode already exists, navigate to it
+        if let existing = CoreDataManager.shared.fetchUserProducts().first(where: { $0.barcode == scannedProduct?.code }) {
+            DispatchQueue.main.async {
+                self.selectedUserProduct = existing
+                self.showProductDetail = true
+                self.scannedProduct = nil
+            }
+            return existing.objectID
+        }
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: product.code,
             productName: product.productName ?? "Unknown Product",
@@ -280,16 +313,7 @@ class ScannerViewModel: ObservableObject {
             crueltyFree: ethicsInfo?.crueltyFree ?? false,
             expiryOverride: expiryDate
         )
-        if let objectID = objectID {
-            // Sync this new product to backend so userproducts & product_added activity get created
-            let ctx = CoreDataManager.shared.viewContext
-            if let userProduct = try? ctx.existingObject(with: objectID) as? UserProduct {
-                SyncService.shared.syncProductToBackend(userProduct)
-            }
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .NSManagedObjectContextDidSave, object: nil)
-            }
-        }
+        // Let caller handle navigation after saving
         return objectID
     }
     
@@ -301,7 +325,7 @@ class ScannerViewModel: ObservableObject {
                 let filename = UUID().uuidString + ".jpg"
                 let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(filename)
                 try? data.write(to: url)
-                imageUrlString = url.absoluteString
+                imageUrlString = url.path
             }
         }
         
@@ -317,22 +341,7 @@ class ScannerViewModel: ObservableObject {
             crueltyFree: ethicsInfo?.crueltyFree ?? false
         )
         
-        if let objectID = objectID {
-            // Sync this new product to backend so userproducts & product_added activity get created
-            let ctx = CoreDataManager.shared.viewContext
-            if let userProduct = try? ctx.existingObject(with: objectID) as? UserProduct {
-                SyncService.shared.syncProductToBackend(userProduct)
-            }
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .NSManagedObjectContextDidSave, object: nil)
-            }
-            
-            // Check if we should contribute to OBF (only if product was not found in database)
-            if shouldContributeToOBF() {
-                print("🌍 Product was not found in database - contributing to Open Beauty Facts")
-                silentlyContributeToOBF(productImage: productImage)
-            }
-        }
+        // Let the caller handle navigation and associations
         return objectID
     }
     

@@ -92,6 +92,7 @@ struct FeedView: View {
             }
             .navigationDestination(for: UserSummary.self) { user in
                 UserProfileView(viewModel: UserProfileViewModel(currentUserId: currentUserId, targetUserId: user.id))
+                    .id(user.id) // Ensure correct reload for different user profiles
             }
         }
     }

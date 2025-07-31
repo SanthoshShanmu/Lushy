@@ -1,187 +1,179 @@
 import SwiftUI
 import AVFoundation
 import CoreData
+import Combine
 
 struct ScannerView: View {
     @ObservedObject var viewModel: ScannerViewModel
     @State private var showCameraPermissionAlert = false
     
     var body: some View {
-        ZStack {
-            // Background
-            Color.black.edgesIgnoringSafeArea(.all)
-            
-            // Camera view
-            if viewModel.isScanning {
-                CameraPreviewView(viewModel: viewModel)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 30)
-                            .stroke(Color.lushyPink, lineWidth: 4)
-                            .frame(width: 280, height: 280)
-                            .padding()
-                            .shadow(color: Color.lushyPink.opacity(0.7), radius: 10, x: 0, y: 0)
-                    )
-                    .overlay(
-                        VStack {
-                            Spacer()
-                            Text("Position barcode within the frame")
-                                .font(.system(size: 16, weight: .medium))
+        NavigationStack {
+            ZStack {
+                // Background
+                Color.clear.pastelBackground().edgesIgnoringSafeArea(.all)
+                
+                // Camera view
+                if viewModel.isScanning {
+                    CameraPreviewView(viewModel: viewModel)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 30)
+                                .stroke(Color.lushyPink, lineWidth: 4)
+                                .frame(width: 280, height: 280)
+                                .padding()
+                                .shadow(color: Color.lushyPink.opacity(0.7), radius: 10, x: 0, y: 0)
+                        )
+                        .overlay(
+                            VStack {
+                                Spacer()
+                                Text("Position barcode within the frame")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 20)
+                                    .background(Color.black.opacity(0.7))
+                                    .cornerRadius(20)
+                                    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 0)
+                                    .padding(.bottom, 60)
+                            }
+                        )
+                } else {
+                    // Scanner not active view with pastel background
+                    ZStack {
+                        Color.clear.pastelBackground().edgesIgnoringSafeArea(.all)
+                        VStack(spacing: 30) {
+                            // Icon
+                            Image(systemName: "barcode.viewfinder")
+                                .font(.system(size: 60))
+                                .foregroundColor(.lushyPink)
+                                .padding(20)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.6))
+                                        .shadow(color: Color.lushyPink.opacity(0.3), radius: 20, x: 0, y: 0)
+                                )
+                                .padding(.bottom, 20)
+                            
+                            // Scan button
+                            Button(action: {
+                                viewModel.startScanning()
+                            }) {
+                                HStack(spacing: 15) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 18, weight: .medium))
+                                    Text("Start Scanning")
+                                        .font(.system(size: 18, weight: .semibold))
+                                }
+                                .padding(.vertical, 18)
+                                .frame(width: 250)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 25)
+                                        .fill(Color.lushyPink)
+                                        .shadow(color: Color.lushyPink.opacity(0.6), radius: 15, x: 0, y: 5)
+                                )
                                 .foregroundColor(.white)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 20)
-                                .background(Color.black.opacity(0.7))
-                                .cornerRadius(20)
-                                .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 0)
-                                .padding(.bottom, 60)
-                        }
-                    )
-            } else {
-                // Scanner not active view
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.black, Color.fromHex("#1E1E1E")]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .edgesIgnoringSafeArea(.all)
-                .overlay(
-                    VStack(spacing: 30) {
-                        // Icon
-                        Image(systemName: "barcode.viewfinder")
-                            .font(.system(size: 60))
-                            .foregroundColor(.lushyPink)
-                            .padding(20)
-                            .background(
-                                Circle()
-                                    .fill(Color.black.opacity(0.6))
-                                    .shadow(color: Color.lushyPink.opacity(0.3), radius: 20, x: 0, y: 0)
-                            )
-                            .padding(.bottom, 20)
-                        
-                        // Scan button
-                        Button(action: {
-                            viewModel.startScanning()
-                        }) {
-                            HStack(spacing: 15) {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 18, weight: .medium))
-                                Text("Start Scanning")
-                                    .font(.system(size: 18, weight: .semibold))
                             }
-                            .padding(.vertical, 18)
-                            .frame(width: 250)
-                            .background(
-                                RoundedRectangle(cornerRadius: 25)
-                                    .fill(Color.lushyPink)
-                                    .shadow(color: Color.lushyPink.opacity(0.6), radius: 15, x: 0, y: 5)
-                            )
-                            .foregroundColor(.white)
-                        }
-                        
-                        // Manual entry button
-                        Button(action: {
-                            viewModel.showManualEntry = true
-                        }) {
-                            HStack(spacing: 15) {
-                                Image(systemName: "keyboard")
-                                    .font(.system(size: 18, weight: .medium))
-                                Text("Manual Entry")
-                                    .font(.system(size: 18, weight: .semibold))
+                            
+                            // Manual entry button
+                            Button(action: {
+                                viewModel.showManualEntry = true
+                            }) {
+                                HStack(spacing: 15) {
+                                    Image(systemName: "keyboard")
+                                        .font(.system(size: 18, weight: .medium))
+                                    Text("Manual Entry")
+                                        .font(.system(size: 18, weight: .semibold))
+                                }
+                                .padding(.vertical, 18)
+                                .frame(width: 250)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 25)
+                                        .fill(Color.lushyPurple)
+                                        .shadow(color: Color.lushyPurple.opacity(0.6), radius: 15, x: 0, y: 5)
+                                )
+                                .foregroundColor(.white)
                             }
-                            .padding(.vertical, 18)
-                            .frame(width: 250)
-                            .background(
-                                RoundedRectangle(cornerRadius: 25)
-                                    .fill(Color.lushyPurple)
-                                    .shadow(color: Color.lushyPurple.opacity(0.6), radius: 15, x: 0, y: 5)
-                            )
-                            .foregroundColor(.white)
                         }
                     }
-                )
-            }
-            
-            // Show loading indicator while fetching product
-            if viewModel.isLoading {
-                Color.black.opacity(0.7)
-                    .overlay(
-                        ProgressView("Fetching product information...")
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(10)
-                    )
-            }
-            
-            // Show error message if any
-            if let errorMessage = viewModel.errorMessage {
-                VStack(spacing: 16) {
-                    Text(errorMessage)
-                        .foregroundColor(.lushyPink)
-                    
-                    Button("Try Again") {
-                        viewModel.reset()
-                    }
-                    .neumorphicButtonStyle()
                 }
-                .glassCard(cornerRadius: 18)
-                .padding(.bottom)
-            }
-
-            // Product not found view
-            if viewModel.productNotFound {
-                ProductNotFoundView(viewModel: viewModel)
-                    .glassCard(cornerRadius: 18)
-            }
-
-            // Show product found screen
-            if viewModel.scannedProduct != nil && !viewModel.productNotFound {
-                ProductFoundView(viewModel: viewModel)
-                    .glassCard(cornerRadius: 18)
-            }
-
-            // Product successfully added message
-            if viewModel.showProductAddedSuccess {
-                VStack(spacing: 20) {
-                    Spacer()
-                    VStack(spacing: 20) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.green)
+                
+                // Show loading indicator while fetching product
+                if viewModel.isLoading {
+                    Color.black.opacity(0.7)
+                        .overlay(
+                            ProgressView("Fetching product information...")
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(10)
+                        )
+                }
+                
+                // Show error message if any
+                if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 16) {
+                        Text(errorMessage)
+                            .foregroundColor(.lushyPink)
                         
-                        Text("Product Added Successfully!")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text(viewModel.scannedProduct?.productName ?? "Product")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
-                        
-                        Button(action: {
-                            viewModel.showProductAddedSuccess = false
+                        Button("Try Again") {
                             viewModel.reset()
-                        }) {
-                            Text("Done")
                         }
                         .neumorphicButtonStyle()
                     }
                     .glassCard(cornerRadius: 18)
+                    .padding(.bottom)
                 }
-            }
-        }
-        .edgesIgnoringSafeArea(.all)
-        .navigationTitle("Scanner")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if viewModel.isScanning {
-                    Button(action: {
-                        viewModel.stopScanning()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
+
+                // Product not found view
+                if viewModel.productNotFound {
+                    ProductNotFoundView(viewModel: viewModel)
+                        .glassCard(cornerRadius: 18)
+                }
+
+                // Show product found screen
+                if viewModel.scannedProduct != nil && !viewModel.productNotFound {
+                    ProductFoundView(viewModel: viewModel)
+                        .glassCard(cornerRadius: 18)
+                }
+
+                // Product successfully added message
+                if viewModel.showProductAddedSuccess {
+                    VStack(spacing: 20) {
+                        Spacer()
+                        VStack(spacing: 20) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.green)
+                            
+                            Text("Product Added Successfully!")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            
+                            Text(viewModel.scannedProduct?.productName ?? "Product")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                            
+                            Button(action: {
+                                viewModel.showProductAddedSuccess = false
+                                viewModel.reset()
+                            }) {
+                                Text("Done")
+                            }
+                            .neumorphicButtonStyle()
+                        }
+                        .glassCard(cornerRadius: 18)
                     }
                 }
             }
-        }
+            .edgesIgnoringSafeArea(.all)
+            .navigationTitle("Scanner")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $viewModel.showProductDetail) {
+                if let product = viewModel.selectedUserProduct {
+                    ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                }
+            }
+        } // NavigationStack
         .sheet(isPresented: $viewModel.showManualEntry) {
             ManualEntryView(viewModel: viewModel)
         }
@@ -260,6 +252,11 @@ struct ProductFoundView: View {
     @State private var allTags: [ProductTag] = []
     @State private var newTagName: String = ""
     @State private var newTagColor: String = "blue"
+    @State private var selectedBagIDs: Set<NSManagedObjectID> = []
+    @State private var allBags: [BeautyBag] = []
+    @State private var newBagName: String = ""
+    @State private var syncCancellable: AnyCancellable?  // Combine token for sync
+    @State private var bagCancellables = Set<AnyCancellable>()  // for bag creation
     
     var body: some View {
         ZStack {
@@ -403,22 +400,113 @@ struct ProductFoundView: View {
                     }
                     .padding(.vertical, 8)
                     
+                    // Bag selection UI
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Add to Bag")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        if allBags.isEmpty {
+                            Text("No bags yet. Create one below.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(allBags, id: \.objectID) { bag in
+                                Button(action: {
+                                    if selectedBagIDs.contains(bag.objectID) {
+                                        selectedBagIDs.remove(bag.objectID)
+                                    } else {
+                                        selectedBagIDs.insert(bag.objectID)
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "bag")
+                                            .foregroundColor(.white)
+                                        Text(bag.name ?? "Unnamed Bag")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        if selectedBagIDs.contains(bag.objectID) {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                        // Quick add new bag
+                        HStack {
+                            TextField("New Bag", text: $newBagName)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Button("Add") {
+                                guard !newBagName.isEmpty else { return }
+                                if let userId = AuthService.shared.userId {
+                                    APIService.shared.createBag(userId: userId, name: newBagName)
+                                        .receive(on: DispatchQueue.main)
+                                        .sink(receiveCompletion: { _ in }, receiveValue: { summary in
+                                            if let newId = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
+                                                CoreDataManager.shared.updateBeautyBagBackendId(id: newId, backendId: summary.id)
+                                            }
+                                            allBags = CoreDataManager.shared.fetchBeautyBags()
+                                            newBagName = ""
+                                        })
+                                        .store(in: &bagCancellables)
+                                } else {
+                                    if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: "lushyPink", icon: "bag.fill") {
+                                        // no backend id
+                                    }
+                                    allBags = CoreDataManager.shared.fetchBeautyBags()
+                                    newBagName = ""
+                                }
+                            }.disabled(newBagName.isEmpty)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    
                     Button(action: {
-                        if let objectID = viewModel.saveProduct() {
-                            // Assign tags
-                            let context = CoreDataManager.shared.viewContext
-                            if let userProduct = try? context.existingObject(with: objectID) as? UserProduct {
+                        // Show processing toast
+                        NotificationCenter.default.post(name: NSNotification.Name("ShowProcessingToast"), object: nil, userInfo: ["key": "processing-toast"])
+                        let context = CoreDataManager.shared.viewContext
+                        guard let objectID = viewModel.saveProduct(),
+                              let userProduct = try? context.existingObject(with: objectID) as? UserProduct else {
+                            viewModel.errorMessage = "Failed to save product"
+                            return
+                        }
+                        // Sync to backend then link tags and bags
+                        let cancellable = APIService.shared.syncProductWithBackend(product: userProduct)
+                            .receive(on: DispatchQueue.main)
+                            .sink(receiveCompletion: { completion in
+                                // Hide processing toast on failure
+                                NotificationCenter.default.post(name: NSNotification.Name("HideProcessingToast"), object: nil, userInfo: ["key": "processing-toast"])
+                                if case .failure(let error) = completion {
+                                    viewModel.errorMessage = error.localizedDescription
+                                }
+                            }, receiveValue: { backendId in
+                                // Hide processing toast on success
+                                NotificationCenter.default.post(name: NSNotification.Name("HideProcessingToast"), object: nil, userInfo: ["key": "processing-toast"])
+                                userProduct.backendId = backendId
+                                try? context.save()
+                                // Attach selected tags
                                 for tagID in selectedTagIDs {
                                     if let tag = try? context.existingObject(with: tagID) as? ProductTag {
-                                        userProduct.addToTags(tag)
+                                        CoreDataManager.shared.addTag(tag, toProduct: userProduct)
                                     }
                                 }
-                                try? context.save()
-                            }
-                            viewModel.showProductAddedSuccess = true
-                        } else {
-                            viewModel.errorMessage = "Failed to save product"
-                        }
+                                // Attach selected bags
+                                for bagID in selectedBagIDs {
+                                    if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
+                                        CoreDataManager.shared.addProduct(userProduct, toBag: bag)
+                                    }
+                                }
+                                // Refresh UI
+                                NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                                DispatchQueue.main.async {
+                                    viewModel.selectedUserProduct = userProduct
+                                    viewModel.showProductDetail = true
+                                }
+                            })
+                        syncCancellable = cancellable
+                        bagCancellables.insert(cancellable)
                     }) {
                         Text("Add to My Bag")
                             .fontWeight(.medium)
@@ -448,6 +536,7 @@ struct ProductFoundView: View {
         }
         .onAppear {
             allTags = CoreDataManager.shared.fetchProductTags()
+            allBags = CoreDataManager.shared.fetchBeautyBags()
         }
     }
 }

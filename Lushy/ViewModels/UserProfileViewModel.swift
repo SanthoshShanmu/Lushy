@@ -15,6 +15,9 @@ class UserProfileViewModel: ObservableObject {
     let currentUserId: String
     let targetUserId: String
     
+    private var lastFetchTime: Date?
+    private let throttleInterval: TimeInterval = 60  // throttle interval in seconds
+    
     var isViewingOwnProfile: Bool {
         return currentUserId == targetUserId
     }
@@ -22,26 +25,31 @@ class UserProfileViewModel: ObservableObject {
     init(currentUserId: String, targetUserId: String) {
         self.currentUserId = currentUserId
         self.targetUserId = targetUserId
+        
+        // Refresh profile whenever requested, using remote data
         NotificationCenter.default.publisher(for: NSNotification.Name("RefreshProfile"))
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                if self.isViewingOwnProfile {
-                    let localBags = CoreDataManager.shared.fetchBeautyBags()
-                    self.bags = localBags.map { bag in
-                        BeautyBagSummary(
-                            id: bag.objectID.uriRepresentation().absoluteString,
-                            name: bag.name ?? ""
-                        )
-                    }
-                } else {
-                    self.fetchProfile()
-                }
+                self?.fetchProfile(force: true)  // always force refresh on explicit notification
             }
             .store(in: &cancellables)
+
+        // Initial load
+        fetchProfile(force: true)
     }
-    
-    func fetchProfile() {
+
+    // MARK: - Profile Fetching
+    func fetchProfile(force: Bool = false) {
+        // Throttle frequent calls unless forced
+        let now = Date()
+        if !force, let last = lastFetchTime, now.timeIntervalSince(last) < throttleInterval {
+            return
+        }
+        lastFetchTime = now
+        
+        // Reset previous profile to avoid showing stale data
+        DispatchQueue.main.async { [weak self] in self?.profile = nil }
+        // Always fetch fresh profile when this method is called
         isLoading = true
         error = nil
         APIService.shared.fetchUserProfile(userId: targetUserId) { [weak self] result in
@@ -50,7 +58,25 @@ class UserProfileViewModel: ObservableObject {
                 switch result {
                 case .success(let wrapper):
                     self?.profile = wrapper.user
-                    self?.bags = wrapper.user.bags ?? []
+                    // Use remote bag summaries for UI (own or other profile)
+                    let remoteBags = wrapper.user.bags ?? []
+                    let uniqueRemoteBags = remoteBags.reduce(into: [BeautyBagSummary]()) { acc, bag in
+                        if !acc.contains(where: { $0.id == bag.id }) { acc.append(bag) }
+                    }
+                    self?.bags = uniqueRemoteBags
+                    // Sync local Core Data store for bags
+                    DispatchQueue.global(qos: .background).async {
+                        let existingIds = Set(CoreDataManager.shared.fetchBeautyBags().compactMap { $0.backendId })
+                        for summary in uniqueRemoteBags {
+                            if !existingIds.contains(summary.id) {
+                                if let newId = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
+                                    CoreDataManager.shared.updateBeautyBagBackendId(id: newId, backendId: summary.id)
+                                }
+                            }
+                        }
+                    }
+                    // Sync backend products to local Core Data for navigation
+                    SyncService.shared.fetchRemoteProducts()
                     self?.products = wrapper.user.products ?? []
                     self?.favorites = wrapper.user.products?.filter { $0.isFavorite == true } ?? []
                     self?.isFollowing = wrapper.user.followers?.contains { $0.id == self?.currentUserId } ?? false
@@ -67,7 +93,7 @@ class UserProfileViewModel: ObservableObject {
                 switch result {
                 case .success:
                     self?.isFollowing = true
-                    self?.fetchProfile()
+                    self?.fetchProfile(force: true)
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
                 case .failure(let err):
                     self?.error = err.localizedDescription
@@ -82,7 +108,7 @@ class UserProfileViewModel: ObservableObject {
                 switch result {
                 case .success:
                     self?.isFollowing = false
-                    self?.fetchProfile()
+                    self?.fetchProfile(force: true)
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
                 case .failure(let err):
                     self?.error = err.localizedDescription
@@ -115,6 +141,26 @@ class UserProfileViewModel: ObservableObject {
                 self.addedWishlistIds.insert(productId)
                 completion(.success(()))
             }
+            .store(in: &cancellables)
+    }
+    
+    // Delete a beauty bag
+    func deleteBag(summary: BeautyBagSummary) {
+        let userId = currentUserId
+        // Delete remotely
+        APIService.shared.deleteBag(userId: userId, bagId: summary.id)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                // Handle errors if needed
+            }, receiveValue: {
+                // Remove locally
+                if let cdBag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
+                    CoreDataManager.shared.deleteBeautyBag(cdBag)
+                }
+                // Update UI summary list
+                self.bags.removeAll { $0.id == summary.id }
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+            })
             .store(in: &cancellables)
     }
 }

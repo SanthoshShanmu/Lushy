@@ -70,6 +70,7 @@ struct UserSearchView: View {
             .navigationTitle("Search Users")
             .navigationDestination(for: UserSummary.self) { user in
                 UserProfileView(viewModel: UserProfileViewModel(currentUserId: currentUserId, targetUserId: user.id))
+                    .id(user.id) // Ensure view reloads when navigating to different profiles
             }
         }
     }

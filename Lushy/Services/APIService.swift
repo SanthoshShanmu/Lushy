@@ -72,8 +72,8 @@ struct UserProfileWrapper: Codable {
 
 class APIService {
     static let shared = APIService()
-    
-    // Change from private to internal
+
+    // Base URL for our backend server
     let baseURL = URL(string: "http://localhost:5001/api")!
     
     private init() {}
@@ -409,17 +409,20 @@ class APIService {
         guard let userId = AuthService.shared.userId else {
             return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
         }
-        
         let urlString = "\(baseURL)/users/\(userId)/products"
         guard let url = URL(string: urlString) else {
             return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
         }
-        
         var request = URLRequest(url: url)
         if let token = AuthService.shared.token {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
+        let decoder = JSONDecoder()
+        // Decode ISO8601 date strings with fractional seconds
+        decoder.dateDecodingStrategy = .iso8601
+
+        // Start request
         return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse,
@@ -430,9 +433,13 @@ class APIService {
                     }
                     throw APIError.invalidResponse
                 }
+                // Debug: print server JSON for products
+                if let jsonStr = String(data: data, encoding: .utf8) {
+                    print("APIService: Products JSON: \(jsonStr)")
+                }
                 return data
             }
-            .decode(type: ProductsResponse.self, decoder: JSONDecoder())
+            .decode(type: ProductsResponse.self, decoder: decoder)
             .map { $0.data.products }
             .mapError { error -> APIError in
                 if let apiError = error as? APIError {
@@ -483,45 +490,6 @@ class APIService {
         }
     }
     
-    // Sync a single product to the backend to create a new UserProduct and activity
-    func syncProductWithBackend(product: UserProduct) -> AnyPublisher<Bool, APIError> {
-        guard let userId = AuthService.shared.userId else {
-            return Fail(error: .authenticationRequired).eraseToAnyPublisher()
-        }
-        let url = baseURL
-            .appendingPathComponent("users")
-            .appendingPathComponent(userId)
-            .appendingPathComponent("products")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        // Prepare payload
-        let payload: [String: Any] = [
-            "barcode": product.barcode ?? "",
-            "productName": product.productName ?? "",
-            "brand": product.brand ?? "",
-            "imageUrl": product.imageUrl ?? "",
-            "purchaseDate": product.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
-            "vegan": product.vegan,
-            "crueltyFree": product.crueltyFree,
-            "favorite": product.favorite
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { data, response -> Bool in
-                guard let http = response as? HTTPURLResponse,
-                      (200...299).contains(http.statusCode) else {
-                    throw APIError.invalidResponse
-                }
-                return true
-            }
-            .mapError { error in (error as? APIError) ?? .networkError }
-            .eraseToAnyPublisher()
-    }
-    
     // Delete a beauty bag for a user
     func deleteBag(userId: String, bagId: String) -> AnyPublisher<Void, APIError> {
         let url = baseURL
@@ -545,39 +513,268 @@ class APIService {
             .mapError { error in (error as? APIError) ?? .networkError }
             .eraseToAnyPublisher()
     }
-}
-
-// API version of wishlist item (matches what your backend returns)
-struct APIWishlistItem: Codable {
-    let id: String
-    let productName: String
-    let productURL: String
-    let notes: String
-    let imageURL: String?
-}
-
-// Create a Models namespace to avoid ambiguity
-enum Models {
-    // Empty for namespace purposes
-}
-
-// Also add these model definitions
-struct PAOTaxonomyResponse: Codable {
-    let tags: [PAOTaxonomyItem]
-}
-
-struct PAOTaxonomyItem: Codable, Identifiable {
-    let id: String
-    let known: Int
-    let products: Int
     
-    var displayName: String {
-        // Convert "en:12-months" to "12 Months"
-        let parts = id.split(separator: ":")
-        if parts.count > 1 {
-            return parts[1].replacingOccurrences(of: "-", with: " ")
-                .capitalized
+    // Fetch user tags from backend
+    func fetchUserTags(userId: String, completion: @escaping (Result<[TagSummary], Error>) -> Void) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("tags")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        return id
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
+                completion(.failure(APIError.invalidResponse)); return
+            }
+            do {
+                // Use global TagSummary with CodingKeys for _id
+                struct TagListResponse: Codable { let tags: [TagSummary] }
+                let wrapper = try JSONDecoder().decode(TagListResponse.self, from: data)
+                completion(.success(wrapper.tags))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    // Create a new product tag for a user
+    func createTag(userId: String, name: String, color: String) -> AnyPublisher<TagSummary, APIError> {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("tags")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body: [String: String] = ["name": name, "color": color]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        // Wrapper for createTag response
+        struct CreateTagWrapper: Codable {
+            let tag: TagSummary
+        }
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                if let jsonStr = String(data: data, encoding: .utf8) {
+                    print("APIService: createTag response HTTP \(http.statusCode): \(jsonStr)")
+                }
+                return data
+            }
+            .decode(type: CreateTagWrapper.self, decoder: JSONDecoder())
+            .map { $0.tag }
+            .mapError { error -> APIError in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return .decodingError
+                } else {
+                    return .networkError
+                }
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // Add tag to product on backend
+    func updateProductTags(userId: String, productId: String, addTagId: String) {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent(productId)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body = ["addTagId": addTagId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request).resume()
+    }
+
+    // Remove tag from product on backend
+    func removeProductTags(userId: String, productId: String, removeTagId: String) {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent(productId)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body = ["removeTagId": removeTagId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request).resume()
+    }
+    
+    // Fetch user bags from backend
+    func fetchUserBags(userId: String, completion: @escaping (Result<[BeautyBagSummary], Error>) -> Void) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("bags")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode),
+                  let data = data else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            do {
+                struct BagListResponse: Codable { let bags: [BeautyBagSummary] }
+                let wrapper = try JSONDecoder().decode(BagListResponse.self, from: data)
+                completion(.success(wrapper.bags))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    
+    // Fetch a single user product (with tags and bags) from backend
+    func fetchUserProduct(userId: String, productId: String, completion: @escaping (Result<BackendUserProduct, APIError>) -> Void) {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent(productId)
+        var request = URLRequest(url: url)
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError)); return
+            }
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode),
+                  let data = data else {
+                completion(.failure(.invalidResponse)); return
+            }
+            struct SingleResponse: Codable {
+                struct Payload: Codable { let product: BackendUserProduct }
+                let status: String
+                let data: Payload
+            }
+            do {
+                let wrapper = try JSONDecoder().decode(SingleResponse.self, from: data)
+                completion(.success(wrapper.data.product))
+            } catch {
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+    
+    // Replace manual JSON parsing implementation of syncProductWithBackend with Codable decoding
+
+    func syncProductWithBackend(product: UserProduct) -> AnyPublisher<String, APIError> {
+        guard let userId = AuthService.shared.userId else {
+            return Fail(error: .authenticationRequired).eraseToAnyPublisher()
+        }
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        // Build payload including tags & bags
+        var payload: [String: Any] = [
+            "barcode": product.barcode ?? "",
+            "productName": product.productName ?? "",
+            "brand": product.brand ?? "",
+            "imageUrl": product.imageUrl ?? "",
+            "purchaseDate": product.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
+            "vegan": product.vegan,
+            "crueltyFree": product.crueltyFree,
+            "favorite": product.favorite
+        ]
+        if let tagsSet = product.tags as? Set<ProductTag>, !tagsSet.isEmpty {
+            payload["tags"] = tagsSet.compactMap { $0.backendId }
+        }
+        if let bagsSet = product.bags as? Set<BeautyBag>, !bagsSet.isEmpty {
+            payload["bags"] = bagsSet.compactMap { $0.backendId }
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        struct ResponseWrapper: Decodable {
+            let status: String
+            let data: DataContainer
+            struct DataContainer: Decodable {
+                let product: BackendUserProduct
+            }
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return data
+            }
+            .decode(type: ResponseWrapper.self, decoder: decoder)
+            .map { $0.data.product.id }
+            .mapError { error in
+                if let apiErr = error as? APIError { return apiErr }
+                if error is DecodingError { return .decodingError }
+                return .networkError
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // MARK: - PAO Taxonomy
+    /// Fetch periods-after-opening taxonomy from OpenBeautyFacts
+    func fetchPAOTaxonomy() -> AnyPublisher<[String: String], APIError> {
+        let urlString = "https://world.openbeautyfacts.org/periods-after-opening.json"
+        guard let url = URL(string: urlString) else {
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        return URLSession.shared.dataTaskPublisher(for: url)
+            .tryMap { data, response -> Data in
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return data
+            }
+            .tryMap { data -> [String: String] in
+                // JSON is a dictionary of code: label
+                guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: String] else {
+                    throw APIError.decodingError
+                }
+                return dict
+            }
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return APIError.decodingError
+                } else {
+                    return APIError.networkError
+                }
+            }
+            .eraseToAnyPublisher()
     }
 }

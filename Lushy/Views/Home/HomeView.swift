@@ -3,7 +3,6 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     @Binding var selectedTab: Tab
-    @State private var showingBagOverview = true
     @State private var showOpenProducts = true
     @State private var showExpiringProducts = true
     @State private var showStoredProducts = true
@@ -14,174 +13,56 @@ struct HomeView: View {
     var body: some View {
         if #available(iOS 16.0, *) {
             NavigationStack {
-                homeContent
-            }
-            .sheet(isPresented: $viewModel.showProductDetail) {
-                if let product = viewModel.selectedProduct {
-                    ProductDetailView(viewModel: ProductDetailViewModel(product: product))
-                }
-            }
-        } else {
-            NavigationView {
-                homeContent
-            }
-            .sheet(isPresented: $viewModel.showProductDetail) {
-                if let product = viewModel.selectedProduct {
-                    ProductDetailView(viewModel: ProductDetailViewModel(product: product))
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var homeContent: some View {
-        ZStack {
-            Color.clear
-            .pastelBackground()
-            if showingBagOverview {
                 ScrollView {
-                    Text("Choose a Beauty Bag")
-                        .lushyTitle()
-                        .padding(.top, 20)
                     LazyVStack(spacing: 20) {
-                        // All Products card
-                        VStack(spacing: 12) {
-                            Image(systemName: "bag.fill")
-                                .font(.largeTitle)
-                                .foregroundStyle(LushyPalette.gradientPrimary)
-                            
-                            Text("All Products")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.lushyCream.opacity(0.3)))
-                        .onTapGesture {
-                            viewModel.setBagFilter(nil)
-                            showingBagOverview = false
-                        }
-                        
-                        // Individual bags
+                        // All Products entry if desired
+                        // Individual bag entries
                         ForEach(viewModel.allBags, id: \.self) { bag in
-                            VStack(spacing: 8) {
-                                Image(systemName: bag.icon ?? "bag.fill")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.lushyMint)
-                                
-                                Text(bag.name ?? "Unnamed")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding()
-                            .background(RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.lushyCream.opacity(0.3)))
-                            .onTapGesture {
-                                viewModel.setBagFilter(bag)
-                                showingBagOverview = false
+                            NavigationLink(destination: BeautyBagDetailView(bag: bag)) {
+                                VStack(spacing: 8) {
+                                    Image(systemName: bag.icon ?? "bag.fill")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.lushyMint)
+                                    Text(bag.name ?? "Unnamed Bag")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .padding()
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color.lushyCream.opacity(0.3)))
                             }
                         }
                     }
                     .padding()
                 }
-            } else {
-                Color.clear.pastelBackground()
-                
-                ScrollView {
-                    VStack(spacing: 30) {
-                        // Enhanced Header with girly styling
-                        HStack {
-                            if !showingBagOverview {
-                                Button(action: { showingBagOverview = true }) {
-                                    Image(systemName: "chevron.left")
-                                        .font(.title2)
-                                        .foregroundColor(LushyPalette.pink)
-                                }
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(showingBagOverview ? "My Beauty Bag" : (viewModel.selectedBag?.name ?? "All Products"))
-                                    .lushyTitle()
-                            }
-                            
-                            Spacer()
-                            
-                            // Enhanced filter menu with girly styling
-                            Menu {
-                                Section("Visibility") {
-                                    Toggle("Open Products", isOn: $showOpenProducts)
-                                    Toggle("Expiring Soon", isOn: $showExpiringProducts)
-                                    Toggle("In Storage", isOn: $showStoredProducts)
-                                }
-                                
-                                Section("Filter by Bag") {
-                                    Button("All Bags", action: { viewModel.setBagFilter(nil) })
-                                    ForEach(viewModel.allBags, id: \.self) { bag in
-                                        Button(action: { viewModel.setBagFilter(bag) }) {
-                                            Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
-                                        }
-                                    }
-                                }
-                                
-                                Section("Filter by Tag") {
-                                    Button("All Tags", action: { viewModel.setTagFilter(nil) })
-                                    ForEach(viewModel.allTags, id: \.self) { tag in
-                                        Button(action: { viewModel.setTagFilter(tag) }) {
-                                            Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "slider.horizontal.3")
-                            }
-                            .neumorphicButtonStyle()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 15)
-                        
-                        // Product sections with enhanced styling
-                        if !viewModel.openProducts.isEmpty && showOpenProducts {
-                            productSection(
-                                title: "💖 Open Products",
-                                subtitle: "Currently using",
-                                products: viewModel.openProducts,
-                                accentColor: .lushyPink
-                            )
-                            .glassCard(cornerRadius: 22)
-                        }
-                        
-                        if !viewModel.expiringProducts.isEmpty && showExpiringProducts {
-                            productSection(
-                                title: "⏰ Expiring Soon",
-                                subtitle: "Use these first!",
-                                products: viewModel.expiringProducts,
-                                accentColor: .orange
-                            )
-                            .glassCard(cornerRadius: 22)
-                        }
-                        
-                        if !viewModel.storedProducts.isEmpty && showStoredProducts {
-                            productSection(
-                                title: "🎀 In Storage",
-                                subtitle: "Safely stored away",
-                                products: viewModel.storedProducts,
-                                accentColor: .lushyMint
-                            )
-                            .glassCard(cornerRadius: 22)
-                        }
-                        
-                        // Add some bottom padding for safe area
-                        Rectangle()
-                            .fill(Color.clear)
-                            .frame(height: 100)
-                    }
-                }
+                .navigationTitle("Select a Beauty Bag")
+                .navigationBarTitleDisplayMode(.inline)
             }
-        }
-        .onAppear {
-            sparkleAnimation.toggle()
+        } else {
+            NavigationView {
+                ScrollView {
+                    LazyVStack(spacing: 20) {
+                        ForEach(viewModel.allBags, id: \.self) { bag in
+                            NavigationLink(destination: BeautyBagDetailView(bag: bag)) {
+                                VStack(spacing: 8) {
+                                    Image(systemName: bag.icon ?? "bag.fill")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.lushyMint)
+                                    Text(bag.name ?? "Unnamed Bag")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .padding()
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color.lushyCream.opacity(0.3)))
+                            }
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("Select a Beauty Bag")
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
     

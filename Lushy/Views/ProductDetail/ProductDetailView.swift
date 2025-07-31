@@ -133,31 +133,42 @@ struct _PrettyProductHeader: View {
         VStack(alignment: .leading, spacing: 20) {
             // Product image with soft shadow
             if let imageUrl = viewModel.product.imageUrl {
-                // Center the image
                 HStack {
                     Spacer()
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
+                    // Attempt to load from local file path
+                    let fileURL = URL(fileURLWithPath: imageUrl)
+                    if FileManager.default.fileExists(atPath: fileURL.path),
+                       let uiImage = UIImage(contentsOfFile: fileURL.path) {
+                        Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 25)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.lushyPink.opacity(0.1), Color.lushyPurple.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                            .frame(height: 250)
+                            .clipShape(RoundedRectangle(cornerRadius: 25))
+                            .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
+                    } else if let remoteURL = URL(string: imageUrl) {
+                        AsyncImage(url: remoteURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: 25)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.lushyPink.opacity(0.1), Color.lushyPurple.opacity(0.05)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
-                            .overlay(
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.lushyPink.opacity(0.3))
-                            )
+                                .overlay(
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.lushyPink.opacity(0.3))
+                                )
+                        }
+                        .frame(height: 250)
+                        .clipShape(RoundedRectangle(cornerRadius: 25))
+                        .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
                     }
-                    .frame(height: 250)
-                    .clipShape(RoundedRectangle(cornerRadius: 25))
-                    .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
                     Spacer()
                 }
             }
@@ -363,8 +374,7 @@ struct _PrettyActionButtons: View {
                         .fill(
                             LinearGradient(colors: [.lushyPeach, .lushyMint], startPoint: .leading, endPoint: .trailing)
                         )
-                )
-            }
+            )}
             .padding(.horizontal)
         }
     }
@@ -547,7 +557,11 @@ private struct _PrettyBagsSection: View {
         .sheet(isPresented: $showBagPicker) {
             NavigationView {
                 List {
-                    ForEach(viewModel.allBags, id: \.self) { bag in
+                    // Only show each unique bag that the product isn't yet in
+                    let available = viewModel.allBags.filter { bag in
+                        !viewModel.bagsForProduct().contains(where: { $0.objectID == bag.objectID })
+                    }
+                    ForEach(available, id: \.self) { bag in
                         Button(action: {
                             viewModel.addProductToBag(bag)
                             showBagPicker = false

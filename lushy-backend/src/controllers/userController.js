@@ -1,4 +1,5 @@
 const User = require('../models/user');
+const mongoose = require('mongoose');
 
 // Follow a user
 exports.followUser = async (req, res) => {
@@ -77,7 +78,11 @@ exports.getUserProfile = async (req, res) => {
     } catch (e) {}
     try {
       const UserProduct = require('../models/userProduct');
-      products = await UserProduct.find({ user: userId }).select('productName brand favorite');
+      // Fetch products for user with populated tags and bags
+      products = await UserProduct.find({ user: userId })
+        .select('productName brand favorite tags bags barcode imageUrl purchaseDate openDate periodsAfterOpening vegan crueltyFree')
+        .populate('tags', 'name color')
+        .populate('bags', 'name');
     } catch (e) {}
     // Attach bags and products to user object
     user = user.toObject();
@@ -126,6 +131,18 @@ exports.createBag = async (req, res) => {
   }
 };
 
+// Get all beauty bags for a user
+exports.getUserBags = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const BeautyBag = require('../models/beautyBag');
+    const bags = await BeautyBag.find({ user: userId }).select('name');
+    res.json({ bags });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch bags.', error: err.message });
+  }
+};
+
 // Delete a beauty bag
 exports.deleteBag = async (req, res) => {
   try {
@@ -138,5 +155,39 @@ exports.deleteBag = async (req, res) => {
     res.json({ message: 'Bag deleted successfully.' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete bag.', error: err.message });
+  }
+};
+
+// Get product tags for a user
+exports.getUserTags = async (req, res) => {
+  console.log('getUserTags called with userId=', req.params.userId);
+  try {
+    const userId = req.params.userId;
+    const ProductTag = require('../models/productTag');
+    console.log('ProductTag model loaded:', typeof ProductTag);
+    const tags = await ProductTag.find({ user: new mongoose.Types.ObjectId(userId) }).select('name color');
+    console.log(`Fetched ${tags.length} tags`);
+    res.json({ tags });
+  } catch (err) {
+    console.error('Error in getUserTags:', err);
+    res.status(500).json({ message: 'Failed to fetch tags.', error: err.message });
+  }
+};
+
+// Create a new product tag for a user
+exports.createTag = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { name, color } = req.body;
+    const ProductTag = require('../models/productTag');
+    // Prevent duplicate tag names per user
+    let existing = await ProductTag.findOne({ user: userId, name });
+    if (existing) {
+      return res.status(200).json({ tag: existing });
+    }
+    const newTag = await ProductTag.create({ user: userId, name, color });
+    res.status(201).json({ tag: newTag });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to create tag.', error: err.message });
   }
 };

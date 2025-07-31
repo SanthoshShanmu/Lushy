@@ -81,9 +81,50 @@ struct UserProfileView: View {
                             FavoritesSection(favorites: viewModel.favorites)
                         }
 
-                        // Beauty Bags Section
+                        // Beauty Bags Section as horizontal scroll
                         if !viewModel.bags.isEmpty {
-                            BeautyBagsSection(bags: viewModel.bags)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: "bag.fill")
+                                        .foregroundColor(.lushyPink)
+                                    Text("Beauty Bags")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(viewModel.bags, id: \.id) { bagSummary in
+                                            let bagView = Group {
+                                                if viewModel.isViewingOwnProfile,
+                                                   let cdBag = CoreDataManager.shared.fetchBeautyBags().first(where: {
+                                                       $0.backendId == bagSummary.id ||
+                                                       $0.objectID.uriRepresentation().absoluteString == bagSummary.id
+                                                   }) {
+                                                    NavigationLink(destination: BeautyBagDetailView(bag: cdBag)) {
+                                                        BagCard(bag: bagSummary)
+                                                    }
+                                                } else {
+                                                    BagCard(bag: bagSummary)
+                                                }
+                                            }
+                                            .padding(.vertical, 8)
+                                            .contextMenu {
+                                                if viewModel.isViewingOwnProfile {
+                                                    Button(role: .destructive) {
+                                                        viewModel.deleteBag(summary: bagSummary)
+                                                    } label: {
+                                                        Label("Delete Bag", systemImage: "trash")
+                                                    }
+                                                }
+                                            }
+                                            bagView
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
                         }
                         
                         // Products Section
@@ -105,7 +146,7 @@ struct UserProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             // Always fetch profile data (including own account)
-            viewModel.fetchProfile()
+            viewModel.fetchProfile(force: true)
         }
         .alert("Wishlist", isPresented: $showingWishlistAlert) {
             Button("OK") { wishlistMessage = nil }
@@ -389,7 +430,7 @@ struct ProductsSection: View {
     @ObservedObject var viewModel: UserProfileViewModel
     @Binding var wishlistMessage: String?
     @Binding var showingWishlistAlert: Bool
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -405,18 +446,35 @@ struct ProductsSection: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                ForEach(products) { product in
-                    ProductCard(product: product, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.9))
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
-        )
-    }
+                ForEach(products) { summary in
+                    // Fetch or create a local UserProduct for navigation
+                    let localProduct: UserProduct = {
+                        if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
+                            return existing
+                        } else {
+                            let context = CoreDataManager.shared.viewContext
+                            let stub = UserProduct(context: context)
+                            stub.backendId = summary.id
+                            stub.productName = summary.name
+                            stub.brand = summary.brand
+                            stub.userId = viewModel.currentUserId
+                            try? context.save()
+                            return stub
+                        }
+                    }()
+                    NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
+                        ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                    }
+                 }
+             }
+         }
+         .padding()
+         .background(
+             RoundedRectangle(cornerRadius: 20)
+                 .fill(Color.white.opacity(0.9))
+                 .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+         )
+     }
 }
 
 struct ProductCard: View {

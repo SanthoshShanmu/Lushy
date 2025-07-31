@@ -13,7 +13,6 @@ struct ContentView: View {
     @StateObject private var favoritesViewModel = FavoritesViewModel()
     @StateObject private var feedViewModel = FeedViewModel()
     @StateObject private var userSearchViewModel = UserSearchViewModel()
-    @State private var currentUserId: String = AuthService.shared.userId ?? ""
     @EnvironmentObject var authManager: AuthManager
     @State private var showLoginPrompt = false
     
@@ -21,26 +20,33 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            FeedView(viewModel: feedViewModel, currentUserId: currentUserId)
+            FeedView(viewModel: feedViewModel, currentUserId: AuthService.shared.userId ?? "")
                 .tabItem {
                     Image(systemName: "person.3.fill")
                     Text("Feed")
                 }
                 .tag(Tab.feed)
             
-            UserSearchView(viewModel: userSearchViewModel, currentUserId: currentUserId)
+            UserSearchView(viewModel: userSearchViewModel, currentUserId: AuthService.shared.userId ?? "")
                 .tabItem {
                     Image(systemName: "magnifyingglass")
                     Text("Search")
                 }
                 .tag(Tab.search)
             
-            HomeView(viewModel: homeViewModel, selectedTab: $selectedTab)
-                .tabItem {
-                    Image(systemName: "house.fill")
-                    Text("Home")
-                }
-                .tag(Tab.home)
+            // Home now shows the current user's profile
+            NavigationView {
+                // Always use the actual logged-in user ID
+                let uid = AuthService.shared.userId ?? ""
+                UserProfileView(viewModel: UserProfileViewModel(currentUserId: uid, targetUserId: uid))
+                    .environmentObject(authManager)
+                    .id(uid)
+            }
+            .tabItem {
+                Image(systemName: "house.fill")
+                Text("Home")
+            }
+            .tag(Tab.home)
             
             ScannerView(viewModel: scannerViewModel)
                 .tabItem {
@@ -83,23 +89,8 @@ struct ContentView: View {
             }
             .tag(Tab.favorites)
             
-            NavigationView {
-                BeautyBagsView()
-            }
-            .tabItem {
-                Image(systemName: "bag.fill")
-                Text("Bags")
-            }
-            .tag(Tab.bags)
-            
-            NavigationView {
-                TagManagerView()
-            }
-            .tabItem {
-                Image(systemName: "tag.fill")
-                Text("Tags")
-            }
-            .tag(Tab.tags)
+            // Bags browsing is now accessible from Home/Profile
+            // (Removed standalone Bags tab)
         }
         .onAppear {
             // Any additional setup needed when the main content view appears

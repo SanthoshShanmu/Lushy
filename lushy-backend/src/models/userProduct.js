@@ -75,6 +75,9 @@ const UserProductSchema = new Schema({
     type: Boolean,
     default: false
   },
+  // Associations to user tags and beauty bags
+  tags: [{ type: Schema.Types.ObjectId, ref: 'ProductTag' }],
+  bags: [{ type: Schema.Types.ObjectId, ref: 'BeautyBag' }],
   comments: [CommentSchema],
   reviews: [ReviewSchema],
   createdAt: {
