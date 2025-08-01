@@ -16,7 +16,12 @@ class CoreDataManager {
     }
     
     private init() {
+        // Before loading persistent stores, enable lightweight migration
         container = NSPersistentContainer(name: "Lushy")
+        if let description = container.persistentStoreDescriptions.first {
+            description.shouldMigrateStoreAutomatically = true
+            description.shouldInferMappingModelAutomatically = true
+        }
         
         // Add better error handling
         container.loadPersistentStores { (storeDescription, error) in
@@ -80,7 +85,10 @@ class CoreDataManager {
         periodsAfterOpening: String?,
         vegan: Bool,
         crueltyFree: Bool,
-        expiryOverride: Date? = nil
+        expiryOverride: Date? = nil,
+        shade: String? = nil,
+        sizeInMl: Double? = nil,
+        spf: Int16? = nil
     ) -> NSManagedObjectID? {
         // Save in main viewContext for consistent updates
         let context = viewContext
@@ -105,6 +113,10 @@ class CoreDataManager {
             product.periodsAfterOpening = periodsAfterOpening
             product.vegan = vegan
             product.crueltyFree = crueltyFree
+            // New metadata
+            product.shade = shade
+            product.sizeInMl = sizeInMl ?? 0.0
+            product.spf = spf ?? 0
             product.userId = currentUserId()
             
             // Set expiry date - either from override or calculate from PAO

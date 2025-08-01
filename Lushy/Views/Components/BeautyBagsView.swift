@@ -152,11 +152,13 @@ struct BeautyBagDetailView: View {
                     }
                 }
             }
-         }
+        }
         .navigationTitle(bag.name ?? "Bag")
         .navigationBarTitleDisplayMode(.inline)
-         .onAppear {
-             viewModel.fetchBags()
-         }
-     }
- }
+        .onAppear {
+            viewModel.fetchBags()
+            // Refresh all products metadata from backend when viewing a bag
+            SyncService.shared.fetchRemoteProducts()
+        }
+    }
+}

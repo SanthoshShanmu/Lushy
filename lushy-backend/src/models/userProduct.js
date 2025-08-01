@@ -71,6 +71,10 @@ const UserProductSchema = new Schema({
     type: Boolean,
     default: false
   },
+  // New optional metadata fields
+  shade: { type: String },
+  sizeInMl: { type: Number },
+  spf: { type: Number },
   inWishlist: {
     type: Boolean,
     default: false

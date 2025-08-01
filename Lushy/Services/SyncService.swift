@@ -134,70 +134,45 @@ class SyncService {
     private func mergeBackendProducts(_ backendProducts: [BackendUserProduct]) {
         let context = CoreDataManager.shared.viewContext
         
-        for backendProduct in backendProducts {
-            // Check if product already exists locally by barcode
-            let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-            request.predicate = NSPredicate(format: "barcode == %@", backendProduct.barcode)
-            
-            do {
-                let existingProducts = try context.fetch(request)
-                
+        context.performAndWait {
+            for backendProduct in backendProducts {
+                print("Debug: backendProduct.id=\(backendProduct.id), barcode=\(backendProduct.barcode), purchaseDate=\(backendProduct.purchaseDate)")
+                // Check if product already exists locally by backendId first (to match stubs), else by barcode
+                let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+                let predicateByBackend = NSPredicate(format: "backendId == %@", backendProduct.id)
+                let predicateByBarcode = NSPredicate(format: "barcode == %@", backendProduct.barcode)
+                request.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [predicateByBackend, predicateByBarcode])
+                let existingProducts = (try? context.fetch(request)) ?? []
+                let productToSync: UserProduct
                 if let existingProduct = existingProducts.first {
-                    // Update existing product
                     updateLocalProduct(existingProduct, from: backendProduct)
-                    existingProduct.backendId = backendProduct.id // <-- set backendId
-                    // Sync tag relationships (backend -> local)
-                    if let tagSummaries = backendProduct.tags {
-                        let localTags = CoreDataManager.shared.fetchProductTags()
-                        for tagSummary in tagSummaries {
-                            if let tag = localTags.first(where: { $0.backendId == tagSummary.id }) {
-                                existingProduct.addToTags(tag)
-                            }
-                        }
-                    }
-                    // Also push local tags (local -> backend)
-                    if let userId = AuthService.shared.userId, let prodId = existingProduct.backendId {
-                        if let localTagSet = existingProduct.tags as? Set<ProductTag> {
-                            let backendTagIds = Set(backendProduct.tags?.map { $0.id } ?? [])
-                            for tag in localTagSet {
-                                if let tagBackendId = tag.backendId, !backendTagIds.contains(tagBackendId) {
-                                    APIService.shared.updateProductTags(userId: userId, productId: prodId, addTagId: tagBackendId)
-                                }
-                            }
-                        }
-                    }
-                    // Sync bag relationships
-                    if let bagSummaries = backendProduct.bags {
-                        let localBags = CoreDataManager.shared.fetchBeautyBags()
-                        for bagSummary in bagSummaries {
-                            if let bag = localBags.first(where: { $0.backendId == bagSummary.id }) {
-                                bag.addToProducts(existingProduct)
-                            }
-                        }
-                    }
+                    productToSync = existingProduct
                 } else {
-                    // Create new product and attach relationships
                     let newProduct = createLocalProduct(from: backendProduct, in: context)
-                    // Attach tags
-                    if let tagSummaries = backendProduct.tags {
-                        let localTags = CoreDataManager.shared.fetchProductTags()
-                        for tagSummary in tagSummaries {
-                            if let tag = localTags.first(where: { $0.name == tagSummary.name && $0.color == tagSummary.color }) {
-                                newProduct.addToTags(tag)
-                            }
-                        }
-                    }
-                    // Attach bags
-                    if let bagSummaries = backendProduct.bags {
-                        let localBags = CoreDataManager.shared.fetchBeautyBags()
-                        for bagSummary in bagSummaries {
-                            if let bag = localBags.first(where: { $0.backendId == bagSummary.id }) {
-                                bag.addToProducts(newProduct)
-                            }
+                    productToSync = newProduct
+                }
+                // Sync tag relationships
+                if let tagSummaries = backendProduct.tags {
+                    // clear existing
+                    (productToSync.tags as? Set<ProductTag> ?? []).forEach { productToSync.removeFromTags($0) }
+                    for summary in tagSummaries {
+                        if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
+                            productToSync.addToTags(tag)
                         }
                     }
                 }
-                
+                // Sync bag relationships
+                if let bagSummaries = backendProduct.bags {
+                    // clear existing
+                    (productToSync.bags as? Set<BeautyBag> ?? []).forEach { productToSync.removeFromBags($0) }
+                    for summary in bagSummaries {
+                        if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
+                            productToSync.addToBags(bag)
+                        }
+                    }
+                }
+            } // for
+            do {
                 try context.save()
             } catch {
                 print("Error merging backend products: \(error)")
@@ -219,6 +194,13 @@ class SyncService {
         localProduct.vegan = backendProduct.vegan
         localProduct.crueltyFree = backendProduct.crueltyFree
         localProduct.favorite = backendProduct.favorite
+        // Sync new metadata fields
+        localProduct.shade = backendProduct.shade
+        localProduct.sizeInMl = backendProduct.sizeInMl ?? 0.0
+        localProduct.spf = Int16(backendProduct.spf ?? 0)
+        // Ensure required Core Data fields are populated
+        localProduct.barcode = backendProduct.barcode
+        localProduct.userId = AuthService.shared.userId ?? localProduct.userId
         localProduct.backendId = backendProduct.id // <-- set backendId
     }
     
@@ -239,6 +221,11 @@ class SyncService {
         product.vegan = backendProduct.vegan
         product.crueltyFree = backendProduct.crueltyFree
         product.favorite = backendProduct.favorite
+        // New metadata fields
+        product.shade = backendProduct.shade
+        product.sizeInMl = backendProduct.sizeInMl ?? 0.0
+        product.spf = Int16(backendProduct.spf ?? 0)
+        product.userId = AuthService.shared.userId ?? "guest"
         product.backendId = backendProduct.id // <-- set backendId
         return product
     }

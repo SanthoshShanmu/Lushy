@@ -419,8 +419,24 @@ class APIService {
         }
         
         let decoder = JSONDecoder()
-        // Decode ISO8601 date strings with fractional seconds
-        decoder.dateDecodingStrategy = .iso8601
+        // Decode ISO8601 strings with fractional seconds
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            // Try fractional seconds parser
+            let fractionalFormatter = ISO8601DateFormatter()
+            fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = fractionalFormatter.date(from: dateString) {
+                return date
+            }
+            // Fallback to default ISO8601 parser
+            let basicFormatter = ISO8601DateFormatter()
+            if let date = basicFormatter.date(from: dateString) {
+                return date
+            }
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateString)"))
+        }
 
         // Start request
         return URLSession.shared.dataTaskPublisher(for: request)

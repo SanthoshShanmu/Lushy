@@ -39,6 +39,10 @@ struct BackendUserProduct: Codable, Identifiable {
     let favorite: Bool
     let tags: [TagSummary]?  // Tag associations
     let bags: [BeautyBagSummary]?  // Bag associations
+    // New metadata fields
+    let shade: String?
+    let sizeInMl: Double?
+    let spf: Int?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -54,6 +58,9 @@ struct BackendUserProduct: Codable, Identifiable {
         case favorite
         case tags
         case bags
+        case shade
+        case sizeInMl
+        case spf
     }
 }
 

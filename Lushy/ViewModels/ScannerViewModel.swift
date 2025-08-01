@@ -18,6 +18,11 @@ class ScannerViewModel: ObservableObject {
     @Published var manualProductName = ""
     @Published var manualBrand = ""
     
+    // Add metadata published properties
+    @Published var manualShade = ""
+    @Published var manualSizeInMl = ""
+    @Published var manualSpf = ""
+
     // Form data for adding product
     @Published var purchaseDate = Date()
     @Published var openDate: Date?
@@ -329,6 +334,12 @@ class ScannerViewModel: ObservableObject {
             }
         }
         
+        // Convert metadata values
+        let shadeValue = manualShade.isEmpty ? nil : manualShade
+        let sizeValue = Double(manualSizeInMl)
+        let spfValue = Int16(manualSpf) ?? 0
+        
+        // Call CoreDataManager with new parameters
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: manualBarcode,
             productName: manualProductName,
@@ -338,7 +349,11 @@ class ScannerViewModel: ObservableObject {
             openDate: isProductOpen ? openDate : nil,
             periodsAfterOpening: periodsAfterOpening ?? self.periodsAfterOpening,
             vegan: ethicsInfo?.vegan ?? false,
-            crueltyFree: ethicsInfo?.crueltyFree ?? false
+            crueltyFree: ethicsInfo?.crueltyFree ?? false,
+            expiryOverride: nil,
+            shade: shadeValue,
+            sizeInMl: sizeValue,
+            spf: spfValue
         )
         
         // Let the caller handle navigation and associations
@@ -488,6 +503,9 @@ class ScannerViewModel: ObservableObject {
         manualBarcode = ""
         manualProductName = ""
         manualBrand = ""
+        manualShade = ""
+        manualSizeInMl = ""
+        manualSpf = ""
         isProductOpen = false
         openDate = nil
         purchaseDate = Date()

@@ -62,14 +62,14 @@ class ProductDetailViewModel: ObservableObject {
             .store(in: &cancellables)
         // Initial load of bags, tags, and refresh product relationships
         fetchBagsAndTags()
-        // Fetch backend detail to sync tags and bags associations
+        // Sync remote metadata, tags, bags for this product
         refreshRemoteDetail()
         // Load latest product including relationships (tags, bags)
         refreshProduct()
     }
     
     /// Fetch a single product from backend and update local Core Data relationships
-    private func refreshRemoteDetail() {
+    func refreshRemoteDetail() {
         guard let userId = AuthService.shared.userId,
               let prodBackendId = product.backendId else { return }
         APIService.shared.fetchUserProduct(userId: userId, productId: prodBackendId) { [weak self] result in
@@ -78,6 +78,26 @@ class ProductDetailViewModel: ObservableObject {
                 DispatchQueue.main.async {
                     let ctx = CoreDataManager.shared.viewContext
                     ctx.performAndWait {
+                        // Ensure tag definitions exist locally for any fetched tags
+                        if let fetchedTags = backendProd.tags {
+                            let localTags = CoreDataManager.shared.fetchProductTags()
+                            for summary in fetchedTags {
+                                if !localTags.contains(where: { $0.backendId == summary.id }) {
+                                    _ = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id)
+                                }
+                            }
+                        }
+                        // Ensure bag definitions exist locally for any fetched bags
+                        if let fetchedBags = backendProd.bags {
+                            let localBags = CoreDataManager.shared.fetchBeautyBags()
+                            for summary in fetchedBags {
+                                if !localBags.contains(where: { $0.backendId == summary.id }) {
+                                    if let newBagId = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
+                                        CoreDataManager.shared.updateBeautyBagBackendId(id: newBagId, backendId: summary.id)
+                                    }
+                                }
+                            }
+                        }
                         // Update tag relationships only if backend returned any
                         if let fetchedTags = backendProd.tags, !fetchedTags.isEmpty {
                             // Clear existing and attach new
@@ -88,6 +108,12 @@ class ProductDetailViewModel: ObservableObject {
                                 }
                             }
                         }
+                        // Sync new metadata fields
+                        if let shade = backendProd.shade {
+                            self?.product.shade = shade
+                        }
+                        self?.product.sizeInMl = backendProd.sizeInMl ?? 0.0
+                        self?.product.spf = Int16(backendProd.spf ?? 0)
                         // Update bag relationships only if backend returned any
                         if let fetchedBags = backendProd.bags, !fetchedBags.isEmpty {
                             (self?.product.bags as? Set<BeautyBag> ?? []).forEach { self?.product.removeFromBags($0) }
@@ -278,6 +304,9 @@ class ProductDetailViewModel: ObservableObject {
                     }
                     self.allBags = uniqueBags
                     self.allTags = CoreDataManager.shared.fetchProductTags()
+                    // After tags and bags are loaded, re-sync detailed product data
+                    self.refreshRemoteDetail()
+                    self.refreshProduct()
                 }
             }
         } else {

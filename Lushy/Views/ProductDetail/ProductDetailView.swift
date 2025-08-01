@@ -107,6 +107,11 @@ struct ProductDetailView: View {
         .sheet(isPresented: Binding(get: { viewModel.showReviewForm }, set: { viewModel.showReviewForm = $0 })) {
             ReviewFormView(viewModel: viewModel)
         }
+        .onAppear {
+            // Always refresh from backend when this view appears
+            viewModel.fetchBagsAndTags()
+            viewModel.refreshRemoteDetail()
+        }
     }
     
     // Utility functions used by multiple components
@@ -186,6 +191,37 @@ struct _PrettyProductHeader: View {
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
+                
+                // Display metadata as styled tags
+                HStack(spacing: 8) {
+                    if let shade = viewModel.product.shade, !shade.isEmpty {
+                        Text(shade)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyPurple.opacity(0.2))
+                            .foregroundColor(.lushyPurple)
+                            .cornerRadius(12)
+                    }
+                    if viewModel.product.sizeInMl > 0 {
+                        Text("\(String(format: "%.0f", viewModel.product.sizeInMl)) ml")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyMint.opacity(0.2))
+                            .foregroundColor(.lushyMint)
+                            .cornerRadius(12)
+                    }
+                    if viewModel.product.spf > 0 {
+                        Text("SPF \(viewModel.product.spf)")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyPeach.opacity(0.2))
+                            .foregroundColor(.lushyPeach)
+                            .cornerRadius(12)
+                    }
+                }
                 
                 // Expiry countdown
                 if let days = viewModel.daysUntilExpiry {

@@ -253,6 +253,31 @@ struct ManualEntryView: View {
                 }
             }
         }
+        .onDisappear {
+            // Reset manual entry state for next presentation
+            viewModel.manualBarcode = ""
+            viewModel.manualProductName = ""
+            viewModel.manualBrand = ""
+            viewModel.manualShade = ""
+            viewModel.manualSizeInMl = ""
+            viewModel.manualSpf = ""
+            viewModel.isProductOpen = false
+            viewModel.openDate = nil
+            viewModel.purchaseDate = Date()
+            productImage = nil
+            periodsAfterOpening = ""
+            paoOptions = []
+            paoLabels = [:]
+            selectedBagIDs.removeAll()
+            selectedTagIDs.removeAll()
+            newTagName = ""
+            newTagColor = "blue"
+            isSaving = false
+            showingSuccessAlert = false
+            showingErrorAlert = false
+            errorMessage = ""
+            manualFetchedProduct = nil
+        }
     }
 
     @ViewBuilder private func productLookupSection() -> some View {
@@ -302,6 +327,15 @@ struct ManualEntryView: View {
             TextField("Product Name (Required)", text: $viewModel.manualProductName)
                 .textFieldStyle(.roundedBorder)
             TextField("Brand (Optional)", text: $viewModel.manualBrand)
+                .textFieldStyle(.roundedBorder)
+            // Metadata inputs
+            TextField("Shade (Optional)", text: $viewModel.manualShade)
+                .textFieldStyle(.roundedBorder)
+            TextField("Size (ml, Optional)", text: $viewModel.manualSizeInMl)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+            TextField("SPF (Optional)", text: $viewModel.manualSpf)
+                .keyboardType(.numberPad)
                 .textFieldStyle(.roundedBorder)
             HStack(spacing: 20) {
                 // Display local image if selected, else show fetched product image
@@ -507,6 +541,10 @@ struct ManualEntryView: View {
                     "crueltyFree": userProduct.crueltyFree,
                     "favorite": userProduct.favorite
                 ]
+                // Attach new metadata
+                if let shade = userProduct.shade { body["shade"] = shade }
+                body["sizeInMl"] = userProduct.sizeInMl
+                body["spf"] = userProduct.spf
                 if !productTags.isEmpty { body["tags"] = productTags }
                 if !productBags.isEmpty { body["bags"] = productBags }
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -560,6 +598,8 @@ struct ManualEntryView: View {
             .neumorphicButtonStyle()
         }
     }
+
+    // Removed misplaced onDisappear block here
 }
 
 // Helper for toggling membership in a Set
