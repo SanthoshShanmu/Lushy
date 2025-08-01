@@ -199,11 +199,11 @@ struct AccountView: View {
                     Text("Open Beauty Facts").font(.headline)
                     
                     Toggle("Auto-contribute new products", isOn: Binding(
-                        get: { 
+                        get: {
                             // Default to true if never set (first time users)
                             let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-                            return hasSetPreference ? 
-                                UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+                            return hasSetPreference ?
+                                UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") :
                                 true
                         },
                         set: { UserDefaults.standard.set($0, forKey: "auto_contribute_to_obf") }

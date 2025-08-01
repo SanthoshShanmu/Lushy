@@ -385,8 +385,8 @@ class ScannerViewModel: ObservableObject {
         // Check if user has enabled OBF contributions in settings
         // Default to true if never set (first time users)
         let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-        let autoContributeEnabled = hasSetPreference ? 
-            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") : 
+        let autoContributeEnabled = hasSetPreference ?
+            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") :
             true // Default to enabled for new users
         
         print("🌍 - hasSetPreference: \(hasSetPreference)")

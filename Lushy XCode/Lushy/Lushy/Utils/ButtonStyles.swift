@@ -204,7 +204,7 @@ struct TagButtonStyle: ButtonStyle {
             .background(
                 Capsule()
                     .fill(
-                        isSelected ? 
+                        isSelected ?
                         LinearGradient(
                             gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple.opacity(0.8)]),
                             startPoint: .leading,

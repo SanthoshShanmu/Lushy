@@ -6,8 +6,8 @@ struct BubblyBackground: View {
             // Enhanced gradient background with more feminine colors
             LinearGradient(
                 gradient: Gradient(colors: [
-                    Color.lushyPink.opacity(0.25), 
-                    Color.lushyPurple.opacity(0.18), 
+                    Color.lushyPink.opacity(0.25),
+                    Color.lushyPurple.opacity(0.18),
                     Color.lushyMint.opacity(0.15),
                     Color.lushyPeach.opacity(0.12)
                 ]),
