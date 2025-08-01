@@ -53,20 +53,45 @@ struct UserProfileView: View {
                         
                         // Stats Section (customized)
                         HStack(spacing: 30) {
-                            StatItem(
-                                icon: "heart.fill",
-                                count: profile.followers?.count ?? 0,
-                                label: "Followers",
-                                color: .lushyPink
-                            )
-                            
-                            StatItem(
-                                icon: "person.2.fill",
-                                count: profile.following?.count ?? 0,
-                                label: "Following",
-                                color: .lushyPurple
-                            )
-                            
+                            // Followers
+                            if viewModel.isViewingOwnProfile {
+                                NavigationLink(destination: FollowersListView(followers: profile.followers ?? [], currentUserId: viewModel.currentUserId)) {
+                                    StatItem(
+                                        icon: "heart.fill",
+                                        count: profile.followers?.count ?? 0,
+                                        label: "Followers",
+                                        color: .lushyPink
+                                    )
+                                }
+                            } else {
+                                StatItem(
+                                    icon: "heart.fill",
+                                    count: profile.followers?.count ?? 0,
+                                    label: "Followers",
+                                    color: .lushyPink
+                                )
+                            }
+
+                            // Following
+                            if viewModel.isViewingOwnProfile {
+                                NavigationLink(destination: FollowingListView(following: profile.following ?? [], currentUserId: viewModel.currentUserId)) {
+                                    StatItem(
+                                        icon: "person.2.fill",
+                                        count: profile.following?.count ?? 0,
+                                        label: "Following",
+                                        color: .lushyPurple
+                                    )
+                                }
+                            } else {
+                                StatItem(
+                                    icon: "person.2.fill",
+                                    count: profile.following?.count ?? 0,
+                                    label: "Following",
+                                    color: .lushyPurple
+                                )
+                            }
+
+                            // Bags
                             StatItem(
                                 icon: "bag.fill",
                                 count: viewModel.bags.count,
