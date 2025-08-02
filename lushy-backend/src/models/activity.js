@@ -7,6 +7,15 @@ const ActivitySchema = new mongoose.Schema({
   targetType: { type: String }, // e.g., 'BeautyBag', 'Review', 'UserProduct'
   description: { type: String },
   rating: { type: Number }, // star rating for review activities
+  likes: { type: Number, default: 0 }, // number of likes on this activity
+  likedBy: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] }, // users who liked this activity
+  comments: [ // comments on activity
+    {
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
   createdAt: { type: Date, default: Date.now }
 });
 

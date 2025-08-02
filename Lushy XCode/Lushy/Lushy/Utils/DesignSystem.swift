@@ -86,3 +86,29 @@ extension View {
     func glassCard(cornerRadius: CGFloat = 20) -> some View { modifier(GlassCard(cornerRadius: cornerRadius)) }
     func neumorphicButtonStyle() -> some View { buttonStyle(NeumorphicButton()) }
 }
+
+// MARK: - Feed Card Style (full-width without horizontal padding)
+struct FeedCard: ViewModifier {
+    var cornerRadius: CGFloat = 16
+    func body(content: Content) -> some View {
+        content
+            .padding()                             // inner content padding
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+            .padding(.horizontal, 16)             // side margins
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension View {
+    func feedCard(cornerRadius: CGFloat = 16) -> some View {
+        modifier(FeedCard(cornerRadius: cornerRadius))
+    }
+}

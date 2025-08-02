@@ -793,4 +793,61 @@ class APIService {
             }
             .eraseToAnyPublisher()
     }
+    
+    /// Like an activity
+    func likeActivity(activityId: String, completion: @escaping (Result<(likes: Int, liked: Bool), Error>) -> Void) {
+        let url = baseURL.appendingPathComponent("activities/")
+            .appendingPathComponent(activityId)
+            .appendingPathComponent("like")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error)); return
+            }
+            guard let data = data else {
+                completion(.failure(APIError.noData)); return
+            }
+            do {
+                struct LikeResponse: Codable { let likes: Int; let liked: Bool }
+                let resp = try JSONDecoder().decode(LikeResponse.self, from: data)
+                completion(.success((likes: resp.likes, liked: resp.liked)))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    /// Comment on an activity
+    func commentOnActivity(activityId: String, text: String, completion: @escaping (Result<[CommentSummary], Error>) -> Void) {
+        let url = baseURL.appendingPathComponent("activities/")
+            .appendingPathComponent(activityId)
+            .appendingPathComponent("comment")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body = ["text": text]
+        request.httpBody = try? JSONEncoder().encode(body)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error)); return
+            }
+            guard let data = data else {
+                completion(.failure(APIError.noData)); return
+            }
+            do {
+                let wrapper = try JSONDecoder().decode([String: [CommentSummary]].self, from: data)
+                let comments = wrapper["comments"] ?? []
+                completion(.success(comments))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
 }

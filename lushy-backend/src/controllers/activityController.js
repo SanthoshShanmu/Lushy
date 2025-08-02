@@ -60,7 +60,8 @@ exports.getUserFeed = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .limit(100)
-      .populate('user', 'name email');
+      .populate('user', 'name email')
+      .populate('comments.user', 'name');
       
     console.log('Found matching activities:', activities.length);
     activities.forEach(activity => {
@@ -76,7 +77,15 @@ exports.getUserFeed = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     res.set('Surrogate-Control', 'no-store');
-    res.json({ feed: activities || [] });
+    
+    // Compute liked flag for each activity
+    const currentUserId = req.user.id;
+    const feedWithLiked = activities.map(act => {
+      const obj = act.toObject();
+      obj.liked = (act.likedBy || []).some(id => id.toString() === currentUserId);
+      return obj;
+    });
+    res.json({ feed: feedWithLiked || [] });
   } catch (err) {
     console.error('Feed error:', err);
     res.status(500).json({ message: 'Server error', error: err.message, stack: err.stack });
@@ -113,6 +122,51 @@ exports.createActivity = async (req, res) => {
     });
   } catch (err) {
     console.error('Create activity error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Like an activity
+exports.likeActivity = async (req, res) => {
+  try {
+    const activityId = req.params.activityId;
+    const userId = req.user.id;
+    const activity = await Activity.findById(activityId);
+    if (!activity) return res.status(404).json({ message: 'Activity not found' });
+    // Toggle like
+    const idx = activity.likedBy.findIndex(id => id.toString() === userId);
+    let liked;
+    if (idx !== -1) {
+      activity.likedBy.splice(idx, 1);
+      activity.likes = Math.max(0, activity.likes - 1);
+      liked = false;
+    } else {
+      activity.likedBy.push(userId);
+      activity.likes = (activity.likes || 0) + 1;
+      liked = true;
+    }
+    await activity.save();
+    res.json({ likes: activity.likes, liked });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Add a comment to an activity
+exports.commentOnActivity = async (req, res) => {
+  try {
+    const activityId = req.params.activityId;
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ message: 'Comment text required' });
+    const comment = { user: req.user.id, text, createdAt: new Date() };
+    const activity = await Activity.findByIdAndUpdate(
+      activityId,
+      { $push: { comments: comment } },
+      { new: true }
+    ).populate('comments.user', 'name');
+    if (!activity) return res.status(404).json({ message: 'Activity not found' });
+    res.json({ comments: activity.comments });
+  } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };

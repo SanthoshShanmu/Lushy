@@ -62,31 +62,32 @@ struct FeedView: View {
                     .glassCard()
 
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(viewModel.activities) { activity in
-                                NavigationLink(value: activity.user) {
-                                    Group {
-                                        if activity.type == "review_added" {
-                                            ReviewActivityCard(activity: activity, currentUserId: currentUserId)
-                                        } else {
-                                            ActivityCard(activity: activity, currentUserId: currentUserId)
-                                        }
+                                if activity.type == "review_added" {
+                                    NavigationLink(value: activity.user) {
+                                        ReviewActivityCard(activity: activity, currentUserId: currentUserId)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
                                     }
+                                    .feedCard()
+                                } else {
+                                    NavigationLink(value: activity.user) {
+                                        ActivityCard(activity: activity, currentUserId: currentUserId)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .feedCard()
                                 }
-                                .glassCard()
-                                .padding(.horizontal)
                             }
                         }
                         .padding(.top)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .refreshable {
                         viewModel.fetchFeed(for: currentUserId)
                     }
                 }
             }
-            .navigationTitle("✨ Beauty Feed")
-            .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 viewModel.fetchFeed(for: currentUserId)
             }
@@ -217,72 +218,167 @@ struct ActivityCard: View {
 struct ReviewActivityCard: View {
     let activity: Activity
     let currentUserId: String
+    @State private var likesCount: Int = 0
+    @State private var commentsCount: Int = 0
+    @State private var showCommentSheet = false
+    @State private var newCommentText = ""
+    @State private var isLiked = false  // track if user has liked this activity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // User Header
-            HStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.6), Color.lushyPurple.opacity(0.4)]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+        // Expand entire card to full width
+        VStack(spacing: 0) {
+            // Outer white card background
+            VStack(alignment: .leading, spacing: 0) {
+                // User header
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.lushyPink.opacity(0.6), Color.lushyPurple.opacity(0.4)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Text(activity.user.name.prefix(1).uppercased())
-                            .font(.headline)
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Text(activity.user.name.prefix(1).uppercased())
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        )
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(activity.user.name)
+                            .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                    )
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(activity.user.name)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                    Text("Reviewed a product")
+                            .foregroundColor(.primary)
+                        // Subtitle: Reviewed product
+                        Text("Reviewed \(extractedTitle)")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(LushyPalette.pink)
+                    }
+                    Spacer()
+                    Text(timeAgoString(from: activity.createdAt))
                         .font(.caption)
-                        .foregroundColor(LushyPalette.pink)
+                        .foregroundColor(.secondary)
                 }
-                Spacer()
-                Text(timeAgoString(from: activity.createdAt))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
+                .padding(.vertical, 12) // Vertical padding only
 
-            // Review Text
-            if let reviewText = activity.description {
-                Text(reviewText)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .multilineTextAlignment(.leading)
-                    .padding(.horizontal)
-            }
+                // Gradient review block
+                VStack(alignment: .leading, spacing: 12) {
+                    // Title
+                    Text(extractedTitle)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
 
-            // Star Rating
-            if let rating = activity.rating {
-                HStack(spacing: 4) {
-                    ForEach(0..<5) { idx in
-                        Image(systemName: idx < rating ? "star.fill" : "star")
-                            .foregroundColor(idx < rating ? .yellow : .gray.opacity(0.5))
+                    // Review text
+                    if let reviewText = activity.description {
+                        Text(reviewText)
+                            .font(.body)
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Star rating
+                    if let rating = activity.rating {
+                        HStack(spacing: 4) {
+                            ForEach(0..<5) { idx in
+                                Image(systemName: idx < rating ? "star.fill" : "star")
+                                    .foregroundColor(.white)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 16)                // vertical padding
+                .frame(maxWidth: .infinity)            // expand view width before background
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.8), Color.lushyPurple.opacity(0.9)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .cornerRadius(12, corners: [.topLeft, .topRight])
+                )
+                .frame(maxWidth: .infinity) // Expand to full available width
+            }
+            .frame(maxWidth: .infinity) // Expand to full available width
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+            
+            // Interaction Bar
+            HStack(spacing: 20) {
+                Button(action: {
+                    APIService.shared.likeActivity(activityId: activity.id) { result in
+                        if case .success(let response) = result {
+                            DispatchQueue.main.async {
+                                likesCount = response.likes
+                                isLiked = response.liked
+                            }
+                        }
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .foregroundColor(isLiked ? .red : .secondary)
+                        Text("\(likesCount)")
                             .font(.caption)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                Button(action: {
+                    showCommentSheet = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "message")
+                            .foregroundColor(.secondary)
+                        Text("\(commentsCount)")
+                            .font(.caption)
+                    }
+                }
+                Spacer()
             }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
-        )
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        .onAppear {
+            likesCount = activity.likes ?? 0
+            commentsCount = activity.comments?.count ?? 0
+            // Initialize liked state from backend
+            isLiked = activity.liked ?? false
+        }
+        .sheet(isPresented: $showCommentSheet) {
+            VStack(spacing: 16) {
+                TextField("Add a comment...", text: $newCommentText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+                Button("Submit") {
+                    APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
+                        if case .success(let comments) = result {
+                            DispatchQueue.main.async {
+                                commentsCount = comments.count
+                                newCommentText = ""
+                                showCommentSheet = false
+                            }
+                        }
+                    }
+                }
+                .disabled(newCommentText.isEmpty)
+                .padding()
+                Spacer()
+            }
+            .padding()
+        }
+    }
+
+    // Extract product title from description
+    private var extractedTitle: String {
+        guard let desc = activity.description,
+              desc.hasPrefix("Reviewed ") else { return "" }
+        let trimmed = desc.dropFirst("Reviewed ".count)
+        return String(trimmed).components(separatedBy: " and").first ?? String(trimmed)
     }
 
     // Utility function to format createdAt string as time ago

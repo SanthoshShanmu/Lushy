@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const activityController = require('../controllers/activityController');
+const authMiddleware = require('../middleware/auth');
 
 // Follow a user
 router.post('/:userId/follow', userController.followUser);
@@ -17,8 +18,8 @@ router.post('/:userId/bags', userController.createBag);
 router.delete('/:userId/bags/:bagId', userController.deleteBag);
 // Search users
 router.get('/search', userController.searchUsers);
-// Get activity feed for a user
-router.get('/:userId/feed', activityController.getUserFeed);
+// Get activity feed for a user (requires auth to track likes)
+router.get('/:userId/feed', authMiddleware.authenticate, activityController.getUserFeed);
 // Create activity
 router.post('/:userId/activities', activityController.createActivity);
 // Get product tags

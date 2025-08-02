@@ -164,11 +164,27 @@ struct Activity: Codable, Identifiable {
     let targetType: String?
     let description: String?
     let rating: Int?  // star rating for review activities
+    let likes: Int?   // number of likes
+    let comments: [CommentSummary]?  // comments on this activity
+    let liked: Bool?  // whether the current user has liked this activity
     let createdAt: String
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, type, targetId, targetType, description, rating, createdAt
+        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt
+    }
+}
+
+// A minimal summary model for comments under an activity
+struct CommentSummary: Codable, Identifiable {
+    let id: String
+    let user: UserSummary
+    let text: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case user, text, createdAt
     }
 }
 
