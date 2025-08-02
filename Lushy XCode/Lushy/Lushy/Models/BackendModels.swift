@@ -163,11 +163,12 @@ struct Activity: Codable, Identifiable {
     let targetId: String?
     let targetType: String?
     let description: String?
+    let rating: Int?  // star rating for review activities
     let createdAt: String
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, type, targetId, targetType, description, createdAt
+        case user, type, targetId, targetType, description, rating, createdAt
     }
 }
 

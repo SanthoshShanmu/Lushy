@@ -412,6 +412,7 @@ exports.updateUserProduct = async (req, res) => {
           targetId: new mongoose.Types.ObjectId(req.params.id), // ensure ObjectId
           targetType: 'UserProduct',
           description: `Reviewed ${product.productName} and gave it ${rating} stars`,
+          rating: rating,
           createdAt: new Date()
         });
         console.log('Activity created: review_added for user', req.params.userId);

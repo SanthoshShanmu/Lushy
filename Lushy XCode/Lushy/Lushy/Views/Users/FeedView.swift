@@ -66,10 +66,16 @@ struct FeedView: View {
                         LazyVStack(spacing: 16) {
                             ForEach(viewModel.activities) { activity in
                                 NavigationLink(value: activity.user) {
-                                    ActivityCard(activity: activity, currentUserId: currentUserId)
-                                        .glassCard()
-                                        .padding(.horizontal)
+                                    Group {
+                                        if activity.type == "review_added" {
+                                            ReviewActivityCard(activity: activity, currentUserId: currentUserId)
+                                        } else {
+                                            ActivityCard(activity: activity, currentUserId: currentUserId)
+                                        }
+                                    }
                                 }
+                                .glassCard()
+                                .padding(.horizontal)
                             }
                         }
                         .padding(.top)
@@ -182,24 +188,127 @@ struct ActivityCard: View {
     
     private func timeAgoString(from dateString: String) -> String {
         let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: dateString) else {
-            return "Unknown"
+        // Try full ISO8601 with fractional seconds
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withFractionalSeconds,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
         }
-        
-        let now = Date()
-        let timeInterval = now.timeIntervalSince(date)
-        
-        if timeInterval < 60 {
-            return "Just now"
-        } else if timeInterval < 3600 {
-            let minutes = Int(timeInterval / 60)
-            return "\(minutes)m ago"
-        } else if timeInterval < 86400 {
-            let hours = Int(timeInterval / 3600)
-            return "\(hours)h ago"
-        } else {
-            let days = Int(timeInterval / 86400)
-            return "\(days)d ago"
+        // Fallback without fractional seconds
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
         }
+        return "Unknown"
+    }
+}
+
+// MARK: - Review Activity Card Component
+struct ReviewActivityCard: View {
+    let activity: Activity
+    let currentUserId: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // User Header
+            HStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.6), Color.lushyPurple.opacity(0.4)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Text(activity.user.name.prefix(1).uppercased())
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(activity.user.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    Text("Reviewed a product")
+                        .font(.caption)
+                        .foregroundColor(LushyPalette.pink)
+                }
+                Spacer()
+                Text(timeAgoString(from: activity.createdAt))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            // Review Text
+            if let reviewText = activity.description {
+                Text(reviewText)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal)
+            }
+
+            // Star Rating
+            if let rating = activity.rating {
+                HStack(spacing: 4) {
+                    ForEach(0..<5) { idx in
+                        Image(systemName: idx < rating ? "star.fill" : "star")
+                            .foregroundColor(idx < rating ? .yellow : .gray.opacity(0.5))
+                            .font(.caption)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    // Utility function to format createdAt string as time ago
+    private func timeAgoString(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        // Try full ISO8601 with fractional seconds
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withFractionalSeconds,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        // Fallback without fractional seconds
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        return "Unknown"
     }
 }
