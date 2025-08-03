@@ -65,19 +65,16 @@ struct FeedView: View {
                     ScrollView(.vertical, showsIndicators: true) {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(viewModel.activities) { activity in
-                                if activity.type == "review_added" {
-                                    NavigationLink(value: activity.user) {
+                                NavigationLink(value: activity.user) {
+                                    if activity.type == "review_added" {
                                         ReviewActivityCard(activity: activity, currentUserId: currentUserId)
                                             .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .feedCard()
-                                } else {
-                                    NavigationLink(value: activity.user) {
+                                    } else {
                                         ActivityCard(activity: activity, currentUserId: currentUserId)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-                                    .feedCard()
                                 }
+                                .feedCard()
                             }
                         }
                         .padding(.top)
@@ -156,12 +153,7 @@ struct ActivityCard: View {
                     .lineLimit(3)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
-        )
+        // Removed internal padding and background
     }
     
     private func activityIcon(for type: String) -> String {
@@ -266,48 +258,48 @@ struct ReviewActivityCard: View {
                 .padding(.vertical, 12) // Vertical padding only
 
                 // Gradient review block
-                VStack(alignment: .leading, spacing: 12) {
-                    // Title
-                    Text(extractedTitle)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-
-                    // Review text
-                    if let reviewText = activity.description {
-                        Text(reviewText)
-                            .font(.body)
+                ZStack(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.lushyPink.opacity(0.8), Color.lushyPurple.opacity(0.9)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Title
+                        Text(extractedTitle)
+                            .font(.title3)
+                            .fontWeight(.semibold)
                             .foregroundColor(.white)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
 
-                    // Star rating
-                    if let rating = activity.rating {
-                        HStack(spacing: 4) {
-                            ForEach(0..<5) { idx in
-                                Image(systemName: idx < rating ? "star.fill" : "star")
-                                    .foregroundColor(.white)
-                                    .font(.caption)
+                        // Review text
+                        if let reviewText = activity.description {
+                            Text(reviewText)
+                                .font(.body)
+                                .foregroundColor(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        // Star rating
+                        if let rating = activity.rating {
+                            HStack(spacing: 4) {
+                                ForEach(0..<5) { idx in
+                                    Image(systemName: idx < rating ? "star.fill" : "star")
+                                        .foregroundColor(.white)
+                                        .font(.caption)
+                                }
                             }
                         }
                     }
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 16) // Added horizontal padding
                 }
-                .padding(.vertical, 16)                // vertical padding
-                .frame(maxWidth: .infinity)            // expand view width before background
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.8), Color.lushyPurple.opacity(0.9)]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .cornerRadius(12, corners: [.topLeft, .topRight])
-                )
-                .frame(maxWidth: .infinity) // Expand to full available width
+                .frame(maxWidth: .infinity)
+                .cornerRadius(12, corners: [.topLeft, .topRight])
             }
             .frame(maxWidth: .infinity) // Expand to full available width
-            .background(Color.white)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
             
             // Interaction Bar
             HStack(spacing: 20) {

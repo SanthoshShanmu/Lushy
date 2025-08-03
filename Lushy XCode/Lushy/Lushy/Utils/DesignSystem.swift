@@ -95,14 +95,14 @@ struct FeedCard: ViewModifier {
             .padding()                             // inner content padding
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color.white)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .stroke(Color.gray.opacity(0.1), lineWidth: 1)
             )
             .padding(.horizontal, 16)             // side margins
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -110,5 +110,28 @@ struct FeedCard: ViewModifier {
 extension View {
     func feedCard(cornerRadius: CGFloat = 16) -> some View {
         modifier(FeedCard(cornerRadius: cornerRadius))
+    }
+}
+
+// MARK: - Review Card Style
+struct ReviewCard: ViewModifier {
+    var cornerRadius: CGFloat = 12
+    var shadowColor: Color = Color.white.opacity(0.4)
+    var shadowRadius: CGFloat = 4
+    var shadowOffset: CGSize = CGSize(width: 0, height: 2)
+    func body(content: Content) -> some View {
+        content
+            .padding()  // inner padding for review card content
+            .background(Color.white)
+            .cornerRadius(cornerRadius)
+            .shadow(color: shadowColor, radius: shadowRadius, x: shadowOffset.width, y: shadowOffset.height)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+    }
+}
+
+extension View {
+    func reviewCard(cornerRadius: CGFloat = 12) -> some View {
+        modifier(ReviewCard(cornerRadius: cornerRadius))
     }
 }
