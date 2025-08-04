@@ -107,6 +107,13 @@ struct ActivityCard: View {
     let activity: Activity
     let currentUserId: String
     
+    @State private var likesCount: Int = 0
+    @State private var commentsCount: Int = 0
+    @State private var showCommentSheet = false
+    @State private var newCommentText = ""
+    @State private var isLiked = false
+    @State private var commentList: [CommentSummary] = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
@@ -152,8 +159,99 @@ struct ActivityCard: View {
                     .foregroundColor(.primary)
                     .lineLimit(3)
             }
+
+            // Interaction Bar
+            HStack(spacing: 20) {
+                Button(action: {
+                    APIService.shared.likeActivity(activityId: activity.id) { result in
+                        if case .success(let response) = result {
+                            DispatchQueue.main.async {
+                                likesCount = response.likes
+                                isLiked = response.liked
+                            }
+                        }
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .foregroundColor(isLiked ? .red : .secondary)
+                        Text("\(likesCount)")
+                            .font(.caption)
+                    }
+                }
+                Button(action: {
+                    showCommentSheet = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "message")
+                            .foregroundColor(.secondary)
+                        Text("\(commentsCount)")
+                            .font(.caption)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top, 8)
+
         }
-        // Removed internal padding and background
+        .onAppear {
+            likesCount = activity.likes ?? 0
+            commentsCount = activity.comments?.count ?? 0
+            isLiked = activity.liked ?? false
+            commentList = activity.comments ?? []
+        }
+        .sheet(isPresented: $showCommentSheet) {
+            NavigationView {
+                VStack(spacing: 16) {
+                    Text("Comments")
+                        .font(.headline)
+                        .padding(.top)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(commentList) { comment in
+                                VStack(alignment: .leading) {
+                                    Text(comment.user.name)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    Text(comment.text)
+                                        .font(.body)
+                                    Text(comment.createdAt)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Divider()
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    HStack {
+                        TextField("Add a comment...", text: $newCommentText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Button("Submit") {
+                            APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
+                                if case .success(let comments) = result {
+                                    DispatchQueue.main.async {
+                                        commentList = comments
+                                        commentsCount = comments.count
+                                        newCommentText = ""
+                                        showCommentSheet = false
+                                    }
+                                }
+                            }
+                        }
+                        .disabled(newCommentText.isEmpty)
+                    }
+                    .padding()
+                    Spacer()
+                }
+                .navigationBarTitle("Comments", displayMode: .inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { showCommentSheet = false }
+                    }
+                }
+            }
+        }
     }
     
     private func activityIcon(for type: String) -> String {
@@ -215,6 +313,7 @@ struct ReviewActivityCard: View {
     @State private var showCommentSheet = false
     @State private var newCommentText = ""
     @State private var isLiked = false  // track if user has liked this activity
+    @State private var commentList: [CommentSummary] = []
 
     var body: some View {
         // Expand entire card to full width
@@ -340,28 +439,59 @@ struct ReviewActivityCard: View {
             commentsCount = activity.comments?.count ?? 0
             // Initialize liked state from backend
             isLiked = activity.liked ?? false
+            commentList = activity.comments ?? []
         }
         .sheet(isPresented: $showCommentSheet) {
-            VStack(spacing: 16) {
-                TextField("Add a comment...", text: $newCommentText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding()
-                Button("Submit") {
-                    APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
-                        if case .success(let comments) = result {
-                            DispatchQueue.main.async {
-                                commentsCount = comments.count
-                                newCommentText = ""
-                                showCommentSheet = false
+            NavigationView {
+                VStack(spacing: 16) {
+                    Text("Comments")
+                        .font(.headline)
+                        .padding(.top)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(commentList) { comment in
+                                VStack(alignment: .leading) {
+                                    Text(comment.user.name)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    Text(comment.text)
+                                        .font(.body)
+                                    Text(comment.createdAt)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Divider()
                             }
                         }
+                        .padding(.horizontal)
+                    }
+                    HStack {
+                        TextField("Add a comment...", text: $newCommentText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Button("Submit") {
+                            APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
+                                if case .success(let comments) = result {
+                                    DispatchQueue.main.async {
+                                        commentList = comments
+                                        commentsCount = comments.count
+                                        newCommentText = ""
+                                        showCommentSheet = false
+                                    }
+                                }
+                            }
+                        }
+                        .disabled(newCommentText.isEmpty)
+                    }
+                    .padding()
+                    Spacer()
+                }
+                .navigationBarTitle("Comments", displayMode: .inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { showCommentSheet = false }
                     }
                 }
-                .disabled(newCommentText.isEmpty)
-                .padding()
-                Spacer()
             }
-            .padding()
         }
     }
 
