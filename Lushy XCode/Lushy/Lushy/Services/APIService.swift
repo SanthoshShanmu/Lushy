@@ -683,17 +683,35 @@ class APIService {
                   let data = data else {
                 completion(.failure(.invalidResponse)); return
             }
-            struct SingleResponse: Codable {
-                struct Payload: Codable { let product: BackendUserProduct }
-                let status: String
-                let data: Payload
+
+            // Debug: print raw JSON for fetchUserProduct
+            if let raw = String(data: data, encoding: .utf8) {
+                print("APIService.fetchUserProduct JSON: \(raw)")
             }
-            do {
-                let wrapper = try JSONDecoder().decode(SingleResponse.self, from: data)
-                completion(.success(wrapper.data.product))
-            } catch {
-                completion(.failure(.decodingError))
-            }
+             struct SingleResponse: Codable {
+                 struct Payload: Codable { let product: BackendUserProduct }
+                 let status: String
+                 let data: Payload
+             }
+             do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .custom { decoder in
+                    let container = try decoder.singleValueContainer()
+                    let dateStr = try container.decode(String.self)
+                    let frac = ISO8601DateFormatter()
+                    frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let d = frac.date(from: dateStr) { return d }
+                    let basic = ISO8601DateFormatter()
+                    if let d = basic.date(from: dateStr) { return d }
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateStr)"))
+                }
+                 let wrapper = try decoder.decode(SingleResponse.self, from: data)
+                 completion(.success(wrapper.data.product))
+             } catch {
+                print("APIService.fetchUserProduct decode error: \(error)")
+                completion(.failure(.decodingError)); return
+             }
         }.resume()
     }
     
@@ -845,6 +863,92 @@ class APIService {
                 let wrapper = try JSONDecoder().decode([String: [CommentSummary]].self, from: data)
                 let comments = wrapper["comments"] ?? []
                 completion(.success(comments))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    
+    // MARK: - Product Search
+    /// Search products across all users by name
+    func searchProducts(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
+        fallbackOBSearch(query: query, completion: completion)
+    }
+    
+    /// Fetch general product detail by product ID
+    func fetchProductDetail(productId: String, completion: @escaping (Result<BackendUserProduct, Error>) -> Void) {
+        let url = baseURL.appendingPathComponent("products").appendingPathComponent(productId)
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error)); return
+            }
+            guard let data = data else {
+                completion(.failure(APIError.noData)); return
+            }
+
+            // Debug: print raw JSON for inspection
+            if let raw = String(data: data, encoding: .utf8) {
+                print("APIService.fetchProductDetail JSON: \(raw)")
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .custom { decoder in
+                    let container = try decoder.singleValueContainer()
+                    let dateStr = try container.decode(String.self)
+                    // Try fractional seconds parser
+                    let frac = ISO8601DateFormatter()
+                    frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let d = frac.date(from: dateStr) { return d }
+                    // Fallback to standard ISO8601
+                    let basic = ISO8601DateFormatter()
+                    if let d = basic.date(from: dateStr) { return d }
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateStr)"))
+                }
+                let root = try decoder.decode(ProductDetailResponse.self, from: data)
+                completion(.success(root.data.product))
+            } catch {
+                print("APIService.fetchProductDetail decode error: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    // Wrapper for decoding product detail
+    private struct ProductDetailResponse: Codable {
+        struct DataContainer: Codable { let product: BackendUserProduct }
+        let status: String
+        let data: DataContainer
+    }
+    
+    // Client-side fallback search using OpenBeautyFacts when backend returns no results
+    private func fallbackOBSearch(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
+        var components = URLComponents(string: "https://world.openbeautyfacts.org/cgi/search.pl")!
+        components.queryItems = [
+            URLQueryItem(name: "search_terms", value: query),
+            URLQueryItem(name: "search_simple", value: "1"),
+            URLQueryItem(name: "action", value: "process"),
+            URLQueryItem(name: "json", value: "1"),
+            URLQueryItem(name: "fields", value: "code,product_name,brands,image_url,image_small_url"),
+            URLQueryItem(name: "page_size", value: "20")
+        ]
+        guard let url = components.url else {
+            completion(.failure(APIError.invalidURL)); return
+        }
+        URLSession.shared.dataTask(with: URLRequest(url: url)) { data, _, error in
+            if let error = error {
+                completion(.failure(error)); return
+            }
+            guard let data = data else {
+                completion(.failure(APIError.noData)); return
+            }
+            do {
+                struct OBResponse: Decodable { let products: [ProductSearchSummary] }
+                let resp = try JSONDecoder().decode(OBResponse.self, from: data)
+                completion(.success(resp.products))
             } catch {
                 completion(.failure(error))
             }

@@ -6,98 +6,118 @@ struct FeedView: View {
     @StateObject private var userSearchViewModel = UserSearchViewModel()
     @State private var selectedUser: UserSummary?
     
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.clear
-                    .pastelBackground()
+    // Add smaller subviews for each state
+    @ViewBuilder private var loadingView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: LushyPalette.pink))
+                .scaleEffect(1.5)
+            Text("Loading your feed...")
+                .lushyCaption()
+        }
+        .glassCard()
+    }
 
-                if viewModel.isLoading {
-                    VStack(spacing: 20) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: LushyPalette.pink))
-                            .scaleEffect(1.5)
-                        Text("Loading your feed...")
-                            .lushyCaption()
-                    }
-                    .glassCard()
+    @ViewBuilder private func errorView(_ error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "heart.slash.fill")
+                .font(.system(size: 50))
+                .foregroundStyle(LushyPalette.gradientPrimary.opacity(0.6))
+            Text("Oops! Something went wrong")
+                .lushyTitle()
+            Text(error)
+                .lushyCaption()
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .glassCard()
+    }
 
-                } else if let error = viewModel.error {
-                    VStack(spacing: 16) {
-                        Image(systemName: "heart.slash.fill")
-                            .font(.system(size: 50))
-                            .foregroundStyle(LushyPalette.gradientPrimary.opacity(0.6))
-                        Text("Oops! Something went wrong")
-                            .lushyTitle()
-                        Text(error)
-                            .lushyCaption()
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .glassCard()
+    @ViewBuilder private var emptyView: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 60))
+                .foregroundStyle(LushyPalette.gradientPrimary)
+            VStack(spacing: 8) {
+                Text("Your feed is empty! ✨")
+                    .lushyTitle()
+                Text("Follow friends to see their beauty journey")
+                    .lushyCaption()
+                    .multilineTextAlignment(.center)
+            }
+            NavigationLink(destination: UserSearchView(viewModel: userSearchViewModel, currentUserId: currentUserId)) {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.badge.plus")
+                    Text("Find Friends")
+                }
+                .neumorphicButtonStyle()
+            }
+        }
+        .glassCard()
+    }
 
-                } else if viewModel.activities.isEmpty {
-                    VStack(spacing: 24) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 60))
-                            .foregroundStyle(LushyPalette.gradientPrimary)
-                        
-                        VStack(spacing: 8) {
-                            Text("Your feed is empty! ✨")
-                                .lushyTitle()
-                            
-                            Text("Follow friends to see their beauty journey")
-                                .lushyCaption()
-                                .multilineTextAlignment(.center)
-                        }
-                        
-                        NavigationLink(destination: UserSearchView(viewModel: userSearchViewModel, currentUserId: currentUserId)) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "person.badge.plus")
-                                Text("Find Friends")
-                            }
-                            .neumorphicButtonStyle()
-                        }
-                    }
-                    .glassCard()
-
+    // Extracted navigation link for activities
+    @ViewBuilder private func activityLink(for activity: Activity) -> some View {
+        if activity.targetType == "UserProduct", let productId = activity.targetId {
+            NavigationLink(destination: GeneralProductDetailView(userId: currentUserId, productId: productId)) {
+                if activity.type == "review_added" {
+                    ReviewActivityCard(activity: activity, currentUserId: currentUserId)
                 } else {
-                    ScrollView(.vertical, showsIndicators: true) {
-                        LazyVStack(alignment: .leading, spacing: 16) {
-                            ForEach(viewModel.activities) { activity in
-                                NavigationLink(value: activity.user) {
-                                    if activity.type == "review_added" {
-                                        ReviewActivityCard(activity: activity, currentUserId: currentUserId)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    } else {
-                                        ActivityCard(activity: activity, currentUserId: currentUserId)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                                .feedCard()
-                            }
-                        }
-                        .padding(.top)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .refreshable {
-                        viewModel.fetchFeed(for: currentUserId)
-                    }
+                    ActivityCard(activity: activity, currentUserId: currentUserId)
                 }
             }
-            .onAppear {
-                viewModel.fetchFeed(for: currentUserId)
+        } else {
+            NavigationLink(value: activity.user) {
+                if activity.type == "review_added" {
+                    ReviewActivityCard(activity: activity, currentUserId: currentUserId)
+                } else {
+                    ActivityCard(activity: activity, currentUserId: currentUserId)
+                }
             }
-            .onChange(of: currentUserId) { _, newUserId in
-                viewModel.fetchFeed(for: newUserId)
+        }
+    }
+
+    @ViewBuilder private var listView: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                ForEach(viewModel.activities) { activity in
+                    activityLink(for: activity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .feedCard()
+                }
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshFeed"))) { _ in
-                viewModel.fetchFeed(for: currentUserId)
+            .padding(.top)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var content: some View {
+        ZStack {
+            Color.clear.pastelBackground()
+
+            if viewModel.isLoading {
+                loadingView
+            } else if let error = viewModel.error {
+                errorView(error)
+            } else if viewModel.activities.isEmpty {
+                emptyView
+            } else {
+                listView
             }
-            .navigationDestination(for: UserSummary.self) { user in
-                UserProfileView(viewModel: UserProfileViewModel(currentUserId: currentUserId, targetUserId: user.id))
-                    .id(user.id) // Ensure correct reload for different user profiles
-            }
+        }
+        .onAppear { viewModel.fetchFeed(for: currentUserId) }
+        .onChange(of: currentUserId) { _, newUserId in viewModel.fetchFeed(for: newUserId) }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshFeed"))) { _ in viewModel.fetchFeed(for: currentUserId) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
+                .refreshable { viewModel.fetchFeed(for: currentUserId) }
+                .navigationDestination(for: UserSummary.self) { user in
+                    UserProfileView(viewModel: UserProfileViewModel(currentUserId: currentUserId, targetUserId: user.id))
+                        .id(user.id)
+                }
         }
     }
 }
@@ -528,5 +548,40 @@ struct ReviewActivityCard: View {
             return date.timeAgoDisplay
         }
         return "Unknown"
+    }
+}
+
+// MARK: - General Product Detail View
+struct GeneralProductDetailView: View {
+    @StateObject private var viewModel: GeneralProductDetailViewModel
+    init(userId: String, productId: String) {
+        _viewModel = StateObject(wrappedValue: GeneralProductDetailViewModel(userId: userId, productId: productId))
+    }
+    var body: some View {
+        VStack {
+            if viewModel.isLoading {
+                ProgressView()
+            } else if let error = viewModel.error {
+                Text(error).foregroundColor(.red).multilineTextAlignment(.center).padding()
+            } else if let product = viewModel.product {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if let urlString = product.imageUrl, let url = URL(string: urlString) {
+                            AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { Color.gray.opacity(0.3) }
+                                .frame(maxWidth: .infinity, maxHeight: 200)
+                        }
+                        Text(product.productName ?? "Unknown Product")
+                            .font(.title2).fontWeight(.bold)
+                        if let brand = product.brand {
+                            Text(brand).font(.subheadline).foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                }
+            } else {
+                Text("No product details available").foregroundColor(.secondary)
+            }
+        }
+        .navigationTitle(viewModel.product?.productName ?? "Product")
     }
 }

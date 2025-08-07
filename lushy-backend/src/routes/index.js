@@ -6,6 +6,7 @@ const wishlistRoutes = require('./wishlistRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const userRoutes = require('./userRoutes');
 const activityRoutes = require('./activityRoutes');
+const productRoutes = require('./productRoutes');
 
 // Auth routes (no userId required)
 router.use('/auth', authRoutes);
@@ -22,5 +23,8 @@ router.use('/activities', activityRoutes);
 
 // User routes
 router.use('/users', userRoutes);
+
+// Public product endpoints
+router.use('/products', productRoutes);
 
 module.exports = router;

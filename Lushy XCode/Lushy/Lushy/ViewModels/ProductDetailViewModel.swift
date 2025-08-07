@@ -11,9 +11,12 @@ class ProductDetailViewModel: ObservableObject {
     @Published var reviewText = ""
     @Published var allBags: [BeautyBag] = []
     @Published var allTags: [ProductTag] = []
+    @Published var isLoading = false
+    @Published var error: String?
 
     private var cancellables = Set<AnyCancellable>()
-    
+    private let productId: String
+
     // Get compliance advisory for current region
     var complianceAdvisory: String {
         // Get user's region from UserDefaults
@@ -44,6 +47,7 @@ class ProductDetailViewModel: ObservableObject {
     // Fix the incomplete notification handler in init()
     init(product: UserProduct) {
         self.product = product
+        self.productId = product.backendId ?? ""
         
         // Subscribe to Core Data saves to refresh product
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
