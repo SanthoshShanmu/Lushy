@@ -702,4 +702,95 @@ class CoreDataManager {
             }
         }
     }
+    
+    // Update core product details and sync to backend
+    func updateProductDetails(
+        id: NSManagedObjectID,
+        productName: String,
+        brand: String?,
+        shade: String?,
+        sizeInMl: Double?,
+        spf: Int?,
+        purchaseDate: Date,
+        isOpened: Bool,
+        openDate: Date?,
+        periodsAfterOpening: String?
+    ) {
+        let context = container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+        context.performAndWait {
+            guard let product = try? context.existingObject(with: id) as? UserProduct else { return }
+
+            // Update fields locally
+            product.productName = productName
+            product.brand = brand
+            product.shade = shade
+            product.sizeInMl = sizeInMl ?? 0.0
+            product.spf = Int16(spf ?? 0)
+            product.purchaseDate = purchaseDate
+
+            if isOpened {
+                product.openDate = openDate ?? product.openDate ?? Date()
+            } else {
+                product.openDate = nil
+            }
+            product.periodsAfterOpening = periodsAfterOpening
+
+            // Recalculate expiry from PAO and open date
+            if let od = product.openDate, let pao = product.periodsAfterOpening, let months = extractMonths(from: pao) {
+                let newExpiry = Calendar.current.date(byAdding: .month, value: months, to: od)
+                // Cancel and reschedule notification if expiry changed
+                if product.expireDate != newExpiry {
+                    NotificationService.shared.cancelNotification(for: product)
+                    product.expireDate = newExpiry
+                    if let _ = newExpiry {
+                        NotificationService.shared.scheduleExpiryNotification(for: product)
+                    }
+                } else {
+                    product.expireDate = newExpiry
+                }
+            } else {
+                // No PAO or no open date -> clear expiry
+                if product.expireDate != nil {
+                    NotificationService.shared.cancelNotification(for: product)
+                }
+                product.expireDate = nil
+            }
+
+            do { try context.save() } catch { print("Failed to save edits: \(error)") }
+
+            // Sync to backend if possible
+            if let userId = AuthService.shared.userId, let backendId = product.backendId {
+                let url = APIService.shared.baseURL
+                    .appendingPathComponent("users")
+                    .appendingPathComponent(userId)
+                    .appendingPathComponent("products")
+                    .appendingPathComponent(backendId)
+                var request = URLRequest(url: url)
+                request.httpMethod = "PUT"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                if let token = AuthService.shared.token {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+                var body: [String: Any] = [
+                    "productName": productName,
+                    "brand": brand ?? "",
+                    "purchaseDate": purchaseDate.timeIntervalSince1970
+                ]
+                if let shade = shade { body["shade"] = shade }
+                if let sizeInMl = sizeInMl { body["sizeInMl"] = sizeInMl }
+                if let spf = spf { body["spf"] = spf }
+                if isOpened {
+                    if let od = product.openDate { body["openDate"] = od.timeIntervalSince1970 }
+                    if let pao = periodsAfterOpening { body["periodsAfterOpening"] = pao }
+                } else {
+                    body["openDate"] = NSNull()
+                    body["periodsAfterOpening"] = periodsAfterOpening ?? NSNull()
+                }
+                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                URLSession.shared.dataTask(with: request).resume()
+            }
+        }
+    }
 }

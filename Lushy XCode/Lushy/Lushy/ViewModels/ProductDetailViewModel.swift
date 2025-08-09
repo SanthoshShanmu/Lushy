@@ -31,20 +31,16 @@ class ProductDetailViewModel: ObservableObject {
         ]
         
         // Return region-specific rule or global rule
-        return rules[region] ?? rules["GLOBAL"]!
+        return rules[region] ?? "Follow general cosmetic safety guidelines."
     }
-    
-    // Check if a product has a PAO symbol
-    var hasPAOSymbol: Bool {
-        return product.periodsAfterOpening != nil
+
+    // Compute days until expiry for UI badges
+    var daysUntilExpiry: Int? {
+        guard let expire = product.expireDate else { return nil }
+        let comps = Calendar.current.dateComponents([.day], from: Date(), to: expire)
+        return comps.day
     }
-    
-    // Add batch code info if available
-    var batchCodeInfo: String? {
-        return product.value(forKey: "batchCode") as? String
-    }
-    
-    // Fix the incomplete notification handler in init()
+
     init(product: UserProduct) {
         self.product = product
         self.productId = product.backendId ?? ""
@@ -132,7 +128,10 @@ class ProductDetailViewModel: ObservableObject {
                     self?.refreshProduct()
                 }
             case .failure:
-                break
+                // Surface error so UI can show a toast with retry
+                DispatchQueue.main.async { [weak self] in
+                    self?.error = "Failed to refresh from server. Pull to refresh or tap to retry."
+                }
             }
         }
     }
@@ -209,69 +208,17 @@ class ProductDetailViewModel: ObservableObject {
                     NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
                     return
                 }
-                
-                // Safely try to get the updated object
-                let updatedProduct = try CoreDataManager.shared.viewContext.existingObject(with: self.product.objectID)
-                
-                if let userProduct = updatedProduct as? UserProduct {
-                    self.product = userProduct
-                } else {
-                    print("Object is not a UserProduct")
-                    NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+                let context = self.product.managedObjectContext ?? CoreDataManager.shared.viewContext
+                let refreshed = try context.existingObject(with: self.product.objectID)
+                if let up = refreshed as? UserProduct {
+                    self.product = up
                 }
             } catch {
-                print("Error refreshing product: \(error)")
-                // Object was deleted or otherwise unavailable - notify to dismiss the view
-                NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+                self.error = "Failed to refresh product locally."
             }
         }
     }
     
-    // Calculate days until expiry
-    var daysUntilExpiry: Int? {
-        guard let expireDate = product.expireDate else { return nil }
-        let today = Calendar.current.startOfDay(for: Date())
-        let expiry = Calendar.current.startOfDay(for: expireDate)
-        return Calendar.current.dateComponents([.day], from: today, to: expiry).day
-    }
-    
-    // Formatted expire date string
-    var expiryDateString: String {
-        guard let expireDate = product.expireDate else { return "No expiry date" }
-        
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        
-        return "Expires on \(formatter.string(from: expireDate))"
-    }
-    
-    // Also modify the submitReview function to handle cancellations properly:
-    func cancelReview() {
-        // Reset form
-        reviewRating = 3
-        reviewTitle = ""
-        reviewText = ""
-        showReviewForm = false
-    }
-    
-    // Add this method to ProductDetailViewModel:
-
-    // Delete current product
-    func deleteProduct() {
-        // Cancel any pending notifications
-        NotificationService.shared.cancelNotification(for: product)
-        
-        // Delete from Core Data
-        CoreDataManager.shared.deleteProduct(id: product.objectID)
-        
-        // Post notification so lists can update
-        NotificationCenter.default.post(
-            name: NSNotification.Name("ProductDeleted"),
-            object: product.objectID
-        )
-    }
-
-    // MARK: - Beauty Bags & Tags
     func fetchBagsAndTags() {
         // Load current local tags first
         allTags = CoreDataManager.shared.fetchProductTags()
@@ -375,5 +322,64 @@ class ProductDetailViewModel: ObservableObject {
         // Increment usage count
         CoreDataManager.shared.incrementUsage(id: product.objectID)
         refreshProduct()
+    }
+    
+    /// Update editable product details and sync
+    func updateDetails(
+        productName: String,
+        brand: String?,
+        shade: String?,
+        sizeInMl: Double?,
+        spf: Int?,
+        purchaseDate: Date,
+        isOpened: Bool,
+        openDate: Date?,
+        periodsAfterOpening: String?
+    ) {
+        CoreDataManager.shared.updateProductDetails(
+            id: product.objectID,
+            productName: productName,
+            brand: brand,
+            shade: shade,
+            sizeInMl: sizeInMl,
+            spf: spf,
+            purchaseDate: purchaseDate,
+            isOpened: isOpened,
+            openDate: openDate,
+            periodsAfterOpening: periodsAfterOpening
+        )
+        refreshProduct()
+        // Also refresh remote details to pull any server-side adjustments
+        refreshRemoteDetail()
+    }
+    
+    // New: bulk update helpers so UI can edit tags/bags in one sheet
+    func updateBags(to selectedBags: Set<BeautyBag>) {
+        let current = Set(bagsForProduct())
+        let toAdd = selectedBags.subtracting(current)
+        let toRemove = current.subtracting(selectedBags)
+        toAdd.forEach { addProductToBag($0) }
+        toRemove.forEach { removeProductFromBag($0) }
+    }
+
+    func updateTags(to selectedTags: Set<ProductTag>) {
+        let current = Set(tagsForProduct())
+        let toAdd = selectedTags.subtracting(current)
+        let toRemove = current.subtracting(selectedTags)
+        toAdd.forEach { addTagToProduct($0) }
+        toRemove.forEach { removeTagFromProduct($0) }
+    }
+    
+    // Delete product and notify UI to dismiss detail view
+    func deleteProduct() {
+        // Cancel any pending local notification for this product
+        NotificationService.shared.cancelNotification(for: product)
+        let id = product.objectID
+        // Delete from Core Data
+        CoreDataManager.shared.deleteProduct(id: id)
+        // Notify listeners so views can dismiss if needed
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: id)
+        }
     }
 }

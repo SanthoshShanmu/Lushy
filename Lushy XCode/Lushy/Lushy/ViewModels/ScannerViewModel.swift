@@ -420,7 +420,8 @@ class ScannerViewModel: ObservableObject {
     
     // Contribute to OpenBeautyFacts silently
     func silentlyContributeToOBF(productImage: UIImage? = nil) {
-        guard !manualProductName.isEmpty else { return }
+        // Only proceed if all conditions are met (productNotFound, name present, user setting)
+        guard shouldContributeToOBF() else { return }
         
         isContributingToOBF = true
         print("Starting OBF contribution for \(manualProductName)")

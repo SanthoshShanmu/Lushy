@@ -5,10 +5,9 @@ import Combine
 
 struct ManualEntryView: View {
     @ObservedObject var viewModel: ScannerViewModel
-    @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
 
     // Image capture
     @State private var productImage: UIImage? = nil
@@ -43,8 +42,35 @@ struct ManualEntryView: View {
     @StateObject private var bagViewModel = BeautyBagViewModel()
     @State private var showAddBagSheet = false
 
+    // Guard against losing edits
+    @State private var showDiscardAlert = false
+
     // At top of ManualEntryView, add syncCancellable state
     @State private var syncCancellable: AnyCancellable?  // for product sync
+
+    // Consider there are unsaved changes if any input is filled/selected or an image chosen
+    private var hasUnsavedChanges: Bool {
+        if isSaving { return false }
+        return !(viewModel.manualBarcode.isEmpty &&
+                 viewModel.manualProductName.isEmpty &&
+                 viewModel.manualBrand.isEmpty &&
+                 viewModel.manualShade.isEmpty &&
+                 viewModel.manualSizeInMl.isEmpty &&
+                 viewModel.manualSpf.isEmpty &&
+                 productImage == nil &&
+                 periodsAfterOpening.isEmpty &&
+                 selectedBagIDs.isEmpty &&
+                 selectedTagIDs.isEmpty &&
+                 manualFetchedProduct == nil &&
+                 !viewModel.isProductOpen &&
+                 viewModel.openDate == nil)
+    }
+
+    // Simple local barcode validation: 8-13 digits
+    private var isManualBarcodeValid: Bool {
+        let digits = viewModel.manualBarcode.filter { $0.isNumber }
+        return digits.count >= 8 && digits.count <= 13
+    }
 
     var body: some View {
         NavigationView {
@@ -64,6 +90,18 @@ struct ManualEntryView: View {
                 .disabled(isSaving)
             }
             .navigationTitle("Add Product")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        if hasUnsavedChanges {
+                            showDiscardAlert = true
+                        } else {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .interactiveDismissDisabled(hasUnsavedChanges && !isSaving)
             .overlay(
                 Group {
                     if isSaving {
@@ -75,10 +113,34 @@ struct ManualEntryView: View {
                     }
                 }
             )
-            .alert(isPresented: $showingErrorAlert) {
-                Alert(title: Text("Error"),
-                      message: Text(errorMessage),
-                      dismissButton: .default(Text("OK")))
+            // Error toast with retry
+            .overlay(alignment: .bottom) {
+                if showingErrorAlert && !errorMessage.isEmpty {
+                    VStack {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.white)
+                            Text(errorMessage).foregroundColor(.white).font(.subheadline)
+                            Spacer(minLength: 8)
+                            Button("Retry") { attemptSave() }
+                                .padding(8)
+                                .background(Color.white.opacity(0.2))
+                                .cornerRadius(8)
+                                .foregroundColor(.white)
+                        }
+                        .padding()
+                        .background(Color.red.opacity(0.9))
+                        .cornerRadius(14)
+                        .padding(.horizontal)
+                        .padding(.bottom, 20)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .alert("Discard changes?", isPresented: $showDiscardAlert) {
+                Button("Discard", role: .destructive) { dismiss() }
+                Button("Keep Editing", role: .cancel) {}
+            } message: {
+                Text("You have unsaved changes. Are you sure you want to close?")
             }
             .sheet(isPresented: Binding<Bool>(
                 get: { imageSource != .none },
@@ -150,106 +212,66 @@ struct ManualEntryView: View {
                     }
                 }
             }
-            .overlay(
-                Group {
+            // Unified toast overlay (processing + OBF success)
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 10) {
+                    if showingProcessingToast {
+                        HStack {
+                            ProgressView()
+                                .frame(width: 20, height: 20)
+                            Text("Saving product...")
+                                .foregroundColor(.white)
+                                .font(.subheadline)
+                        }
+                        .padding()
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(20)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     if showingOBFSuccessToast {
-                        VStack {
-                            Spacer()
-                            HStack {
+                        HStack {
+                            if viewModel.isContributingToOBF {
+                                ProgressView()
+                                    .frame(width: 20, height: 20)
+                                Text("Contributing to Open Beauty Facts...")
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                            } else {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.green)
                                 Text("Contributed to Open Beauty Facts")
                                     .foregroundColor(.white)
                                     .font(.subheadline)
                             }
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(20)
-                            .padding(.bottom, 20)
                         }
+                        .padding()
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(20)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .onAppear {
+                            // Auto-hide after a short delay
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                withAnimation {
-                                    showingOBFSuccessToast = false
-                                }
+                                withAnimation { showingOBFSuccessToast = false }
                             }
                         }
                     }
                 }
-            )
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OBFContributionSuccess"))) { _ in
-                withAnimation {
-                    showingOBFSuccessToast = true
-                }
+                .padding(.bottom, 20)
+                .padding(.horizontal)
             }
-            // Toast overlay for status indicators
-            .overlay(
-                ZStack {
-                    // OBF Success toast
-                    if showingOBFSuccessToast {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                if viewModel.isContributingToOBF {
-                                    ProgressView()
-                                        .frame(width: 20, height: 20)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                }
-                                
-                                Text(viewModel.isContributingToOBF ?
-                                     "Contributing to Open Beauty Facts..." :
-                                     "Contributed to Open Beauty Facts")
-                                .foregroundColor(.white)
-                                .font(.subheadline)
-                            }
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(20)
-                            .padding(.bottom, 20)
-                        }
-                    }
-                    
-                    // Processing toast (shown when initial save occurs)
-                    if showingProcessingToast {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                ProgressView()
-                                    .frame(width: 20, height: 20)
-                                Text("Saving product...")
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
-                            }
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(20)
-                            .padding(.bottom, 20)
-                        }
-                    }
-                }
-            )
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OBFContributionSuccess"))) { _ in
                 print("Received OBF contribution success notification")
-                withAnimation {
-                    showingOBFSuccessToast = true
-                    // Don't hide automatically - it will be dismissed with the view
-                }
+                withAnimation { showingOBFSuccessToast = true }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowProcessingToast"))) { notification in
                 if let userInfo = notification.userInfo, userInfo["key"] as? String == "processing-toast" {
-                    withAnimation {
-                        showingProcessingToast = true
-                    }
+                    withAnimation { showingProcessingToast = true }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("HideProcessingToast"))) { notification in
                 if let userInfo = notification.userInfo, userInfo["key"] as? String == "processing-toast" {
-                    withAnimation {
-                        showingProcessingToast = false
-                    }
+                    withAnimation { showingProcessingToast = false }
                 }
             }
         }
@@ -273,13 +295,18 @@ struct ManualEntryView: View {
             newTagName = ""
             newTagColor = "blue"
             isSaving = false
-            showingSuccessAlert = false
             showingErrorAlert = false
             errorMessage = ""
             manualFetchedProduct = nil
+            // Cancel subscriptions to avoid leaks
+            paoCancellable?.cancel(); paoCancellable = nil
+            lookupCancellable?.cancel(); lookupCancellable = nil
+            syncCancellable?.cancel(); syncCancellable = nil
+            tagCancellables.removeAll()
         }
     }
 
+    // MARK: - Sections
     @ViewBuilder private func productLookupSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Product Lookup").font(.headline)
@@ -316,6 +343,12 @@ struct ManualEntryView: View {
                 .alert(isPresented: $showManualLookupError) {
                     Alert(title: Text("Lookup Error"), message: Text(manualLookupError), dismissButton: .default(Text("OK")))
                 }
+            }
+            // Inline barcode validation hint
+            if !viewModel.manualBarcode.isEmpty && !isManualBarcodeValid {
+                Text("Invalid barcode format (8-13 digits)")
+                    .font(.caption)
+                    .foregroundColor(.red)
             }
         }
         .glassCard(cornerRadius: 20)
@@ -391,15 +424,50 @@ struct ManualEntryView: View {
                            selection: Binding(get: { viewModel.openDate ?? Date() },
                                                set: { viewModel.openDate = $0 }),
                            displayedComponents: .date)
+                // Better PAO UX: quick choices + labeled picker
+                Text("Period After Opening (PAO)").font(.subheadline).foregroundColor(.secondary)
+                HStack {
+                    ForEach(["3M","6M","12M","24M"], id: \.self) { code in
+                        Button(action: { periodsAfterOpening = code }) {
+                            Text(code)
+                                .font(.caption)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background((periodsAfterOpening == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
+                                .foregroundColor(periodsAfterOpening == code ? .white : .primary)
+                                .cornerRadius(8)
+                        }
+                    }
+                }
                 Picker("PAO", selection: $periodsAfterOpening) {
                     ForEach(paoOptions, id: \.self) { code in
                         Text(paoLabels[code] ?? code).tag(code)
                     }
                 }
                 .pickerStyle(MenuPickerStyle())
+                // Expiry preview
+                if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening) {
+                    HStack {
+                        Image(systemName: "calendar").foregroundColor(.lushyMint)
+                        Text("Will set expiry to \(preview)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
         }
         .glassCard(cornerRadius: 20)
+    }
+
+    private func expiryPreview(openDate: Date?, pao: String) -> String? {
+        guard let open = openDate else { return nil }
+        // Parse digits from PAO like "6M", "12M"
+        let months = Int(pao.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+        guard months > 0 else { return nil }
+        if let date = Calendar.current.date(byAdding: .month, value: months, to: open) {
+            let df = DateFormatter(); df.dateStyle = .medium
+            return df.string(from: date)
+        }
+        return nil
     }
 
     @ViewBuilder private func bagSelectionSection() -> some View {
@@ -487,116 +555,133 @@ struct ManualEntryView: View {
 
     @ViewBuilder private func saveButtonsSection() -> some View {
         HStack(spacing: 20) {
-            Button("Save") {
-                isSaving = true
-                let context = CoreDataManager.shared.viewContext
-                // 1) Save locally
-                guard let objectID = viewModel.saveManualProduct(productImage: productImage) else {
-                    isSaving = false
-                    errorMessage = "Failed to save product locally."
-                    showingErrorAlert = true
-                    return
-                }
-                guard let userProduct = try? context.existingObject(with: objectID) as? UserProduct else {
-                    isSaving = false
-                    errorMessage = "Failed to fetch saved product."
-                    showingErrorAlert = true
-                    return
-                }
-                // 2) Attach selected tags locally so payload will include them
-                for tagID in selectedTagIDs {
-                    if let tag = try? context.existingObject(with: tagID) as? ProductTag {
-                        userProduct.addToTags(tag)
-                    }
-                }
-                // 3) Attach selected bags locally
-                for bagID in selectedBagIDs {
-                    if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
-                        userProduct.addToBags(bag)
-                    }
-                }
-                try? context.save()
-                // 4) Create user product on backend with tags & bags
-                let userId = AuthService.shared.userId ?? ""
-                let url = APIService.shared.baseURL
-                    .appendingPathComponent("users")
-                    .appendingPathComponent(userId)
-                    .appendingPathComponent("products")
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-                if let token = AuthService.shared.token {
-                    request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-                // Build body payload
-                let productTags = selectedTagIDs.compactMap { try? context.existingObject(with: $0) as? ProductTag }.compactMap { $0.backendId }
-                let productBags = selectedBagIDs.compactMap { try? context.existingObject(with: $0) as? BeautyBag }.compactMap { $0.backendId }
-                var body: [String: Any] = [
-                    "barcode": userProduct.barcode ?? "",
-                    "productName": userProduct.productName ?? "",
-                    "brand": userProduct.brand ?? "",
-                    "imageUrl": userProduct.imageUrl ?? "",
-                    "purchaseDate": userProduct.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
-                    "vegan": userProduct.vegan,
-                    "crueltyFree": userProduct.crueltyFree,
-                    "favorite": userProduct.favorite
-                ]
-                // Attach new metadata
-                if let shade = userProduct.shade { body["shade"] = shade }
-                body["sizeInMl"] = userProduct.sizeInMl
-                body["spf"] = userProduct.spf
-                if !productTags.isEmpty { body["tags"] = productTags }
-                if !productBags.isEmpty { body["bags"] = productBags }
-                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                struct CreateResponse: Decodable {
-                    let status: String
-                    let data: DataContainer
-                    struct DataContainer: Decodable { let product: BackendUserProduct }
-                }
-                URLSession.shared.dataTaskPublisher(for: request)
-                    .tryMap { data, response -> String in
-                        guard let http = response as? HTTPURLResponse,
-                              (200...299).contains(http.statusCode) else {
-                            throw APIError.invalidResponse
-                        }
-                        // Parse JSON for the new product ID
-                        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let dataObj = json["data"] as? [String: Any],
-                              let prod = dataObj["product"] as? [String: Any],
-                              let id = prod["_id"] as? String else {
-                            throw APIError.decodingError
-                        }
-                        return id
-                    }
-                    .mapError { error in (error as? APIError) ?? .customError(error.localizedDescription) }
-                    .receive(on: RunLoop.main)
-                    .sink(receiveCompletion: { completion in
-                        isSaving = false
-                        if case .failure(let err) = completion {
-                            errorMessage = err.localizedDescription
-                            showingErrorAlert = true
-                        }
-                    }, receiveValue: { backendId in
-                        // Persist backendId locally
-                        userProduct.backendId = backendId
-                        try? context.save()
-                        // Dismiss and navigate
-                        NotificationCenter.default.post(name: .init("RefreshProfile"), object: nil)
-                        NotificationCenter.default.post(name: .init("RefreshFeed"), object: nil)
-                        presentationMode.wrappedValue.dismiss()
-                        viewModel.selectedUserProduct = userProduct
-                        viewModel.showProductDetail = true
-                    })
-                    .store(in: &tagCancellables)
-            }
-            .disabled(isSaving)
-            .neumorphicButtonStyle()
+            Button("Save") { attemptSave() }
+                .disabled(isSaving || viewModel.manualProductName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .neumorphicButtonStyle()
 
             Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
+                if hasUnsavedChanges { showDiscardAlert = true } else { dismiss() }
             }
             .neumorphicButtonStyle()
         }
+    }
+
+    private func attemptSave() {
+        // Require a product name
+        if viewModel.manualProductName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errorMessage = "Please enter a product name."
+            showingErrorAlert = true
+            return
+        }
+
+        isSaving = true
+        showingErrorAlert = false
+        let context = CoreDataManager.shared.viewContext
+        // 1) Save locally
+        guard let objectID = viewModel.saveManualProduct(periodsAfterOpening: periodsAfterOpening, productImage: productImage) else {
+            isSaving = false
+            errorMessage = "Failed to save product locally."
+            showingErrorAlert = true
+            return
+        }
+        guard let userProduct = try? context.existingObject(with: objectID) as? UserProduct else {
+            isSaving = false
+            errorMessage = "Failed to fetch saved product."
+            showingErrorAlert = true
+            return
+        }
+        // Attach local selections so payload will include them
+        for tagID in selectedTagIDs {
+            if let tag = try? context.existingObject(with: tagID) as? ProductTag {
+                userProduct.addToTags(tag)
+            }
+        }
+        for bagID in selectedBagIDs {
+            if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
+                userProduct.addToBags(bag)
+            }
+        }
+        try? context.save()
+
+        // 2) If product not found in the DB, silently contribute to OBF now and show toast while uploading
+        if viewModel.productNotFound {
+            withAnimation { showingOBFSuccessToast = true }
+            viewModel.silentlyContributeToOBF(productImage: productImage)
+        }
+
+        // 4) Create user product on backend with tags & bags
+        let userId = AuthService.shared.userId ?? ""
+        let url = APIService.shared.baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        // Build payload
+        var productTags: [String] = []
+        var productBags: [String] = []
+        if let tags = userProduct.tags as? Set<ProductTag> { productTags = tags.compactMap { $0.backendId } }
+        if let bags = userProduct.bags as? Set<BeautyBag> { productBags = bags.compactMap { $0.backendId } }
+        var body: [String: Any] = [
+            "barcode": userProduct.barcode ?? "",
+            "productName": userProduct.productName ?? "",
+            "brand": userProduct.brand ?? "",
+            "imageUrl": userProduct.imageUrl ?? "",
+            "purchaseDate": userProduct.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
+            "vegan": userProduct.vegan,
+            "crueltyFree": userProduct.crueltyFree,
+            "favorite": userProduct.favorite
+        ]
+        if let shade = userProduct.shade { body["shade"] = shade }
+        body["sizeInMl"] = userProduct.sizeInMl
+        body["spf"] = userProduct.spf
+        if !productTags.isEmpty { body["tags"] = productTags }
+        if !productBags.isEmpty { body["bags"] = productBags }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        struct CreateResponse: Decodable { let status: String; let data: DataContainer; struct DataContainer: Decodable { let product: BackendUserProduct } }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    self.isSaving = false
+                    self.errorMessage = error.localizedDescription
+                    self.showingErrorAlert = true
+                }
+                return
+            }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
+                DispatchQueue.main.async {
+                    self.isSaving = false
+                    self.errorMessage = "Failed to create product on server."
+                    self.showingErrorAlert = true
+                }
+                return
+            }
+            do {
+                let wrapper = try JSONDecoder().decode(CreateResponse.self, from: data)
+                let backendId = wrapper.data.product.id
+                DispatchQueue.main.async {
+                    let context = CoreDataManager.shared.viewContext
+                    if let userProduct = try? context.existingObject(with: objectID) as? UserProduct {
+                        userProduct.backendId = backendId
+                        try? context.save()
+                    }
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    self.isSaving = false
+                    self.dismiss()
+                    self.viewModel.selectedUserProduct = userProduct
+                    self.viewModel.showProductDetail = true
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isSaving = false
+                    self.errorMessage = "Unexpected response. Please try again."
+                    self.showingErrorAlert = true
+                }
+            }
+        }.resume()
     }
 
     // Removed misplaced onDisappear block here
@@ -613,7 +698,7 @@ fileprivate extension Set where Element: Hashable {
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImage: UIImage?
     var sourceType: UIImagePickerController.SourceType
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
     var onDismiss: (() -> Void)?
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -651,12 +736,12 @@ struct ImagePicker: UIViewControllerRepresentable {
             } else if let originalImage = info[.originalImage] as? UIImage {
                 parent.selectedImage = originalImage
             }
-            parent.presentationMode.wrappedValue.dismiss()
+            parent.dismiss()
             parent.onDismiss?()
         }
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.presentationMode.wrappedValue.dismiss()
+            parent.dismiss()
             parent.onDismiss?()
         }
     }

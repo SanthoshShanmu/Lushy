@@ -22,6 +22,11 @@ struct AccountView: View {
     // Add state to track if profile has been fetched
     @State private var hasFetchedProfile = false
     
+    // OBF testing/alerts state
+    @State private var obfConnectionTesting = false
+    @State private var obfConnectionResult: String? = nil
+    @State private var showingOBFAlert = false
+    
     var body: some View {
         ScrollView {
             Color.clear.pastelBackground()
@@ -213,6 +218,56 @@ struct AccountView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
+                    Button(action: {
+                        showingOBFCredentialsSheet = true
+                    }) {
+                        Label("Set OBF Credentials", systemImage: "key.fill")
+                    }
+                    
+                    // Show current stored OBF user id (non-sensitive)
+                    if let obfUser = OBFContributionService.shared.storedUserId(), !obfUser.isEmpty {
+                        HStack {
+                            Image(systemName: "person.text.rectangle")
+                            Text("OBF User: \(obfUser)")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    } else {
+                        Text("OBF User: Not set")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    
+                    // Test connection button
+                    Button(action: {
+                        obfConnectionTesting = true
+                        OBFContributionService.shared.testConnection { ok in
+                            DispatchQueue.main.async {
+                                obfConnectionTesting = false
+                                obfConnectionResult = ok ? "Successfully connected to Open Beauty Facts." : "Could not reach Open Beauty Facts. Please check your connection."
+                                showingOBFAlert = true
+                            }
+                        }
+                    }) {
+                        if obfConnectionTesting {
+                            HStack {
+                                ProgressView()
+                                Text("Testing OBF Connection...")
+                            }
+                        } else {
+                            Label("Test OBF Connection", systemImage: "network")
+                        }
+                    }
+                    
+                    // Clear credentials
+                    Button(role: .destructive) {
+                        OBFContributionService.shared.clearCredentials()
+                        obfConnectionResult = "OBF credentials cleared."
+                        showingOBFAlert = true
+                    } label: {
+                        Label("Clear OBF Credentials", systemImage: "trash")
+                    }
+                    
                     Text("You've contributed \(contributionCount) products")
                         .font(.body)
                     
@@ -243,6 +298,8 @@ struct AccountView: View {
                 hasFetchedProfile = true
                 fetchUserProfile()
             }
+            // Update contribution counter when view appears
+            contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count")
         }
         .alert(isPresented: $showingLogoutConfirm) {
             Alert(
@@ -265,10 +322,24 @@ struct AccountView: View {
                     .edgesIgnoringSafeArea(.all)
                 )
         }
+        .sheet(isPresented: $showingOBFCredentialsSheet) {
+            OBFCredentialsView(isPresented: $showingOBFCredentialsSheet)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.15), Color.lushyPurple.opacity(0.10)]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .edgesIgnoringSafeArea(.all)
+                )
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowLogin"))) { _ in
             isLoggedIn = false
             // Show login prompt via ContentView
             NotificationCenter.default.post(name: NSNotification.Name("ShowLoginPrompt"), object: nil)
+        }
+        .alert(obfConnectionResult ?? "", isPresented: $showingOBFAlert) {
+            Button("OK", role: .cancel) {}
         }
     }
     

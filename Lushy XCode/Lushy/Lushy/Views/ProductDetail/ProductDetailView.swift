@@ -1,10 +1,65 @@
 import SwiftUI
 import CoreData
+import Combine
+import UIKit
 
 struct ProductDetailView: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var showingDeleteAlert = false
+    // Edit sheet state
+    @State private var showEditSheet = false
+    @State private var editName: String = ""
+    @State private var editBrand: String = ""
+    @State private var editShade: String = ""
+    @State private var editSizeText: String = ""
+    @State private var editSpfText: String = ""
+    @State private var editPurchaseDate: Date = Date()
+    @State private var editIsOpened: Bool = false
+    @State private var editOpenDate: Date = Date()
+    @State private var editPAO: String = ""
+    @State private var paoLabels: [String: String] = [:]
+    @State private var paoOptions: [String] = []
+    @State private var paoCancellable: AnyCancellable?
+    // New: combined associations sheet
+    @State private var showAssociationsSheet = false
+    // New: guard against discarding unsaved edit changes
+    @State private var showDiscardEditConfirm = false
+    // New: unified assign sheet toggle and edit discard confirmation
+    @State private var showAssignSheet = false
+    @State private var showEditDiscardConfirm = false
+    // New: state for removing from bag(s)
+    @State private var showRemoveFromBagAlert = false
+    @State private var bagToRemove: BeautyBag?
+    @State private var showNoBagAlert = false
+    
+    // Helper to refetch PAO taxonomy on demand
+    private func fetchPAOTaxonomy() {
+        paoCancellable = APIService.shared.fetchPAOTaxonomy()
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                // No-op; UI offers retry if options remain empty
+            }, receiveValue: { dict in
+                paoLabels = dict
+                let sortedKeys = dict.keys.sorted { lhs, rhs in
+                    let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                    let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                    return lhsNum < rhsNum
+                }
+                paoOptions = sortedKeys
+            })
+    }
+    
+    // Expiry preview helper used in the edit sheet
+    private func expiryPreview(openDate: Date, pao: String) -> String? {
+        let months = Int(pao.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+        guard months > 0 else { return nil }
+        if let date = Calendar.current.date(byAdding: .month, value: months, to: openDate) {
+            let df = DateFormatter(); df.dateStyle = .medium
+            return df.string(from: date)
+        }
+        return nil
+    }
     
     var body: some View {
         ZStack {
@@ -25,6 +80,9 @@ struct ProductDetailView: View {
                     // Product header with dreamy styling
                     _PrettyProductHeader(viewModel: viewModel)
                     
+                    // Compliance & Dates
+                    _PrettyComplianceSection(viewModel: viewModel)
+                    
                     // Usage info with soft cards
                     _PrettyUsageInfo(viewModel: viewModel)
                     
@@ -38,15 +96,24 @@ struct ProductDetailView: View {
                     _PrettyReviewsSection(viewModel: viewModel)
                     
                     // Bags & Tags with soft design
-                    _PrettyBagsSection(viewModel: viewModel)
-                    _PrettyTagsSection(viewModel: viewModel)
+                    _PrettyBagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
+                    _PrettyTagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
                     
-                    // Soft delete option
+                    // Soft delete option (now: remove from bag(s))
                     Button(action: {
-                        showingDeleteAlert = true
+                        let bags = viewModel.bagsForProduct()
+                        if bags.isEmpty {
+                            showNoBagAlert = true
+                        } else if bags.count == 1 {
+                            bagToRemove = bags.first
+                            showRemoveFromBagAlert = true
+                        } else {
+                            // Open assign sheet to uncheck desired bag(s)
+                            showAssignSheet = true
+                        }
                     }) {
                         HStack(spacing: 8) {
-                            Image(systemName: "trash")
+                            Image(systemName: "bag.badge.minus")
                                 .font(.system(size: 14, weight: .medium))
                             Text("Remove from beauty bag")
                                 .font(.footnote)
@@ -66,16 +133,30 @@ struct ProductDetailView: View {
                 }
                 .padding(.bottom, 30)
             }
+            .refreshable {
+                viewModel.fetchBagsAndTags()
+                viewModel.refreshRemoteDetail()
+            }
         }
         .navigationTitle("Beauty Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    // Delete full product
                     Button(role: .destructive) {
                         showingDeleteAlert = true
                     } label: {
                         Label("Remove Product", systemImage: "trash")
+                    }
+                    // Remove from bag(s)
+                    Button {
+                        let bags = viewModel.bagsForProduct()
+                        if bags.isEmpty { showNoBagAlert = true }
+                        else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
+                        else { showAssignSheet = true }
+                    } label: {
+                        Label("Remove from Bag(s)…", systemImage: "bag.badge.minus")
                     }
                     
                     Button {
@@ -85,6 +166,32 @@ struct ProductDetailView: View {
                             viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
                             systemImage: viewModel.product.favorite ? "heart.slash" : "heart"
                         )
+                    }
+                    
+                    Button {
+                        // Prefill edit fields
+                        editName = viewModel.product.productName ?? ""
+                        editBrand = viewModel.product.brand ?? ""
+                        editShade = viewModel.product.shade ?? ""
+                        editSizeText = viewModel.product.sizeInMl > 0 ? String(format: "%.0f", viewModel.product.sizeInMl) : ""
+                        editSpfText = viewModel.product.spf > 0 ? String(viewModel.product.spf) : ""
+                        editPurchaseDate = viewModel.product.purchaseDate ?? Date()
+                        editIsOpened = viewModel.product.openDate != nil
+                        editOpenDate = viewModel.product.openDate ?? Date()
+                        editPAO = viewModel.product.periodsAfterOpening ?? ""
+                        // Fetch PAO taxonomy
+                        fetchPAOTaxonomy()
+                        showEditSheet = true
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    
+                    if let barcode = viewModel.product.barcode, !barcode.isEmpty {
+                        Button {
+                            UIPasteboard.general.string = barcode
+                        } label: {
+                            Label("Copy Barcode", systemImage: "doc.on.doc")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle.fill")
@@ -104,8 +211,162 @@ struct ProductDetailView: View {
                 secondaryButton: .cancel()
             )
         }
+        // Alert for removing from a single bag
+        .alert(isPresented: $showRemoveFromBagAlert) {
+            Alert(
+                title: Text("Remove from bag"),
+                message: Text("Remove this product from '\(bagToRemove?.name ?? "Bag")'?"),
+                primaryButton: .destructive(Text("Remove")) {
+                    if let bag = bagToRemove { viewModel.removeProductFromBag(bag) }
+                },
+                secondaryButton: .cancel()
+            )
+        }
+        // Info if product is not in any bag
+        .alert(isPresented: $showNoBagAlert) {
+            Alert(
+                title: Text("Not in any bag"),
+                message: Text("This product is not assigned to a beauty bag."),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .sheet(isPresented: Binding(get: { viewModel.showReviewForm }, set: { viewModel.showReviewForm = $0 })) {
             ReviewFormView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showEditSheet) {
+            NavigationView {
+                Form {
+                    Section(header: Text("Details")) {
+                        TextField("Name", text: $editName)
+                        TextField("Brand", text: $editBrand)
+                        TextField("Shade", text: $editShade)
+                        TextField("Size (ml)", text: $editSizeText)
+                            .keyboardType(.decimalPad)
+                        TextField("SPF", text: $editSpfText)
+                            .keyboardType(.numberPad)
+                    }
+                    Section(header: Text("Dates")) {
+                        DatePicker("Purchase Date", selection: $editPurchaseDate, displayedComponents: .date)
+                        Toggle("Opened", isOn: $editIsOpened)
+                        if editIsOpened {
+                            DatePicker("Open Date", selection: $editOpenDate, displayedComponents: .date)
+                            Picker("PAO", selection: $editPAO) {
+                                ForEach(paoOptions, id: \.self) { code in
+                                    Text(paoLabels[code] ?? code).tag(code)
+                                }
+                            }
+                            // Quick PAO presets for better UX
+                            HStack(spacing: 8) {
+                                ForEach(["3M","6M","12M","24M"], id: \.self) { code in
+                                    Button(action: { editPAO = code }) {
+                                        Text(paoLabels[code] ?? code)
+                                            .font(.caption)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background((editPAO == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
+                                            .foregroundColor(editPAO == code ? .white : .primary)
+                                            .cornerRadius(12)
+                                    }
+                                }
+                                Button("Clear") { editPAO = "" }
+                                    .font(.caption)
+                            }
+                            // PAO taxonomy retry if list is empty
+                            if paoOptions.isEmpty {
+                                Button("Retry PAO Load") { fetchPAOTaxonomy() }
+                                    .font(.caption)
+                            }
+                            // Expiry preview when PAO is set
+                            if !editPAO.isEmpty, let preview = expiryPreview(openDate: editOpenDate, pao: editPAO) {
+                                HStack {
+                                    Image(systemName: "calendar").foregroundColor(.lushyMint)
+                                    Text("Will set expiry to \(preview)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Edit Product")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            if editHasChanges {
+                                showEditDiscardConfirm = true
+                            } else {
+                                showEditSheet = false
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Save") {
+                            let sizeVal = Double(editSizeText)
+                            let spfVal = Int(editSpfText)
+                            viewModel.updateDetails(
+                                productName: editName,
+                                brand: editBrand.isEmpty ? nil : editBrand,
+                                shade: editShade.isEmpty ? nil : editShade,
+                                sizeInMl: sizeVal,
+                                spf: spfVal,
+                                purchaseDate: editPurchaseDate,
+                                isOpened: editIsOpened,
+                                openDate: editIsOpened ? editOpenDate : nil,
+                                periodsAfterOpening: editIsOpened ? (editPAO.isEmpty ? nil : editPAO) : nil
+                            )
+                            showEditSheet = false
+                        }
+                        .disabled(editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                // Prevent swipe-down dismiss if there are unsaved edits
+                .interactiveDismissDisabled(editHasChanges)
+                .alert("Discard changes?", isPresented: $showEditDiscardConfirm) {
+                    Button("Keep Editing", role: .cancel) {}
+                    Button("Discard", role: .destructive) { showEditSheet = false }
+                } message: {
+                    Text("You have unsaved edits. Do you want to discard them?")
+                }
+            }
+        }
+        // Unified Assign Tags & Bags Sheet
+        .sheet(isPresented: $showAssignSheet) {
+            AssignTagsBagsSheet(viewModel: viewModel, isPresented: $showAssignSheet)
+        }
+        // Error toast overlay with Retry
+        .overlay(alignment: .bottom) {
+            if let err = viewModel.error, !err.isEmpty {
+                VStack {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.white)
+                        Text(err).foregroundColor(.white).font(.subheadline)
+                        Spacer(minLength: 8)
+                        Button("Retry") {
+                            viewModel.refreshRemoteDetail()
+                            viewModel.error = nil
+                        }
+                        .padding(8)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
+                        .foregroundColor(.white)
+                        Button(action: { viewModel.error = nil }) {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.white)
+                        }
+                    }
+                    .padding()
+                    .background(Color.red.opacity(0.9))
+                    .cornerRadius(14)
+                    .padding(.horizontal)
+                    .padding(.bottom, 20)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProductDeleted"))) { note in
+            if let deletedId = note.object as? NSManagedObjectID,
+               deletedId.uriRepresentation() == viewModel.product.objectID.uriRepresentation() {
+                presentationMode.wrappedValue.dismiss()
+            }
         }
         .onAppear {
             // Always refresh from backend when this view appears
@@ -125,6 +386,30 @@ struct ProductDetailView: View {
         let now = Date()
         let twoWeeks = 14 * 24 * 60 * 60
         return date.timeIntervalSince(now) < Double(twoWeeks)
+    }
+    
+    // Track if edit form has changes to guard against loss
+    private var editHasChanges: Bool {
+        let currentName = viewModel.product.productName ?? ""
+        let currentBrand = viewModel.product.brand ?? ""
+        let currentShade = viewModel.product.shade ?? ""
+        let currentSize = viewModel.product.sizeInMl > 0 ? String(format: "%.0f", viewModel.product.sizeInMl) : ""
+        let currentSpf = viewModel.product.spf > 0 ? String(viewModel.product.spf) : ""
+        if editName != currentName { return true }
+        if editBrand != currentBrand { return true }
+        if editShade != currentShade { return true }
+        if editSizeText != currentSize { return true }
+        if editSpfText != currentSpf { return true }
+        let currentPurchase = viewModel.product.purchaseDate ?? Date()
+        if Calendar.current.startOfDay(for: editPurchaseDate) != Calendar.current.startOfDay(for: currentPurchase) { return true }
+        if editIsOpened != (viewModel.product.openDate != nil) { return true }
+        if editIsOpened {
+            if let pOpen = viewModel.product.openDate {
+                if Calendar.current.startOfDay(for: editOpenDate) != Calendar.current.startOfDay(for: pOpen) { return true }
+            } else { return true }
+            if editPAO != (viewModel.product.periodsAfterOpening ?? "") { return true }
+        }
+        return false
     }
 }
 
@@ -235,6 +520,81 @@ struct _PrettyProductHeader: View {
     }
 }
 
+// MARK: - Compliance & Dates Section
+private struct _PrettyComplianceSection: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(.lushyMint)
+                Text("Compliance & Dates")
+                    .font(.headline)
+            }
+            .padding(.bottom, 2)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                if let purchase = viewModel.product.purchaseDate {
+                    HStack {
+                        Text("Purchased:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(dateString(purchase))
+                    }
+                }
+                if let open = viewModel.product.openDate {
+                    HStack {
+                        Text("Opened:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(dateString(open))
+                    }
+                }
+                if let pao = viewModel.product.periodsAfterOpening, !pao.isEmpty {
+                    HStack {
+                        Text("PAO:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(pao)
+                    }
+                }
+                HStack {
+                    Text("Expiry:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if let expire = viewModel.product.expireDate {
+                        Text(dateString(expire))
+                            .foregroundColor(viewModel.daysUntilExpiry ?? 999 > 7 ? .green : ((viewModel.daysUntilExpiry ?? 0) > 0 ? .orange : .red))
+                    } else {
+                        Text("Not set")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Divider().padding(.vertical, 4)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "shield.checkerboard")
+                        .foregroundColor(.lushyPurple)
+                    Text(viewModel.complianceAdvisory)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+        .padding(.horizontal)
+    }
+    
+    private func dateString(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        return fmt.string(from: date)
+    }
+}
+
 // MARK: - Pretty Usage Info
 struct _PrettyUsageInfo: View {
     @ObservedObject var viewModel: ProductDetailViewModel
@@ -322,7 +682,10 @@ struct _PrettyActionButtons: View {
     var body: some View {
         VStack(spacing: 15) {
             HStack(spacing: 15) {
-                Button(action: { viewModel.toggleFavorite() }) {
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.toggleFavorite()
+                }) {
                     HStack(spacing: 8) {
                         Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
                             .font(.system(size: 16, weight: .semibold))
@@ -347,7 +710,10 @@ struct _PrettyActionButtons: View {
                             ))
                 }
 
-                Button(action: { viewModel.incrementUsage() }) {
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    viewModel.incrementUsage()
+                }) {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 16, weight: .semibold))
@@ -370,6 +736,7 @@ struct _PrettyActionButtons: View {
             .padding(.horizontal)
             
             Button(action: {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 viewModel.showReviewForm = true
             }) {
                 HStack(spacing: 8) {
@@ -394,7 +761,10 @@ struct _PrettyActionButtons: View {
             .padding(.horizontal)
             
             // Finish product button
-            Button(action: { viewModel.markAsEmpty() }) {
+            Button(action: {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                viewModel.markAsEmpty()
+            }) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .semibold))
@@ -552,7 +922,7 @@ private struct _PrettyReviewsSection: View {
 // MARK: - Bags Section
 private struct _PrettyBagsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
-    @State private var showBagPicker = false
+    @Binding var showAssignSheet: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -562,7 +932,7 @@ private struct _PrettyBagsSection: View {
                 Spacer()
                 Button(action: {
                     viewModel.fetchBagsAndTags()
-                    showBagPicker = true
+                    showAssignSheet = true
                 }) {
                     Image(systemName: "plus")
                 }
@@ -590,41 +960,14 @@ private struct _PrettyBagsSection: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(radius: 2)
-        .sheet(isPresented: $showBagPicker) {
-            NavigationView {
-                List {
-                    // Only show each unique bag that the product isn't yet in
-                    let available = viewModel.allBags.filter { bag in
-                        !viewModel.bagsForProduct().contains(where: { $0.objectID == bag.objectID })
-                    }
-                    ForEach(available, id: \.self) { bag in
-                        Button(action: {
-                            viewModel.addProductToBag(bag)
-                            showBagPicker = false
-                        }) {
-                            HStack {
-                                Image(systemName: bag.icon ?? "bag.fill")
-                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
-                                Text(bag.name ?? "Unnamed Bag")
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Add to Bag")
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Close") { showBagPicker = false }
-                    }
-                }
-            }
-        }
     }
 }
 
 // MARK: - Tags Section
 private struct _PrettyTagsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
-    @State private var showTagPicker = false
+    @Binding var showAssignSheet: Bool
+
     @State private var newTagName = ""
     @State private var newTagColor = "blue"
 
@@ -636,7 +979,7 @@ private struct _PrettyTagsSection: View {
                 Spacer()
                 Button(action: {
                     viewModel.fetchBagsAndTags()
-                    showTagPicker = true
+                    showAssignSheet = true
                 }) {
                     Image(systemName: "plus")
                 }
@@ -674,55 +1017,138 @@ private struct _PrettyTagsSection: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(radius: 2)
-        .sheet(isPresented: $showTagPicker) {
-            NavigationView {
-                VStack {
-                    List {
-                        ForEach(viewModel.allTags, id: \.self) { tag in
-                            Button(action: {
-                                viewModel.addTagToProduct(tag)
-                                showTagPicker = false
-                            }) {
-                                HStack {
-                                    Circle()
-                                        .fill(Color(tag.color ?? "blue"))
-                                        .frame(width: 16, height: 16)
-                                    Text(tag.name ?? "Unnamed Tag")
+    }
+}
+
+// Unified sheet to assign Tags & Bags together
+private struct AssignTagsBagsSheet: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    @Binding var isPresented: Bool
+    @State private var selectedBagIDs: Set<NSManagedObjectID> = []
+    @State private var selectedTagIDs: Set<NSManagedObjectID> = []
+    @State private var newTagName = ""
+    @State private var newTagColor = "blue"
+    @State private var newBagName = ""
+    @State private var newBagIcon = "bag.fill"
+    @State private var newBagColor = "lushyPink"
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Bags")) {
+                    if viewModel.allBags.isEmpty {
+                        Text("No bags yet").foregroundColor(.secondary)
+                    }
+                    ForEach(viewModel.allBags, id: \.self) { bag in
+                        Button(action: { toggle(bag: bag) }) {
+                            HStack {
+                                Image(systemName: bag.icon ?? "bag.fill")
+                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                Text(bag.name ?? "Unnamed Bag")
+                                Spacer()
+                                if selectedBagIDs.contains(bag.objectID) {
+                                    Image(systemName: "checkmark").foregroundColor(.blue)
                                 }
                             }
                         }
                     }
-                    Divider()
-                    VStack(spacing: 10) {
-                        Text("Quick Create Tag")
-                            .font(.headline)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Quick Create Bag").font(.subheadline)
+                        TextField("Name", text: $newBagName)
                         HStack {
-                            TextField("New Tag", text: $newTagName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Picker("Color", selection: $newTagColor) {
-                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"], id: \.self) { color in
-                                    Text(color.capitalized)
+                            TextField("Icon (SF Symbol)", text: $newBagIcon)
+                            TextField("Color token", text: $newBagColor)
+                        }
+                        Button("Add Bag") {
+                            if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) {
+                                if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newId) as? BeautyBag {
+                                    selectedBagIDs.insert(bag.objectID)
                                 }
                             }
-                            .frame(width: 80)
-                            Button("Add") {
-                                if !newTagName.isEmpty {
-                                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                                    viewModel.fetchBagsAndTags()
-                                    newTagName = ""
-                                    newTagColor = "blue"
+                            newBagName = ""; newBagIcon = "bag.fill"; newBagColor = "lushyPink"
+                            viewModel.fetchBagsAndTags()
+                        }.disabled(newBagName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                Section(header: Text("Tags")) {
+                    if viewModel.allTags.isEmpty {
+                        Text("No tags yet").foregroundColor(.secondary)
+                    }
+                    ForEach(viewModel.allTags, id: \.self) { tag in
+                        Button(action: { toggle(tag: tag) }) {
+                            HStack {
+                                Circle().fill(Color(tag.color ?? "blue")).frame(width: 14, height: 14)
+                                Text(tag.name ?? "Unnamed Tag")
+                                Spacer()
+                                if selectedTagIDs.contains(tag.objectID) {
+                                    Image(systemName: "checkmark").foregroundColor(.blue)
                                 }
-                            }.disabled(newTagName.isEmpty)
+                            }
                         }
                     }
-                    .padding()
-                }
-                .navigationTitle("Add Tag")
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Close") { showTagPicker = false }
+                    HStack {
+                        TextField("New Tag", text: $newTagName)
+                        Picker("Color", selection: $newTagColor) {
+                            ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach","blue","green"], id: \.self) { c in
+                                Text(c.capitalized).tag(c)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        Button("Add") {
+                            CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                            newTagName = ""; newTagColor = "blue"
+                            viewModel.fetchBagsAndTags()
+                        }.disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
+            }
+            .navigationTitle("Assign Tags & Bags")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { isPresented = false }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") { applyChanges(); isPresented = false }
+                }
+            }
+            .onAppear {
+                // initialize selections from current relationships
+                selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID })
+                selectedTagIDs = Set(viewModel.tagsForProduct().map { $0.objectID })
+            }
+        }
+    }
+
+    private func toggle(bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
+    private func toggle(tag: ProductTag) { if selectedTagIDs.contains(tag.objectID) { selectedTagIDs.remove(tag.objectID) } else { selectedTagIDs.insert(tag.objectID) } }
+
+    private func applyChanges() {
+        // Bags
+        let currentBags = Set(viewModel.bagsForProduct().map { $0.objectID })
+        let toAddBags = selectedBagIDs.subtracting(currentBags)
+        let toRemoveBags = currentBags.subtracting(selectedBagIDs)
+        for id in toAddBags {
+            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag {
+                viewModel.addProductToBag(bag)
+            }
+        }
+        for id in toRemoveBags {
+            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag {
+                viewModel.removeProductFromBag(bag)
+            }
+        }
+        // Tags
+        let currentTags = Set(viewModel.tagsForProduct().map { $0.objectID })
+        let toAddTags = selectedTagIDs.subtracting(currentTags)
+        let toRemoveTags = currentTags.subtracting(selectedTagIDs)
+        for id in toAddTags {
+            if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag {
+                viewModel.addTagToProduct(tag)
+            }
+        }
+        for id in toRemoveTags {
+            if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag {
+                viewModel.removeTagFromProduct(tag)
             }
         }
     }

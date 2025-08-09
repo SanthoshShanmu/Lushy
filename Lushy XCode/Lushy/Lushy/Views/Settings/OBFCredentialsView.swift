@@ -6,13 +6,17 @@ struct OBFCredentialsView: View {
     @State private var password: String = ""
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
+    // New state for connection testing and clearing feedback
+    @State private var isTestingConnection = false
+    @State private var showConnectionResult = false
+    @State private var connectionOk = false
+    @State private var showClearedAlert = false
     
     // Load existing credentials if available
     private func loadExistingCredentials() {
         if OBFContributionService.shared.hasCredentials {
-            // This is just a placeholder since we don't have a getter for security reasons
-            userId = UserDefaults.standard.string(forKey: "obf_user_id") ?? ""
-            // We don't pre-fill the password for security
+            // Prefill only the user id (non-sensitive); leave password blank
+            userId = OBFContributionService.shared.storedUserId() ?? ""
             password = ""
         }
     }
@@ -40,6 +44,31 @@ struct OBFCredentialsView: View {
                         }
                     }
                     .neumorphicButtonStyle()
+                    .padding(.horizontal)
+                    
+                    HStack(spacing: 12) {
+                        Button(isTestingConnection ? "Testing..." : "Test Connection") {
+                            guard !isTestingConnection else { return }
+                            isTestingConnection = true
+                            OBFContributionService.shared.testConnection { ok in
+                                DispatchQueue.main.async {
+                                    self.connectionOk = ok
+                                    self.showConnectionResult = true
+                                    self.isTestingConnection = false
+                                }
+                            }
+                        }
+                        .disabled(isTestingConnection)
+                        .neumorphicButtonStyle()
+                        
+                        Button("Clear Credentials") {
+                            OBFContributionService.shared.clearCredentials()
+                            userId = ""
+                            password = ""
+                            showClearedAlert = true
+                        }
+                        .neumorphicButtonStyle()
+                    }
                     .padding(.horizontal)
                     
                     Link("Create an OBF Account", destination: URL(string: "https://world.openbeautyfacts.org/cgi/user.pl")!)
@@ -70,6 +99,16 @@ struct OBFCredentialsView: View {
                  Button("OK", role: .cancel) { }
              } message: {
                  Text("Please enter both user ID and password.")
+             }
+             .alert(connectionOk ? "Connection OK" : "Connection Failed", isPresented: $showConnectionResult) {
+                 Button("OK", role: .cancel) { }
+             } message: {
+                 Text(connectionOk ? "Successfully reached Open Beauty Facts API." : "Could not reach Open Beauty Facts. Check your internet connection and try again.")
+             }
+             .alert("Credentials Cleared", isPresented: $showClearedAlert) {
+                 Button("OK", role: .cancel) { }
+             } message: {
+                 Text("Your stored credentials have been removed from the device.")
              }
         }
     }

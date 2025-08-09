@@ -10,9 +10,9 @@ class OBFContributionService {
     private let baseUrl = "https://world.openbeautyfacts.org/cgi"
     private let keychain = KeychainSwift()
     
-    // Hard-coded credentials
-    private let userId = "santhosh"
-    private let userPassword = "kaktRBjC9q74Aip"
+    // Secure storage keys for OBF credentials
+    private let obfUserIdKey = "obf_user_id"
+    private let obfPasswordKey = "obf_user_password"
     
     // Request identifiers to track uploads in progress
     private var pendingUploads = Set<UUID>()
@@ -21,13 +21,33 @@ class OBFContributionService {
         // Initialize keychain if needed
     }
     
-    /// Check if credentials are available (always true with hardcoded values)
-    var hasCredentials: Bool {
-        return true
+    /// Retrieve credentials from Keychain
+    private func getCredentials() -> (userId: String, password: String)? {
+        if let user = keychain.get(obfUserIdKey),
+           let pass = keychain.get(obfPasswordKey),
+           !user.isEmpty, !pass.isEmpty {
+            return (user, pass)
+        }
+        // Removed DEBUG fallback credentials for security.
+        return nil
     }
     
-    /// No need to set credentials anymore
-    func setCredentials(userId: String, password: String) {}
+    /// Check if credentials are available
+    var hasCredentials: Bool {
+        return getCredentials() != nil
+    }
+    
+    /// Store credentials securely
+    func setCredentials(userId: String, password: String) {
+        keychain.set(userId, forKey: obfUserIdKey, withAccess: .accessibleAfterFirstUnlock)
+        keychain.set(password, forKey: obfPasswordKey, withAccess: .accessibleAfterFirstUnlock)
+    }
+    
+    /// Clear stored credentials
+    func clearCredentials() {
+        keychain.delete(obfUserIdKey)
+        keychain.delete(obfPasswordKey)
+    }
     
     /// Flag to track if upload is in progress
     var isUploading: Bool {
@@ -93,13 +113,21 @@ class OBFContributionService {
     ) {
         print("⭐️ Starting OBF upload for product: \(name)")
         
+        // Ensure we have credentials
+        guard let creds = getCredentials() else {
+            let err = NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OBF credentials. Configure them in Settings."])
+            print("❌ OBF upload aborted: \(err.localizedDescription)")
+            completion(.failure(err))
+            return
+        }
+        
         // Format PAO to match required format
         let formattedPAO = formatPAO(periodsAfterOpening)
         
         // Build request parameters
         var parameters: [String: String] = [
-            "user_id": userId,
-            "password": userPassword,
+            "user_id": creds.userId,
+            "password": creds.password,
             "product_name": name,
             "brands": brand,
             "categories": category,
@@ -127,21 +155,23 @@ class OBFContributionService {
             case .success(let productId):
                 print("Successfully created product with ID: \(productId)")
                 
-                // If we have an image, upload it
-                if let image = productImage {
-                    self?.uploadProductImage(productId: productId, image: image) { imageResult in
+                // Only attempt image upload if we have a valid barcode/code parameter
+                if let image = productImage, let code = parameters["code"], !code.isEmpty {
+                    self?.uploadProductImage(productId: code, image: image) { imageResult in
                         switch imageResult {
                         case .success:
-                            print("Successfully uploaded image for product: \(productId)")
+                            print("Successfully uploaded image for product: \(code)")
                         case .failure(let error):
                             print("Failed to upload image: \(error.localizedDescription)")
                         }
                         
-                        // Consider the product upload successful even if image fails
                         self?.pendingUploads.remove(uploadId)
                         completion(.success(productId))
                     }
                 } else {
+                    if productImage != nil {
+                        print("Skipping image upload because no valid barcode/code was provided.")
+                    }
                     self?.pendingUploads.remove(uploadId)
                     completion(.success(productId))
                 }
@@ -168,9 +198,12 @@ class OBFContributionService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("Lushy/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
         
-        // Debug information
+        // Debug information (sanitize sensitive fields)
         print("⭐️ Uploading product to OBF with parameters:")
-        print(parameters)
+        var sanitized = parameters
+        if sanitized["password"] != nil { sanitized["password"] = "********" }
+        if sanitized["user_id"] != nil { sanitized["user_id"] = "(redacted)" }
+        print(sanitized)
         
         // Build form data
         let formData = parameters.map { key, value in
@@ -217,7 +250,7 @@ class OBFContributionService {
             }
             
             // Handle non-success status codes
-            completion(.failure(NSError(domain: "OBFContributionService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error: \(httpResponse.statusCode)"])))
+            completion(.failure(NSError(domain: "OBFContributionService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error: \(httpResponse.statusCode)"])) )
         }
         task.resume()
     }
@@ -242,6 +275,12 @@ class OBFContributionService {
             finalImageData = imageData
         }
         
+        // Ensure we have credentials
+        guard let creds = getCredentials() else {
+            completion(.failure(NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OBF credentials. Configure them in Settings."])) )
+            return
+        }
+        
         let urlString = "\(baseUrl)/product_image_upload.pl"
         guard let url = URL(string: urlString) else {
             completion(.failure(NSError(domain: "OBFContributionService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
@@ -261,8 +300,8 @@ class OBFContributionService {
         let fields = [
             "code": productId,
             "imagefield": "front",
-            "user_id": userId,
-            "password": userPassword
+            "user_id": creds.userId,
+            "password": creds.password
         ]
         
         for (key, value) in fields {
@@ -297,6 +336,11 @@ class OBFContributionService {
             completion(.success(true))
         }
         task.resume()
+    }
+    
+    /// Retrieve stored user id (non-sensitive). Returns nil if none.
+    func storedUserId() -> String? {
+        return keychain.get(obfUserIdKey)
     }
 }
 
