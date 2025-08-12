@@ -35,6 +35,8 @@ struct ProductDetailView: View {
     @State private var paoCancellable: AnyCancellable?
     // Track if user manually changed PAO so we stop auto-syncing it
     @State private var userEditedPAO = false
+    @State private var showBagAssignSheet = false
+    @State private var showTagAssignSheet = false
     
     // Extracted background gradient to reduce body complexity (fixes type-check slowdown)
     private var backgroundGradient: LinearGradient {
@@ -115,8 +117,8 @@ struct ProductDetailView: View {
                 _PrettyReviewsSection(viewModel: viewModel)
                 
                 // Bags & Tags with soft design
-                _PrettyBagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
-                _PrettyTagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
+                _PrettyBagsSection(viewModel: viewModel, showBagAssignSheet: $showBagAssignSheet)
+                _PrettyTagsSection(viewModel: viewModel, showTagAssignSheet: $showTagAssignSheet)
             }
             .padding(.bottom, 30)
         }
@@ -324,9 +326,13 @@ struct ProductDetailView: View {
                 .onReceive(viewModel.$product) { _ in syncEditFieldsFromProduct(force: false) }
             }
         }
-        // Unified Assign Tags & Bags Sheet
-        .sheet(isPresented: $showAssignSheet) {
-            AssignTagsBagsSheet(viewModel: viewModel, isPresented: $showAssignSheet)
+        // Separate Bag Assign Sheet
+        .sheet(isPresented: $showBagAssignSheet) {
+            BagAssignSheet(viewModel: viewModel, isPresented: $showBagAssignSheet)
+        }
+        // Separate Tag Assign Sheet
+        .sheet(isPresented: $showTagAssignSheet) {
+            TagAssignSheet(viewModel: viewModel, isPresented: $showTagAssignSheet)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProductDeleted"))) { note in
             if let deletedId = note.object as? NSManagedObjectID,
@@ -888,7 +894,7 @@ private struct _PrettyReviewsSection: View {
 // MARK: - Bags Section
 private struct _PrettyBagsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
-    @Binding var showAssignSheet: Bool
+    @Binding var showBagAssignSheet: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -898,10 +904,8 @@ private struct _PrettyBagsSection: View {
                 Spacer()
                 Button(action: {
                     viewModel.fetchBagsAndTags()
-                    showAssignSheet = true
-                }) {
-                    Image(systemName: "plus")
-                }
+                    showBagAssignSheet = true
+                }) { Image(systemName: "plus") }
             }
             if viewModel.bagsForProduct().isEmpty {
                 Text("Not in any bag.")
@@ -932,10 +936,7 @@ private struct _PrettyBagsSection: View {
 // MARK: - Tags Section
 private struct _PrettyTagsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
-    @Binding var showAssignSheet: Bool
-
-    @State private var newTagName = ""
-    @State private var newTagColor = "lushyPink"
+    @Binding var showTagAssignSheet: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -945,10 +946,8 @@ private struct _PrettyTagsSection: View {
                 Spacer()
                 Button(action: {
                     viewModel.fetchBagsAndTags()
-                    showAssignSheet = true
-                }) {
-                    Image(systemName: "plus")
-                }
+                    showTagAssignSheet = true
+                }) { Image(systemName: "plus") }
             }
             if viewModel.tagsForProduct().isEmpty {
                 Text("No tags.")
@@ -970,10 +969,10 @@ private struct _PrettyTagsSection: View {
                                         .foregroundColor(.gray)
                                 }
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background(Color(tag.color ?? "lushyPink").opacity(0.15))
-                            .cornerRadius(12)
+                            .cornerRadius(14)
                         }
                     }
                 }
@@ -986,161 +985,325 @@ private struct _PrettyTagsSection: View {
     }
 }
 
-// Unified sheet to assign Tags & Bags together
-private struct AssignTagsBagsSheet: View {
+// Separate Bag Assign Sheet
+private struct BagAssignSheet: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     @Binding var isPresented: Bool
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
-    @State private var selectedTagIDs: Set<NSManagedObjectID> = []
-    @State private var newTagName = ""
-    @State private var newTagColor = "lushyPink"
     @State private var newBagName = ""
     @State private var newBagIcon = "bag.fill"
     @State private var newBagColor = "lushyPink"
+    // Added predefined options instead of free text fields
+    private let iconOptions = ["bag.fill","shippingbox.fill","case.fill","suitcase.fill","heart.fill","star.fill"]
+    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
 
     var body: some View {
         NavigationView {
-            List {
-                Section(header: Text("Bags")) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Select Beauty Bags")
+                        .font(.title3).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
                     if viewModel.allBags.isEmpty {
-                        Text("No bags yet").foregroundColor(.secondary)
+                        Text("You have no bags yet. Create one below.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    ForEach(viewModel.allBags, id: \.self) { bag in
-                        Button(action: { toggle(bag: bag) }) {
-                            HStack {
-                                Image(systemName: bag.icon ?? "bag.fill")
-                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
-                                Text(bag.name ?? "Unnamed Bag")
-                                Spacer()
-                                if selectedBagIDs.contains(bag.objectID) {
-                                    Image(systemName: "checkmark").foregroundColor(.lushyPink)
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 14)], spacing: 14) {
+                        ForEach(viewModel.allBags, id: \.self) { bag in
+                            let selected = selectedBagIDs.contains(bag.objectID)
+                            Button(action: { toggle(bag) }) {
+                                VStack(spacing: 10) {
+                                    Image(systemName: bag.icon ?? "bag.fill")
+                                        .font(.system(size: 28, weight: .semibold))
+                                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                    Text(bag.name ?? "Bag")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .fill(Color(bag.color ?? "lushyPink").opacity(selected ? 0.18 : 0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18)
+                                                .stroke(selected ? Color(bag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
+                                        )
+                                )
+                                .overlay(
+                                    Group { if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(Color(bag.color ?? "lushyPink")).offset(x: 50, y: -50) } }
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .animation(.spring(), value: selectedBagIDs)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Create New Bag")
+                            .font(.headline)
+                        TextField("Bag Name", text: $newBagName)
+                            .textFieldStyle(.roundedBorder)
+                        // Icon selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Icon").font(.caption).foregroundColor(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(iconOptions, id: \ .self) { icon in
+                                        let selected = (icon == newBagIcon)
+                                        Button(action: { newBagIcon = icon }) {
+                                            Image(systemName: icon)
+                                                .font(.system(size: 24))
+                                                .foregroundColor(selected ? .white : .lushyPurple)
+                                                .padding(12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .fill(selected ? Color.lushyPurple : Color.lushyPurple.opacity(0.12))
+                                                )
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .stroke(selected ? Color.lushyPurple : Color.clear, lineWidth: 2)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        // Color selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Color").font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 12) {
+                                ForEach(colorOptions, id: \ .self) { colorName in
+                                    let selected = (colorName == newBagColor)
+                                    Button(action: { newBagColor = colorName }) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color(colorName))
+                                                .frame(width: 34, height: 34)
+                                            if selected {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.white)
+                                                    .shadow(radius: 2)
+                                            }
+                                        }
+                                        .overlay(Circle().stroke(selected ? Color.white : Color.clear, lineWidth: 2))
+                                        .shadow(color: Color(colorName).opacity(0.4), radius: 4, x: 0, y: 2)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Quick Create Bag").font(.subheadline)
-                        TextField("Name", text: $newBagName)
-                        HStack {
-                            TextField("Icon (SF Symbol)", text: $newBagIcon)
-                            TextField("Color token", text: $newBagColor)
+                        Button(action: createBag) {
+                            Label("Add Bag", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPink.opacity(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.3 : 0.9)))
+                                .foregroundColor(.white)
                         }
-                        Button("Add Bag") {
-                            if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) {
-                                if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newId) as? BeautyBag {
-                                    selectedBagIDs.insert(bag.objectID)
-                                }
-                            }
-                            newBagName = ""; newBagIcon = "bag.fill"; newBagColor = "lushyPink"
-                            viewModel.fetchBagsAndTags()
-                        }.disabled(newBagName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
                 }
-                Section(header: Text("Tags")) {
-                    if viewModel.allTags.isEmpty {
-                        Text("No tags yet").foregroundColor(.secondary)
-                    }
-                    ForEach(viewModel.allTags, id: \.self) { tag in
-                        Button(action: { toggle(tag: tag) }) {
-                            HStack {
-                                Circle().fill(Color(tag.color ?? "lushyPink")).frame(width: 14, height: 14)
-                                Text(tag.name ?? "Unnamed Tag")
-                                Spacer()
-                                if selectedTagIDs.contains(tag.objectID) {
-                                    Image(systemName: "checkmark").foregroundColor(.lushyPink)
-                                }
-                            }
-                        }
-                    }
-                    HStack {
-                        TextField("New Tag", text: $newTagName)
-                        Picker("Color", selection: $newTagColor) {
-                            ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach"], id: \.self) { c in
-                                Text(c.capitalized).tag(c)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        Button("Add") {
-                            CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                            newTagName = ""; newTagColor = "lushyPink"
-                            viewModel.fetchBagsAndTags()
-                        }.disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
+                .padding([.horizontal, .bottom])
             }
-            .navigationTitle("Assign Tags & Bags")
+            .navigationTitle("Assign Bags")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { isPresented = false }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") { applyChanges(); isPresented = false }
-                }
+                ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .navigationBarTrailing) { Button("Save") { applyChanges(); isPresented = false } }
             }
-            .onAppear {
-                // initialize selections from current relationships
-                selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID })
-                selectedTagIDs = Set(viewModel.tagsForProduct().map { $0.objectID })
-            }
+            .onAppear { selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID }) }
         }
     }
 
-    private func toggle(bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
-    private func toggle(tag: ProductTag) { if selectedTagIDs.contains(tag.objectID) { selectedTagIDs.remove(tag.objectID) } else { selectedTagIDs.insert(tag.objectID) } }
-
+    private func toggle(_ bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
+    private func createBag() {
+        if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon),
+           let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newId) as? BeautyBag {
+            selectedBagIDs.insert(bag.objectID)
+            viewModel.fetchBagsAndTags()
+        }
+        newBagName = ""; newBagIcon = "bag.fill"; newBagColor = "lushyPink"
+    }
     private func applyChanges() {
-        // Bags
-        let currentBags = Set(viewModel.bagsForProduct().map { $0.objectID })
-        let toAddBags = selectedBagIDs.subtracting(currentBags)
-        let toRemoveBags = currentBags.subtracting(selectedBagIDs)
-        for id in toAddBags {
-            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag {
-                viewModel.addProductToBag(bag)
-            }
-        }
-        for id in toRemoveBags {
-            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag {
-                viewModel.removeProductFromBag(bag)
-            }
-        }
-        // Tags
-        let currentTags = Set(viewModel.tagsForProduct().map { $0.objectID })
-        let toAddTags = selectedTagIDs.subtracting(currentTags)
-        let toRemoveTags = currentTags.subtracting(selectedTagIDs)
-        for id in toAddTags {
-            if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag {
-                viewModel.addTagToProduct(tag)
-            }
-        }
-        for id in toRemoveTags {
-            if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag {
-                viewModel.removeTagFromProduct(tag)
-            }
-        }
+        let current = Set(viewModel.bagsForProduct().map { $0.objectID })
+        let toAdd = selectedBagIDs.subtracting(current)
+        let toRemove = current.subtracting(selectedBagIDs)
+        for id in toAdd { if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { viewModel.addProductToBag(bag) } }
+        for id in toRemove { if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { viewModel.removeProductFromBag(bag) } }
     }
 }
 
-// Flexible chip layout for PAO selection
+// Separate Tag Assign Sheet
+private struct TagAssignSheet: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    @Binding var isPresented: Bool
+    @State private var selectedTagIDs: Set<NSManagedObjectID> = []
+    @State private var newTagName = ""
+    @State private var newTagColor = "lushyPink"
+    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Select Tags")
+                        .font(.title3).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    if viewModel.allTags.isEmpty {
+                        Text("You have no tags yet. Create one below.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    FlowLayout(viewModel.allTags) { tag in
+                        let selected = selectedTagIDs.contains(tag.objectID)
+                        Button(action: { toggle(tag) }) {
+                            HStack(spacing: 6) {
+                                Circle().fill(Color(tag.color ?? "lushyPink")).frame(width: 10, height: 10)
+                                Text(tag.name ?? "Tag")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(Color(tag.color ?? "lushyPink").opacity(selected ? 0.28 : 0.12))
+                                    .overlay(
+                                        Capsule().stroke(selected ? Color(tag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
+                                    )
+                            )
+                            .foregroundColor(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .animation(.easeInOut, value: selectedTagIDs)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Create New Tag")
+                            .font(.headline)
+                        TextField("Tag Name", text: $newTagName)
+                            .textFieldStyle(.roundedBorder)
+                        Picker("Color", selection: $newTagColor) {
+                            ForEach(colorOptions, id: \.self) { Text($0.capitalized).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        Button(action: createTag) {
+                            Label("Add Tag", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPurple.opacity(newTagName.isEmpty ? 0.3 : 0.9)))
+                                .foregroundColor(.white)
+                        }
+                        .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
+                }
+                .padding([.horizontal, .bottom])
+            }
+            .navigationTitle("Assign Tags")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .navigationBarTrailing) { Button("Save") { applyChanges(); isPresented = false } }
+            }
+            .onAppear { selectedTagIDs = Set(viewModel.tagsForProduct().map { $0.objectID }) }
+        }
+    }
+
+    private func toggle(_ tag: ProductTag) { if selectedTagIDs.contains(tag.objectID) { selectedTagIDs.remove(tag.objectID) } else { selectedTagIDs.insert(tag.objectID) } }
+    private func createTag() {
+        CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+        viewModel.fetchBagsAndTags()
+        if let newTag = viewModel.allTags.first(where: { ($0.name ?? "") == newTagName }) {
+            selectedTagIDs.insert(newTag.objectID)
+        }
+        newTagName = ""; newTagColor = "lushyPink"
+    }
+    private func applyChanges() {
+        let current = Set(viewModel.tagsForProduct().map { $0.objectID })
+        let toAdd = selectedTagIDs.subtracting(current)
+        let toRemove = current.subtracting(selectedTagIDs)
+        for id in toAdd { if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag { viewModel.addTagToProduct(tag) } }
+        for id in toRemove { if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag { viewModel.removeTagFromProduct(tag) } }
+    }
+}
+
+// Simple flow layout for tag chips
+private struct FlowLayout<Data: RandomAccessCollection, Content: View>: View where Data.Element: Identifiable, Data.Index == Int {
+    let data: Data
+    let content: (Data.Element) -> Content
+    @State private var totalHeight: CGFloat = .zero
+    init(_ data: Data, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+        self.data = data
+        self.content = content
+    }
+    var body: some View {
+        GeometryReader { geo in
+            self.generateContent(in: geo)
+        }
+        .frame(height: totalHeight)
+    }
+    private func generateContent(in g: GeometryProxy) -> some View {
+        var width = CGFloat.zero
+        var height = CGFloat.zero
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(data.enumerated()), id: \.1.id) { _, element in
+                content(element)
+                    .padding(4)
+                    .alignmentGuide(.leading, computeValue: { d in
+                        if abs(width - d.width) > g.size.width { width = 0; height -= d.height }
+                        let result = width
+                        if element.id == data.last?.id { width = 0 } else { width -= d.width }
+                        return result
+                    })
+                    .alignmentGuide(.top, computeValue: { _ in
+                        let result = height
+                        if element.id == data.last?.id { height = 0 }
+                        return result
+                    })
+            }
+        }
+        .background(viewHeightReader($totalHeight))
+    }
+    private func viewHeightReader(_ binding: Binding<CGFloat>) -> some View { GeometryReader { geo -> Color in DispatchQueue.main.async { binding.wrappedValue = geo.size.height }; return Color.clear } }
+}
+
+// Add FlexibleChips used in edit sheet
 private struct FlexibleChips: View {
     let data: [String]
     @Binding var selection: String
     let labels: [String:String]
-    private let columns = [GridItem(.adaptive(minimum: 60), spacing: 8)]
+    private let columns = [GridItem(.adaptive(minimum: 54), spacing: 8)]
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(data, id: \..self) { item in
-                Button(action: { selection = (item == "None" ? "" : item) }) {
-                    Text(item == "None" ? "None" : (labels[item] ?? item))
-                        .font(.caption)
+            ForEach(data, id: \.self) { item in
+                let isNone = (item == "None")
+                let isSelected = selection.isEmpty && isNone || (!isNone && selection == item)
+                Button(action: { selection = isNone ? "" : item }) {
+                    Text(isNone ? "None" : (labels[item] ?? item))
+                        .font(.caption2)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .frame(minWidth: 44)
-                        .background(selection == item || (item == "None" && selection.isEmpty) ? Color.lushyPurple : Color.gray.opacity(0.15))
-                        .foregroundColor(selection == item || (item == "None" && selection.isEmpty) ? .white : .primary)
-                        .cornerRadius(12)
+                        .background(
+                            Capsule().fill(isSelected ? Color.lushyPurple : Color.gray.opacity(0.15))
+                        )
+                        .foregroundColor(isSelected ? .white : .primary)
                 }
                 .buttonStyle(.plain)
             }
         }
+        .animation(.default, value: selection)
     }
 }
