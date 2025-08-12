@@ -301,18 +301,34 @@ class CoreDataManager {
         }
     }
     
-    // Delete a product
+    // Delete a product (now also deletes remotely if synced)
     func deleteProduct(id: NSManagedObjectID) {
         let context = container.newBackgroundContext()
-        
-        context.performAndWait {
-            let userProduct = context.object(with: id)
+        context.perform {
+            guard let userProduct = try? context.existingObject(with: id) as? UserProduct else { return }
+            // Cancel any pending notifications for this product
+            NotificationService.shared.cancelNotification(for: userProduct)
+            let backendId = userProduct.backendId
+            let userId = AuthService.shared.userId
+            // Optimistically delete locally for instant UI
             context.delete(userProduct)
-            
-            do {
-                try context.save()
-            } catch {
-                print("Error deleting product: \(error)")
+            do { try context.save() } catch { print("Error deleting product: \(error)") }
+            // Notify UI layers
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: id)
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+            }
+            // Attempt remote deletion if identifiers available
+            if let backendId = backendId, let userId = userId {
+                var request = URLRequest(url: APIService.shared.baseURL
+                    .appendingPathComponent("users")
+                    .appendingPathComponent(userId)
+                    .appendingPathComponent("products")
+                    .appendingPathComponent(backendId))
+                request.httpMethod = "DELETE"
+                if let token = AuthService.shared.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+                URLSession.shared.dataTask(with: request).resume()
             }
         }
     }

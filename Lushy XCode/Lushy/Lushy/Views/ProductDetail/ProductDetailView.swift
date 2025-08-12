@@ -31,10 +31,6 @@ struct ProductDetailView: View {
     // New: unified assign sheet toggle and edit discard confirmation
     @State private var showAssignSheet = false
     @State private var showEditDiscardConfirm = false
-    // New: state for removing from bag(s)
-    @State private var showRemoveFromBagAlert = false
-    @State private var bagToRemove: BeautyBag?
-    @State private var showNoBagAlert = false
     // Restore cancellable for PAO fetch
     @State private var paoCancellable: AnyCancellable?
     // Track if user manually changed PAO so we stop auto-syncing it
@@ -121,34 +117,12 @@ struct ProductDetailView: View {
                 // Bags & Tags with soft design
                 _PrettyBagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
                 _PrettyTagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
-                
-                // Soft delete option (now: remove from bag(s))
-                removeFromBagButton
             }
             .padding(.bottom, 30)
         }
         .refreshable {
             viewModel.fetchBagsAndTags(); viewModel.refreshRemoteDetail()
         }
-    }
-    
-    private var removeFromBagButton: some View {
-        Button(action: {
-            let bags = viewModel.bagsForProduct()
-            if bags.isEmpty { showNoBagAlert = true }
-            else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
-            else { showAssignSheet = true }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "bag.badge.minus").font(.system(size: 14, weight: .medium))
-                Text("Remove from beauty bag").font(.footnote).fontWeight(.medium)
-            }
-            .foregroundColor(.secondary)
-            .padding(.vertical, 15).padding(.horizontal, 20)
-            .frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: 20).fill(Color.gray.opacity(0.1)))
-        }
-        .padding(.top, 10).padding(.horizontal)
     }
     
     // Error overlay extracted
@@ -180,13 +154,6 @@ struct ProductDetailView: View {
             Button(role: .destructive) { showingDeleteAlert = true } label: {
                 Label("Remove Product", systemImage: "trash")
             }
-            // Remove from bag(s)
-            Button {
-                let bags = viewModel.bagsForProduct()
-                if bags.isEmpty { showNoBagAlert = true }
-                else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
-                else { showAssignSheet = true }
-            } label: { Label("Remove from Bag(s)…", systemImage: "bag.badge.minus") }
             
             Button {
                 viewModel.toggleFavorite()
@@ -277,25 +244,6 @@ struct ProductDetailView: View {
                     presentationMode.wrappedValue.dismiss()
                 },
                 secondaryButton: .cancel()
-            )
-        }
-        // Alert for removing from a single bag
-        .alert(isPresented: $showRemoveFromBagAlert) {
-            Alert(
-                title: Text("Remove from bag"),
-                message: Text("Remove this product from '\(bagToRemove?.name ?? "Bag")'?"),
-                primaryButton: .destructive(Text("Remove")) {
-                    if let bag = bagToRemove { viewModel.removeProductFromBag(bag) }
-                },
-                secondaryButton: .cancel()
-            )
-        }
-        // Info if product is not in any bag
-        .alert(isPresented: $showNoBagAlert) {
-            Alert(
-                title: Text("Not in any bag"),
-                message: Text("This product is not assigned to a beauty bag."),
-                dismissButton: .default(Text("OK"))
             )
         }
         .sheet(isPresented: Binding(get: { viewModel.showReviewForm }, set: { viewModel.showReviewForm = $0 })) {

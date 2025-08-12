@@ -381,11 +381,36 @@ class ProductDetailViewModel: ObservableObject {
         // Cancel any pending local notification for this product
         NotificationService.shared.cancelNotification(for: product)
         let id = product.objectID
-        // Delete from Core Data
-        CoreDataManager.shared.deleteProduct(id: id)
-        // Notify listeners so views can dismiss if needed
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: id)
+        let backendId = product.backendId
+        let userId = AuthService.shared.userId
+        // Helper to perform local deletion & notifications
+        func performLocalDeletion() {
+            CoreDataManager.shared.deleteProduct(id: id)
+            DispatchQueue.main.async {
+                // Notify listeners so views can dismiss if needed
+                NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: id)
+                // Refresh profile & feed lists
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+            }
+        }
+        // If we can sync with backend, attempt DELETE first
+        if let backendId = backendId, let userId = userId {
+            let url = APIService.shared.baseURL
+                .appendingPathComponent("users")
+                .appendingPathComponent(userId)
+                .appendingPathComponent("products")
+                .appendingPathComponent(backendId)
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            if let token = AuthService.shared.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+            URLSession.shared.dataTask(with: request) { _, _, _ in
+                // Regardless of success/failure, remove locally to keep UX responsive
+                performLocalDeletion()
+            }.resume()
+        } else {
+            // No backend id or user -> just delete locally
+            performLocalDeletion()
         }
     }
 }
