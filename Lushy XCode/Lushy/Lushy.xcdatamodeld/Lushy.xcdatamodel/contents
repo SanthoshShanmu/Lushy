@@ -30,7 +30,7 @@
     </entity>
     <entity name="UserProduct" representedClassName="UserProduct" syncable="YES">
         <attribute name="backendId" optional="YES" attributeType="String"/>
-        <attribute name="barcode" attributeType="String"/>
+        <attribute name="barcode" optional="YES" attributeType="String"/>
         <attribute name="brand" optional="YES" attributeType="String"/>
         <attribute name="crueltyFree" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="expireDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>

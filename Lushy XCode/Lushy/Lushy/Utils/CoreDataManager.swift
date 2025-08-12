@@ -76,7 +76,7 @@ class CoreDataManager {
     // Update the saveUserProduct function to accept explicit expiry date
 
     func saveUserProduct(
-        barcode: String,
+        barcode: String?,
         productName: String,
         brand: String?,
         imageUrl: String?,
@@ -94,17 +94,18 @@ class CoreDataManager {
         let context = viewContext
         var objectID: NSManagedObjectID?
         context.performAndWait {
-            // Avoid creating duplicates: if a product with same barcode and user exists, return it
-            let fetchReq: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-            fetchReq.predicate = NSPredicate(format: "barcode == %@ AND userId == %@", barcode, currentUserId())
-            if let existing = (try? context.fetch(fetchReq))?.first {
-                objectID = existing.objectID
-                return
+            // Avoid creating duplicates only if we have a non-empty barcode
+            if let code = barcode, !code.isEmpty {
+                let fetchReq: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+                fetchReq.predicate = NSPredicate(format: "barcode == %@ AND userId == %@", code, currentUserId())
+                if let existing = (try? context.fetch(fetchReq))?.first {
+                    objectID = existing.objectID
+                    return
+                }
             }
             let product = UserProduct(context: context)
-            
             // Set properties
-            product.barcode = barcode
+            product.barcode = (barcode?.isEmpty == true) ? nil : barcode
             product.productName = productName
             product.brand = brand
             product.imageUrl = imageUrl
@@ -118,7 +119,6 @@ class CoreDataManager {
             product.sizeInMl = sizeInMl ?? 0.0
             product.spf = spf ?? 0
             product.userId = currentUserId()
-            
             // Set expiry date - either from override or calculate from PAO
             if let expiryOverride = expiryOverride {
                 product.expireDate = expiryOverride
@@ -128,13 +128,10 @@ class CoreDataManager {
                     product.expireDate = expireDate
                 }
             }
-            
             do {
-                try context.save()  // persist on main context to viewContext
+                try context.save()
                 objectID = product.objectID
-                
-                print("Product saved locally: \(productName)")
-                
+                print("Product saved locally (optional barcode): \(productName)")
             } catch {
                 print("Failed to save user product: \(error)")
             }

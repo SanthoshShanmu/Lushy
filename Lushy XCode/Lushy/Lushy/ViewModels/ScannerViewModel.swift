@@ -267,8 +267,8 @@ class ScannerViewModel: ObservableObject {
     // Save the product to local storage
     func saveProduct() -> NSManagedObjectID? {
         guard let product = scannedProduct else {
-            // Check if manual entry has required fields
-            if !manualProductName.isEmpty && !manualBarcode.isEmpty {
+            // Allow manual save with product name only; barcode optional
+            if !manualProductName.isEmpty {
                 return saveManualProduct()
             }
             errorMessage = "No product information available"

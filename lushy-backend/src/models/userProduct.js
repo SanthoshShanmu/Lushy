@@ -44,7 +44,7 @@ const UserProductSchema = new Schema({
   },
   barcode: {
     type: String,
-    required: true
+    required: false // made optional to allow manual products without barcode
   },
   productName: {
     type: String,

@@ -943,7 +943,40 @@ class APIService {
     // MARK: - Product Search
     /// Search products across all users by name
     func searchProducts(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
-        fallbackOBSearch(query: query, completion: completion)
+        // 1. Try backend search first so manually added (no barcode) products appear
+        var components = URLComponents(url: baseURL.appendingPathComponent("products/search"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        guard let url = components.url else { completion(.failure(APIError.invalidURL)); return }
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { // optional auth
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        struct BackendSearchResponse: Decodable {
+            let status: String
+            let results: Int
+            let data: DataContainer
+            struct DataContainer: Decodable { let products: [ProductSearchSummary] }
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            // On error or invalid response, fallback immediately
+            if let _ = error { self.fallbackOBSearch(query: query, completion: completion); return }
+            guard let http = response as? HTTPURLResponse, let data = data, (200...299).contains(http.statusCode) else {
+                self.fallbackOBSearch(query: query, completion: completion); return
+            }
+            do {
+                let decoded = try JSONDecoder().decode(BackendSearchResponse.self, from: data)
+                if decoded.results == 0 {
+                    // Nothing in backend, use OBF fallback
+                    self.fallbackOBSearch(query: query, completion: completion)
+                } else {
+                    completion(.success(decoded.data.products))
+                }
+            } catch {
+                // Decoding failed, fallback to OBF
+                self.fallbackOBSearch(query: query, completion: completion)
+            }
+        }.resume()
     }
     
     /// Fetch general product detail by product ID
