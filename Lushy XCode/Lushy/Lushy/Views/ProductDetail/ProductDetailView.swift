@@ -807,7 +807,7 @@ private struct _PrettyCommentsSection: View {
                     viewModel.addComment()
                 }) {
                     Image(systemName: "paperplane.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.lushyPink)
                         .padding(10)
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
@@ -969,7 +969,7 @@ private struct _PrettyTagsSection: View {
     @Binding var showAssignSheet: Bool
 
     @State private var newTagName = ""
-    @State private var newTagColor = "blue"
+    @State private var newTagColor = "lushyPink"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -994,7 +994,7 @@ private struct _PrettyTagsSection: View {
                         ForEach(viewModel.tagsForProduct(), id: \.self) { tag in
                             HStack(spacing: 5) {
                                 Circle()
-                                    .fill(Color(tag.color ?? "blue"))
+                                    .fill(Color(tag.color ?? "lushyPink"))
                                     .frame(width: 10, height: 10)
                                 Text(tag.name ?? "")
                                     .font(.caption)
@@ -1006,7 +1006,7 @@ private struct _PrettyTagsSection: View {
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color(tag.color ?? "blue").opacity(0.15))
+                            .background(Color(tag.color ?? "lushyPink").opacity(0.15))
                             .cornerRadius(12)
                         }
                     }
@@ -1027,7 +1027,7 @@ private struct AssignTagsBagsSheet: View {
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
     @State private var newTagName = ""
-    @State private var newTagColor = "blue"
+    @State private var newTagColor = "lushyPink"
     @State private var newBagName = ""
     @State private var newBagIcon = "bag.fill"
     @State private var newBagColor = "lushyPink"
@@ -1047,7 +1047,7 @@ private struct AssignTagsBagsSheet: View {
                                 Text(bag.name ?? "Unnamed Bag")
                                 Spacer()
                                 if selectedBagIDs.contains(bag.objectID) {
-                                    Image(systemName: "checkmark").foregroundColor(.blue)
+                                    Image(systemName: "checkmark").foregroundColor(.lushyPink)
                                 }
                             }
                         }
@@ -1077,11 +1077,11 @@ private struct AssignTagsBagsSheet: View {
                     ForEach(viewModel.allTags, id: \.self) { tag in
                         Button(action: { toggle(tag: tag) }) {
                             HStack {
-                                Circle().fill(Color(tag.color ?? "blue")).frame(width: 14, height: 14)
+                                Circle().fill(Color(tag.color ?? "lushyPink")).frame(width: 14, height: 14)
                                 Text(tag.name ?? "Unnamed Tag")
                                 Spacer()
                                 if selectedTagIDs.contains(tag.objectID) {
-                                    Image(systemName: "checkmark").foregroundColor(.blue)
+                                    Image(systemName: "checkmark").foregroundColor(.lushyPink)
                                 }
                             }
                         }
@@ -1089,14 +1089,14 @@ private struct AssignTagsBagsSheet: View {
                     HStack {
                         TextField("New Tag", text: $newTagName)
                         Picker("Color", selection: $newTagColor) {
-                            ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach","blue","green"], id: \.self) { c in
+                            ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach"], id: \.self) { c in
                                 Text(c.capitalized).tag(c)
                             }
                         }
                         .pickerStyle(MenuPickerStyle())
                         Button("Add") {
                             CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
-                            newTagName = ""; newTagColor = "blue"
+                            newTagName = ""; newTagColor = "lushyPink"
                             viewModel.fetchBagsAndTags()
                         }.disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }

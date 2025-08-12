@@ -448,6 +448,33 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.addToBagId;
     }
 
+    // Handle removing a product from a beauty bag
+    if (req.body.removeFromBagId) {
+      const bagId = req.body.removeFromBagId;
+      await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $pull: { bags: bagId } }
+      );
+      try {
+        const Activity = require('../models/activity');
+        const BeautyBag = require('../models/beautyBag');
+        const product = await UserProduct.findById(req.params.id);
+        const bag = await BeautyBag.findById(bagId);
+        await Activity.create({
+          user: new mongoose.Types.ObjectId(req.params.userId),
+          type: 'remove_from_bag',
+          targetId: new mongoose.Types.ObjectId(bagId),
+          targetType: 'BeautyBag',
+          description: `Removed ${product.productName} from bag ${bag?.name || ''}`.trim(),
+          createdAt: new Date()
+        });
+        console.log('Activity created: remove_from_bag for user', req.params.userId);
+      } catch (e) {
+        console.error('Remove from bag activity creation error:', e);
+      }
+      delete req.body.removeFromBagId;
+    }
+
     // Handle tag addition
     if (req.body.addTagId) {
       const tagId = req.body.addTagId;

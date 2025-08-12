@@ -536,8 +536,29 @@ class CoreDataManager {
     }
     
     func removeProduct(_ product: UserProduct, fromBag bag: BeautyBag) {
+        // Disassociate locally first for instant UI, then sync server
         bag.removeFromProducts(product)
         try? viewContext.save()
+        
+        // Sync removal to backend so server remains the source of truth
+        if let userId = AuthService.shared.userId,
+           let productBackendId = product.backendId,
+           let bagBackendId = bag.backendId {
+            let url = APIService.shared.baseURL
+                .appendingPathComponent("users")
+                .appendingPathComponent(userId)
+                .appendingPathComponent("products")
+                .appendingPathComponent(productBackendId)
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let token = AuthService.shared.token {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            let body: [String: Any] = ["removeFromBagId": bagBackendId]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            URLSession.shared.dataTask(with: request).resume()
+        }
     }
     
     func products(inBag bag: BeautyBag) -> [UserProduct] {

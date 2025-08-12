@@ -102,7 +102,7 @@ struct PrettyProductRow: View {
                         ForEach(Array(tags.prefix(2)), id: \.self) { tag in
                             HStack(spacing: 3) {
                                 Circle()
-                                    .fill(Color(tag.color ?? "blue"))
+                                    .fill(Color(tag.color ?? "lushyPink"))
                                     .frame(width: 7, height: 7)
                                 Text(tag.name ?? "")
                                     .font(.system(size: 10))
@@ -113,7 +113,7 @@ struct PrettyProductRow: View {
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color(tag.color ?? "blue").opacity(0.10))
+                            .background(Color(tag.color ?? "lushyPink").opacity(0.10))
                             .cornerRadius(8)
                         }
                     }

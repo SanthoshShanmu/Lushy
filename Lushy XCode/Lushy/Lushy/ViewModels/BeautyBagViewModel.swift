@@ -37,8 +37,8 @@ class BeautyBagViewModel: ObservableObject {
                     })
                     let remoteIds = Set(summaries.map { $0.id })
                     for summary in summaries {
-                        if let bag = existingByBackend[summary.id] {
-                            // update properties if needed
+                        if let _ = existingByBackend[summary.id] {
+                            // update properties if needed later
                         } else {
                             if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
                                 CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
@@ -62,25 +62,24 @@ class BeautyBagViewModel: ObservableObject {
 
     func createBag() {
         guard !newBagName.isEmpty else { return }
-        // Create locally and update local list immediately
-        guard let bagID = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) else { return }
-        self.bags = CoreDataManager.shared.fetchBeautyBags()
-
-        // Create remotely and store backendId, then refresh list
-        if let userId = AuthService.shared.userId {
-            APIService.shared.createBag(userId: userId, name: newBagName)
-                .receive(on: RunLoop.main)
-                .sink(receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("Failed to create bag remotely: \(error)")
-                    }
-                }, receiveValue: { summary in
-                    // Link local bag to remote and refresh final list
-                    CoreDataManager.shared.updateBeautyBagBackendId(id: bagID, backendId: summary.id)
-                    self.bags = CoreDataManager.shared.fetchBeautyBags()
-                })
-                .store(in: &cancellables)
-        }
+        guard let userId = AuthService.shared.userId else { return }
+        
+        // Remote-first: create on backend, then persist locally using returned id
+        APIService.shared.createBag(userId: userId, name: newBagName)
+            .receive(on: RunLoop.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("Failed to create bag remotely: \(error)")
+                }
+            }, receiveValue: { summary in
+                if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: self.newBagColor, icon: self.newBagIcon) {
+                    CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
+                }
+                self.bags = CoreDataManager.shared.fetchBeautyBags()
+                // Trigger a refresh to ensure relationships and purges
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+            })
+            .store(in: &cancellables)
 
         // Reset form
         newBagName = ""
@@ -110,12 +109,8 @@ class BeautyBagViewModel: ObservableObject {
                 })
                 .store(in: &cancellables)
         } else {
-            // Fallback to local only
-            CoreDataManager.shared.deleteBeautyBag(bag)
-            fetchBags()
-            // Notify profile and other listeners to refresh bags
-            NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
-            NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+            // If no backendId, do nothing to avoid local-only state
+            print("Cannot delete local-only bag; ignoring to enforce server-authoritative state")
         }
     }
 

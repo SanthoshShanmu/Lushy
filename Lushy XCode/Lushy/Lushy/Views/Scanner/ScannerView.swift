@@ -251,7 +251,7 @@ struct ProductFoundView: View {
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
     @State private var allTags: [ProductTag] = []
     @State private var newTagName: String = ""
-    @State private var newTagColor: String = "blue"
+    @State private var newTagColor: String = "lushyPink"
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
     @State private var allBags: [BeautyBag] = []
     @State private var newBagName: String = ""
@@ -365,7 +365,7 @@ struct ProductFoundView: View {
                                 }) {
                                     HStack {
                                         Image(systemName: "tag")
-                                            .foregroundColor(Color(tag.color ?? "blue"))
+                                            .foregroundColor(Color(tag.color ?? "lushyPink"))
                                         Text(tag.name ?? "Unnamed Tag")
                                             .foregroundColor(.white)
                                         Spacer()
@@ -383,7 +383,7 @@ struct ProductFoundView: View {
                             TextField("New Tag", text: $newTagName)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                             Picker("Color", selection: $newTagColor) {
-                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"], id: \.self) { color in
+                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"], id: \.self) { color in
                                     Text(color.capitalized)
                                 }
                             }
@@ -393,7 +393,7 @@ struct ProductFoundView: View {
                                     CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
                                     allTags = CoreDataManager.shared.fetchProductTags()
                                     newTagName = ""
-                                    newTagColor = "blue"
+                                    newTagColor = "lushyPink"
                                 }
                             }.disabled(newTagName.isEmpty)
                         }
@@ -451,9 +451,7 @@ struct ProductFoundView: View {
                                         })
                                         .store(in: &bagCancellables)
                                 } else {
-                                    if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: "lushyPink", icon: "bag.fill") {
-                                        // no backend id
-                                    }
+                                    _ = CoreDataManager.shared.createBeautyBag(name: newBagName, color: "lushyPink", icon: "bag.fill")
                                     allBags = CoreDataManager.shared.fetchBeautyBags()
                                     newBagName = ""
                                 }

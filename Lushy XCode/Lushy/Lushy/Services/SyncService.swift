@@ -32,34 +32,58 @@ class SyncService {
         }
     }
     
+    // Public: Force refresh of all entities from backend in order
+    func refreshAllFromBackend() {
+        fetchRemoteTags { [weak self] in
+            self?.fetchRemoteBags { [weak self] in
+                self?.fetchRemoteProducts()
+            }
+        }
+    }
+    
+    // Force a server-authoritative refresh when app returns to foreground
+    func performAuthoritativeRefresh() {
+        // Always refetch all entities (tags, bags, products) regardless of didInitialSync
+        fetchRemoteTags { [weak self] in
+            self?.fetchRemoteBags { [weak self] in
+                self?.fetchRemoteProducts()
+            }
+        }
+    }
+    
     // Fetch remote product tags and import
     private func fetchRemoteTags(completion: @escaping () -> Void) {
         guard let userId = AuthService.shared.userId else { completion(); return }
         APIService.shared.fetchUserTags(userId: userId) { result in
             switch result {
-            case .success(let tags):
+            case .success(let summaries):
                 let context = CoreDataManager.shared.viewContext
                 context.performAndWait {
-                    // Merge remote tag definitions: update existing or add new
-                    let fetchRequest: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
-                    let existingTags = (try? context.fetch(fetchRequest)) ?? []
-                    let existingByBackend = Dictionary<String, ProductTag>(uniqueKeysWithValues: existingTags.compactMap { tag in
+                    // Build remote id set
+                    let remoteIds = Set(summaries.map { $0.id })
+                    // Import/update existing
+                    let localTags = CoreDataManager.shared.fetchProductTags()
+                    let existingByBackend: [String: ProductTag] = Dictionary(uniqueKeysWithValues: localTags.compactMap { tag -> (String, ProductTag)? in
                         guard let bid = tag.backendId else { return nil }
                         return (bid, tag)
                     })
-                    for summary in tags {
-                        let bid = summary.id
-                        if let localTag = existingByBackend[bid] {
-                            // update properties
-                            localTag.name = summary.name
-                            localTag.color = summary.color
+                    for summary in summaries {
+                        if let tag = existingByBackend[summary.id] {
+                            tag.name = summary.name
+                            tag.color = summary.color
                         } else {
-                            // create new tag
-                            let newTag = ProductTag(context: context)
-                            newTag.name = summary.name
-                            newTag.color = summary.color
-                            newTag.backendId = summary.id
-                            newTag.userId = userId
+                            _ = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id)
+                        }
+                    }
+                    // Prune local tags not present on server
+                    for tag in localTags {
+                        if let bid = tag.backendId {
+                            if !remoteIds.contains(bid) {
+                                CoreDataManager.shared.deleteProductTag(tag)
+                            }
+                        } else {
+                            // Remove any local-only tags (no backend)
+                            CoreDataManager.shared.deleteProductTag(tag)
                         }
                     }
                     try? context.save()
@@ -70,6 +94,29 @@ class SyncService {
                 }
             case .failure:
                 completion()
+            }
+        }
+        
+        // After merge, prune any local tags not present remotely (backend is source of truth)
+        let context = CoreDataManager.shared.viewContext
+        context.performAndWait {
+            // Fetch current local tags
+            let request: NSFetchRequest<ProductTag> = ProductTag.fetchRequest()
+            if let localTags = try? context.fetch(request) {
+                // Build remote ID set from CoreData after network merge
+                let remoteIds = Set(CoreDataManager.shared.fetchProductTags().compactMap { $0.backendId })
+                for tag in localTags {
+                    // Remove any tag with a backendId not in remote set, or tags without backendId
+                    if let bid = tag.backendId {
+                        if !remoteIds.contains(bid) {
+                            context.delete(tag)
+                        }
+                    } else {
+                        // No local-only tags allowed
+                        context.delete(tag)
+                    }
+                }
+                try? context.save()
             }
         }
     }
@@ -84,6 +131,32 @@ class SyncService {
                 }
             }, receiveValue: { backendProducts in
                 self.mergeBackendProducts(backendProducts)
+                
+                // Prune any local products not present remotely and remove unsynced ones (no backendId)
+                let context = CoreDataManager.shared.viewContext
+                let remoteIds = Set(backendProducts.map { $0.id })
+                context.performAndWait {
+                    let fetchRequest: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+                    if let localProducts = try? context.fetch(fetchRequest) {
+                        for product in localProducts {
+                            if let bid = product.backendId {
+                                if !remoteIds.contains(bid) {
+                                    // Stale local product – delete
+                                    context.delete(product)
+                                }
+                            } else {
+                                // Local-only product not permitted – delete
+                                context.delete(product)
+                            }
+                        }
+                        do { try context.save() } catch {
+                            print("Error pruning local products: \(error)")
+                        }
+                    }
+                }
+                
+                // Notify listeners products changed
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
             })
             .store(in: &cancellables)
     }
@@ -94,14 +167,36 @@ class SyncService {
         APIService.shared.fetchUserBags(userId: userId) { result in
             switch result {
             case .success(let summaries):
-                // Avoid duplicates: only create new for missing backend IDs
-                let existingIds = Set(CoreDataManager.shared.fetchBeautyBags().compactMap { $0.backendId })
-                for summary in summaries where !existingIds.contains(summary.id) {
-                    if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
-                        CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
+                let context = CoreDataManager.shared.viewContext
+                context.performAndWait {
+                    let localBags = CoreDataManager.shared.fetchBeautyBags()
+                    let existingByBackend = Dictionary<String, BeautyBag>(uniqueKeysWithValues: localBags.compactMap { bag in
+                        guard let bid = bag.backendId else { return nil }
+                        return (bid, bag)
+                    })
+                    let remoteIds = Set(summaries.map { $0.id })
+                    for summary in summaries {
+                        if let bag = existingByBackend[summary.id] {
+                            // update properties if needed
+                            bag.name = summary.name
+                        } else {
+                            if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
+                                CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
+                            }
+                        }
                     }
+                    // Delete local bags not present remotely AND any without backendId
+                    for bag in localBags {
+                        if let bid = bag.backendId {
+                            if !remoteIds.contains(bid) {
+                                CoreDataManager.shared.deleteBeautyBag(bag)
+                            }
+                        } else {
+                            CoreDataManager.shared.deleteBeautyBag(bag)
+                        }
+                    }
+                    try? context.save()
                 }
-                // Notify listeners to refresh
                 DispatchQueue.main.async {
                     // Notify UI of bag updates
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
@@ -113,23 +208,6 @@ class SyncService {
         }
     }
     
-    /// Push all local Core Data products to backend to create missing userproducts and activities
-    func syncAllLocalProducts() {
-        let context = CoreDataManager.shared.viewContext
-        let fetchRequest: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-        
-        // Only sync products that don't have a backend ID yet
-        fetchRequest.predicate = NSPredicate(format: "backendId == nil")
-        
-        do {
-            let products = try context.fetch(fetchRequest)
-            print("Found \(products.count) local products to sync (unsynced only)")
-            products.forEach { syncProductToBackend($0) }
-        } catch {
-            print("Failed to fetch products for sync: \(error)")
-        }
-    }
-    
     // Merge backend products with CoreData
     private func mergeBackendProducts(_ backendProducts: [BackendUserProduct]) {
         let context = CoreDataManager.shared.viewContext
@@ -138,36 +216,27 @@ class SyncService {
             for backendProduct in backendProducts {
                 print("Debug: backendProduct.id=\(backendProduct.id), barcode=\(backendProduct.barcode), purchaseDate=\(backendProduct.purchaseDate)")
                 // Check if product already exists locally by backendId first (to match stubs), else by barcode
-                let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-                let predicateByBackend = NSPredicate(format: "backendId == %@", backendProduct.id)
-                let predicateByBarcode = NSPredicate(format: "barcode == %@", backendProduct.barcode)
-                request.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [predicateByBackend, predicateByBarcode])
-                let existingProducts = (try? context.fetch(request)) ?? []
-                let productToSync: UserProduct
-                if let existingProduct = existingProducts.first {
-                    updateLocalProduct(existingProduct, from: backendProduct)
-                    productToSync = existingProduct
+                if let local = CoreDataManager.shared.fetchUserProduct(backendId: backendProduct.id) {
+                    self.updateLocalProduct(local, from: backendProduct)
                 } else {
-                    let newProduct = createLocalProduct(from: backendProduct, in: context)
-                    productToSync = newProduct
-                }
-                // Sync tag relationships
-                if let tagSummaries = backendProduct.tags {
-                    // clear existing
-                    (productToSync.tags as? Set<ProductTag> ?? []).forEach { productToSync.removeFromTags($0) }
-                    for summary in tagSummaries {
-                        if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
-                            productToSync.addToTags(tag)
+                    let productToSync = self.createLocalProduct(from: backendProduct, in: context)
+                    // Sync tag relationships
+                    if let tagSummaries = backendProduct.tags {
+                        (productToSync.tags as? Set<ProductTag> ?? []).forEach { productToSync.removeFromTags($0) }
+                        for summary in tagSummaries {
+                            if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
+                                productToSync.addToTags(tag)
+                            }
                         }
                     }
-                }
-                // Sync bag relationships
-                if let bagSummaries = backendProduct.bags {
-                    // clear existing
-                    (productToSync.bags as? Set<BeautyBag> ?? []).forEach { productToSync.removeFromBags($0) }
-                    for summary in bagSummaries {
-                        if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
-                            productToSync.addToBags(bag)
+                    // Sync bag relationships
+                    if let bagSummaries = backendProduct.bags {
+                        // clear existing
+                        (productToSync.bags as? Set<BeautyBag> ?? []).forEach { productToSync.removeFromBags($0) }
+                        for summary in bagSummaries {
+                            if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
+                                productToSync.addToBags(bag)
+                            }
                         }
                     }
                 }
@@ -245,6 +314,10 @@ class SyncService {
             .sink(receiveCompletion: { completion in
                 if case .failure(let error) = completion {
                     print("Error syncing product to backend: \(error.localizedDescription)")
+                    // Remove local-only product to maintain server authority
+                    if let ctx = product.managedObjectContext {
+                        ctx.performAndWait { ctx.delete(product); try? ctx.save() }
+                    }
                 }
             }, receiveValue: { backendId in
                 // Assign returned backendId and save
@@ -271,41 +344,5 @@ class SyncService {
                 }
             })
             .store(in: &cancellables)
-    }
-    
-    // Add this method to manually sync a specific product
-    func syncProductImmediately(_ product: UserProduct) {
-        print("SyncService: Immediate sync requested for product: \(product.productName ?? "Unknown")")
-        syncProductToBackend(product)
-    }
-    
-    // Start comprehensive sync
-    func startSync() {
-        guard !isSyncing else {
-            print("Sync already in progress")
-            return
-        }
-        
-        guard AuthService.shared.isAuthenticated else {
-            print("User not authenticated, skipping sync")
-            return
-        }
-        
-        isSyncing = true
-        print("Starting comprehensive sync...")
-        
-        let products = CoreDataManager.shared.fetchUserProducts()
-        let unSyncedProducts = products.filter { $0.backendId == nil }
-        
-        print("Found \(unSyncedProducts.count) products to sync")
-        
-        for product in unSyncedProducts {
-            syncProductToBackend(product)
-        }
-        
-        // Mark sync as complete after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.isSyncing = false
-        }
     }
 }

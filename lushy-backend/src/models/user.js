@@ -32,7 +32,18 @@ const UserSchema = new mongoose.Schema({
     default: Date.now
   },
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // New optional settings/metadata
+  region: {
+    type: String,
+    enum: ['GLOBAL', 'EU', 'US', 'JP'],
+    default: 'GLOBAL'
+  },
+  settings: {
+    autoContributeToOBF: { type: Boolean, default: true }
+  },
+  obfContributionCount: { type: Number, default: 0 },
+  obfContributedProducts: { type: [String], default: [] }
 });
 
 // Hash password before saving

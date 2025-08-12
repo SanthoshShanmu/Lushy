@@ -29,7 +29,7 @@ struct LushyApp: App {
                     .environmentObject(authManager)
             }
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { oldPhase, newPhase in
             switch newPhase {
             case .background:
                 lastBackgroundDate = Date()
@@ -41,6 +41,8 @@ struct LushyApp: App {
                         authManager.logout()
                     }
                 }
+                // Server-authoritative refresh on foreground
+                SyncService.shared.refreshAllFromBackend()
             default:
                 break
             }

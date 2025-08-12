@@ -10,7 +10,7 @@ struct TagManagerView: View {
                 ForEach(viewModel.tags, id: \.self) { tag in
                     HStack {
                         Circle()
-                            .fill(Color(tag.color ?? "blue"))
+                            .fill(Color(tag.color ?? "lushyPink"))
                             .frame(width: 16, height: 16)
                         Text(tag.name ?? "Unnamed Tag")
                         Spacer()
@@ -51,7 +51,7 @@ struct TagManagerView: View {
 struct AddTagSheet: View {
     @ObservedObject var viewModel: TagViewModel
     @Environment(\.presentationMode) var presentationMode
-    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"]
+    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"]
 
     var body: some View {
         NavigationView {

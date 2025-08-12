@@ -25,7 +25,7 @@ struct ManualEntryView: View {
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
     @StateObject private var tagViewModel = TagViewModel()
     @State private var newTagName: String = ""
-    @State private var newTagColor: String = "blue"
+    @State private var newTagColor: String = "lushyPink"
     @State private var tagCancellables = Set<AnyCancellable>()
 
     @State private var showingOBFSuccessToast = false
@@ -71,6 +71,9 @@ struct ManualEntryView: View {
         let digits = viewModel.manualBarcode.filter { $0.isNumber }
         return digits.count >= 8 && digits.count <= 13
     }
+
+    @FocusState private var focusField: Field?
+    private enum Field { case productName, brand, shade, size, spf, barcode }
 
     var body: some View {
         NavigationView {
@@ -293,7 +296,7 @@ struct ManualEntryView: View {
             selectedBagIDs.removeAll()
             selectedTagIDs.removeAll()
             newTagName = ""
-            newTagColor = "blue"
+            newTagColor = "lushyPink"
             isSaving = false
             showingErrorAlert = false
             errorMessage = ""
@@ -314,41 +317,75 @@ struct ManualEntryView: View {
                 TextField("Barcode", text: $viewModel.manualBarcode)
                     .keyboardType(.numberPad)
                     .textFieldStyle(.roundedBorder)
+                    .focused($focusField, equals: .barcode)
                 Button("Look Up") {
                     if viewModel.manualBarcode.isEmpty {
                         errorMessage = "Please enter a barcode to look up"
                         showingErrorAlert = true
                     } else {
+                        // Reset prior state
+                        manualFetchedProduct = nil
+                        viewModel.productNotFound = false
+                        manualLookupError = ""
                         // Perform manual lookup without affecting scanner
                         lookupCancellable = APIService.shared.fetchProduct(barcode: viewModel.manualBarcode)
                             .receive(on: DispatchQueue.main)
                             .sink(receiveCompletion: { completion in
                                 if case .failure(let error) = completion {
-                                    manualLookupError = error.localizedDescription
-                                    showManualLookupError = true
+                                    if error == .productNotFound {
+                                        // Graceful not found path
+                                        viewModel.productNotFound = true
+                                        manualLookupError = "Product not found. Please enter details below to add it."
+                                        showManualLookupError = false
+                                        // Clear any previously fetched product
+                                        manualFetchedProduct = nil
+                                        focusField = .productName
+                                    } else {
+                                        manualLookupError = error.localizedDescription
+                                        showManualLookupError = true
+                                    }
                                 }
                             }, receiveValue: { product in
                                 manualFetchedProduct = product
-                                // prefill manual fields
                                 viewModel.manualProductName = product.productName ?? ""
                                 viewModel.manualBrand = product.brands ?? ""
-                                if let pao = product.periodsAfterOpening {
-                                    periodsAfterOpening = pao
-                                }
+                                if let pao = product.periodsAfterOpening { periodsAfterOpening = pao }
+                                viewModel.productNotFound = false
                             })
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.manualBarcode.isEmpty)
-                .alert(isPresented: $showManualLookupError) {
-                    Alert(title: Text("Lookup Error"), message: Text(manualLookupError), dismissButton: .default(Text("OK")))
-                }
             }
             // Inline barcode validation hint
             if !viewModel.manualBarcode.isEmpty && !isManualBarcodeValid {
                 Text("Invalid barcode format (8-13 digits)")
                     .font(.caption)
                     .foregroundColor(.red)
+            }
+            // Inline not-found / error banner
+            if viewModel.productNotFound {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "questionmark.circle")
+                        .foregroundColor(.orange)
+                    Text(manualLookupError.isEmpty ? "Product not found. Please enter details below to add it. It will be contributed to Open Beauty Facts." : manualLookupError)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.15))
+                .cornerRadius(10)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if showManualLookupError && !manualLookupError.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
+                    Text(manualLookupError)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .padding(10)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(10)
             }
         }
         .glassCard(cornerRadius: 20)
@@ -357,8 +394,15 @@ struct ManualEntryView: View {
     @ViewBuilder private func productInformationSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Product Information").font(.headline)
+            if viewModel.productNotFound {
+                Text("Enter the product details below. We'll save it locally and sync to your account; the core data may also be sent anonymously to improve the catalog.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .transition(.opacity)
+            }
             TextField("Product Name (Required)", text: $viewModel.manualProductName)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusField, equals: .productName)
             TextField("Brand (Optional)", text: $viewModel.manualBrand)
                 .textFieldStyle(.roundedBorder)
             // Metadata inputs
@@ -533,7 +577,7 @@ struct ManualEntryView: View {
                 TextField("New Tag", text: $newTagName)
                     .textFieldStyle(.roundedBorder)
                 Picker("Color", selection: $newTagColor) {
-                    ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach","blue","green"], id: \.self) {
+                    ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach"], id: \.self) {
                         Text($0.capitalized)
                     }
                 }
@@ -545,7 +589,7 @@ struct ManualEntryView: View {
                     tagViewModel.createTag()
                     // Clear local form
                     newTagName = ""
-                    newTagColor = "blue"
+                    newTagColor = "lushyPink"
                 }
                 .disabled(newTagName.isEmpty)
             }
@@ -590,98 +634,48 @@ struct ManualEntryView: View {
             showingErrorAlert = true
             return
         }
+
         // Attach local selections so payload will include them
         for tagID in selectedTagIDs {
-            if let tag = try? context.existingObject(with: tagID) as? ProductTag {
-                userProduct.addToTags(tag)
-            }
+            if let tag = try? context.existingObject(with: tagID) as? ProductTag { userProduct.addToTags(tag) }
         }
         for bagID in selectedBagIDs {
-            if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
-                userProduct.addToBags(bag)
-            }
+            if let bag = try? context.existingObject(with: bagID) as? BeautyBag { userProduct.addToBags(bag) }
         }
         try? context.save()
 
-        // 2) If product not found in the DB, silently contribute to OBF now and show toast while uploading
+        // If product not found in OBF, silently contribute
         if viewModel.productNotFound {
             withAnimation { showingOBFSuccessToast = true }
             viewModel.silentlyContributeToOBF(productImage: productImage)
         }
 
-        // 4) Create user product on backend with tags & bags
-        let userId = AuthService.shared.userId ?? ""
-        let url = APIService.shared.baseURL
-            .appendingPathComponent("users")
-            .appendingPathComponent(userId)
-            .appendingPathComponent("products")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        // Build payload
-        var productTags: [String] = []
-        var productBags: [String] = []
-        if let tags = userProduct.tags as? Set<ProductTag> { productTags = tags.compactMap { $0.backendId } }
-        if let bags = userProduct.bags as? Set<BeautyBag> { productBags = bags.compactMap { $0.backendId } }
-        var body: [String: Any] = [
-            "barcode": userProduct.barcode ?? "",
-            "productName": userProduct.productName ?? "",
-            "brand": userProduct.brand ?? "",
-            "imageUrl": userProduct.imageUrl ?? "",
-            "purchaseDate": userProduct.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
-            "vegan": userProduct.vegan,
-            "crueltyFree": userProduct.crueltyFree,
-            "favorite": userProduct.favorite
-        ]
-        if let shade = userProduct.shade { body["shade"] = shade }
-        body["sizeInMl"] = userProduct.sizeInMl
-        body["spf"] = userProduct.spf
-        if !productTags.isEmpty { body["tags"] = productTags }
-        if !productBags.isEmpty { body["bags"] = productBags }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        struct CreateResponse: Decodable { let status: String; let data: DataContainer; struct DataContainer: Decodable { let product: BackendUserProduct } }
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                DispatchQueue.main.async {
+        // 2) Sync to backend using unified APIService method (removes duplicate code & date decode issues)
+        print("ManualEntryView: Starting backend sync for product localID=\(objectID)")
+        syncCancellable = APIService.shared.syncProductWithBackend(product: userProduct)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                switch completion {
+                case .failure(let err):
+                    print("ManualEntryView: Sync failed -> \(err.localizedDescription)")
                     self.isSaving = false
-                    self.errorMessage = error.localizedDescription
+                    self.errorMessage = err.localizedDescription
                     self.showingErrorAlert = true
+                case .finished:
+                    break
                 }
-                return
-            }
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
-                DispatchQueue.main.async {
-                    self.isSaving = false
-                    self.errorMessage = "Failed to create product on server."
-                    self.showingErrorAlert = true
-                }
-                return
-            }
-            do {
-                let wrapper = try JSONDecoder().decode(CreateResponse.self, from: data)
-                let backendId = wrapper.data.product.id
-                DispatchQueue.main.async {
-                    let context = CoreDataManager.shared.viewContext
-                    if let userProduct = try? context.existingObject(with: objectID) as? UserProduct {
-                        userProduct.backendId = backendId
-                        try? context.save()
-                    }
-                    NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
-                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
-                    self.isSaving = false
-                    self.dismiss()
-                    self.viewModel.selectedUserProduct = userProduct
-                    self.viewModel.showProductDetail = true
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.isSaving = false
-                    self.errorMessage = "Unexpected response. Please try again."
-                    self.showingErrorAlert = true
-                }
-            }
-        }.resume()
+            }, receiveValue: { backendId in
+                print("ManualEntryView: Sync success backendId=\(backendId)")
+                userProduct.backendId = backendId
+                try? context.save()
+                // Post minimal notifications (avoid RefreshProfile storm) - feed only
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                self.isSaving = false
+                // Navigate to detail
+                self.viewModel.selectedUserProduct = userProduct
+                self.viewModel.showProductDetail = true
+                self.dismiss()
+            })
     }
 
     // Removed misplaced onDisappear block here
@@ -765,7 +759,7 @@ struct MultipleSelectionRow: View {
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.lushyPink)
                 }
             }
         }

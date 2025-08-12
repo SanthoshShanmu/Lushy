@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		C80E3D722DC3CBD900FB2C9C /* Lushy.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = C80E3D702DC3CBD900FB2C9C /* Lushy.xcdatamodeld */; };
-		C8E148522DC62906000B947D /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C8E148512DC62906000B947D /* KeychainSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,7 +70,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C8E148522DC62906000B947D /* KeychainSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,14 +117,12 @@
 			buildRules = (
 			);
 			dependencies = (
-				C8E1484F2DC62845000B947D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C80E3D022DC3CAAD00FB2C9C /* Lushy */,
 			);
 			name = Lushy;
 			packageProductDependencies = (
-				C8E148512DC62906000B947D /* KeychainSwift */,
 			);
 			productName = Lushy;
 			productReference = C82FC4312DD107D800B5AD7E /* Lushy.app */;
@@ -211,7 +207,6 @@
 			mainGroup = C80E3CF72DC3CAAD00FB2C9C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C8E1484D2DC626D9000B947D /* XCRemoteSwiftPackageReference "keychain-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C80E3CF72DC3CAAD00FB2C9C;
@@ -284,10 +279,6 @@
 			isa = PBXTargetDependency;
 			target = C80E3CFF2DC3CAAD00FB2C9C /* Lushy */;
 			targetProxy = C80E3D182DC3CAB000FB2C9C /* PBXContainerItemProxy */;
-		};
-		C8E1484F2DC62845000B947D /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = C8E1484E2DC62845000B947D /* KeychainSwift */;
 		};
 /* End PBXTargetDependency section */
 
@@ -441,6 +432,8 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				OBF_SYSTEM_USER_ID = "santhosh";
+				OBF_SYSTEM_PASSWORD = "kaktRBjC9q74Aip";
 			};
 			name = Debug;
 		};
@@ -472,6 +465,8 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				OBF_SYSTEM_USER_ID = "";
+				OBF_SYSTEM_PASSWORD = "";
 			};
 			name = Release;
 		};
@@ -585,27 +580,8 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		C8E1484D2DC626D9000B947D /* XCRemoteSwiftPackageReference "keychain-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/evgenyneu/keychain-swift.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 24.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		C8E1484E2DC62845000B947D /* KeychainSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C8E1484D2DC626D9000B947D /* XCRemoteSwiftPackageReference "keychain-swift" */;
-			productName = KeychainSwift;
-		};
-		C8E148512DC62906000B947D /* KeychainSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C8E1484D2DC626D9000B947D /* XCRemoteSwiftPackageReference "keychain-swift" */;
-			productName = KeychainSwift;
-		};
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCVersionGroup section */

@@ -447,7 +447,7 @@ class ScannerViewModel: ObservableObject {
                 case .success(let productId):
                     print("Successfully uploaded to OBF with ID: \(productId)")
                     
-                    // Increment contribution count
+                    // Increment contribution count locally
                     let count = UserDefaults.standard.integer(forKey: "obf_contribution_count")
                     UserDefaults.standard.set(count + 1, forKey: "obf_contribution_count")
                     
@@ -455,6 +455,15 @@ class ScannerViewModel: ObservableObject {
                     var contributedProducts = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
                     contributedProducts.append(productId)
                     UserDefaults.standard.set(contributedProducts, forKey: "obf_contributed_products")
+                    
+                    // Sync contribution with backend if authenticated
+                    if let userId = AuthService.shared.userId {
+                        APIService.shared.addOBFContribution(userId: userId, productId: productId) { result in
+                            if case .failure(let err) = result {
+                                print("Failed to sync OBF contribution: \(err.localizedDescription)")
+                            }
+                        }
+                    }
                     
                     // Post notification for success toast
                     NotificationCenter.default.post(name: NSNotification.Name("OBFContributionSuccess"), object: nil)
@@ -510,8 +519,20 @@ class ScannerViewModel: ObservableObject {
         isProductOpen = false
         openDate = nil
         purchaseDate = Date()
+        productNotFound = false // added
     }
     
+    // Clear flags that would show the not-found overlay when returning
+    func resetAfterManualAdd() {
+        productNotFound = false
+        isLoading = false
+        errorMessage = nil
+        scannedBarcode = nil
+        scannedProduct = nil
+        isScanning = false
+        // Keep selectedUserProduct & showProductDetail so navigation remains
+    }
+
     // Store external publisher subscriptions
     func store(_ cancellable: AnyCancellable) {
         cancellables.insert(cancellable)

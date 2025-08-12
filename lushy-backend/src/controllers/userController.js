@@ -191,3 +191,131 @@ exports.createTag = async (req, res) => {
     res.status(500).json({ message: 'Failed to create tag.', error: err.message });
   }
 };
+
+// Get user settings (region, auto-contribute, OBF counters)
+exports.getUserSettings = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user id.' });
+    }
+    const user = await User.findById(userId).select('region settings.obf settings.autoContributeToOBF obfContributionCount obfContributedProducts');
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    res.json({
+      settings: {
+        region: user.region || 'GLOBAL',
+        autoContributeToOBF: user.settings?.autoContributeToOBF ?? true
+      },
+      obf: {
+        contributionCount: user.obfContributionCount || 0,
+        contributedProducts: user.obfContributedProducts || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Update user settings (only owner can update)
+exports.updateUserSettings = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user id.' });
+    }
+
+    // Authorization: only the authenticated user can update their settings
+    if (!req.user || req.user._id.toString() !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update these settings.' });
+    }
+
+    const updates = {};
+    const allowedRegions = ['GLOBAL', 'EU', 'US', 'JP'];
+
+    if (typeof req.body.region === 'string') {
+      const region = req.body.region.toUpperCase();
+      if (!allowedRegions.includes(region)) {
+        return res.status(400).json({ message: 'Invalid region.' });
+      }
+      updates.region = region;
+    }
+
+    if (typeof req.body.autoContributeToOBF === 'boolean') {
+      updates['settings.autoContributeToOBF'] = req.body.autoContributeToOBF;
+    }
+
+    const user = await User.findByIdAndUpdate(userId, { $set: updates }, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    res.json({
+      settings: {
+        region: user.region || 'GLOBAL',
+        autoContributeToOBF: user.settings?.autoContributeToOBF ?? true
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Increment OBF contribution count and optionally record a product id
+exports.addObfContribution = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { productId } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user id.' });
+    }
+
+    // Only owner can modify their counters
+    if (!req.user || req.user._id.toString() !== userId) {
+      return res.status(403).json({ message: 'Not authorized.' });
+    }
+
+    const update = { $inc: { obfContributionCount: 1 } };
+    if (productId && typeof productId === 'string' && productId.trim()) {
+      update.$addToSet = { obfContributedProducts: productId.trim() };
+    }
+
+    const user = await User.findByIdAndUpdate(userId, update, { new: true, upsert: false });
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    res.status(201).json({
+      obf: {
+        contributionCount: user.obfContributionCount || 0,
+        contributedProducts: user.obfContributedProducts || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Get OBF contribution summary
+exports.getObfContributions = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user id.' });
+    }
+
+    // Owner or public read? Keep it authenticated owner-only for now
+    if (!req.user || req.user._id.toString() !== userId) {
+      return res.status(403).json({ message: 'Not authorized.' });
+    }
+
+    const user = await User.findById(userId).select('obfContributionCount obfContributedProducts');
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    res.json({
+      obf: {
+        contributionCount: user.obfContributionCount || 0,
+        contributedProducts: user.obfContributedProducts || []
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};

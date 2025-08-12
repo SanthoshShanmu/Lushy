@@ -70,6 +70,20 @@ struct UserProfileWrapper: Codable {
     let user: UserProfile
 }
 
+// New settings/OBF response models
+struct UserSettingsResponse: Codable {
+    struct Settings: Codable {
+        let region: String
+        let autoContributeToOBF: Bool
+    }
+    struct OBF: Codable {
+        let contributionCount: Int
+        let contributedProducts: [String]
+    }
+    let settings: Settings
+    let obf: OBF?
+}
+
 class APIService {
     static let shared = APIService()
 
@@ -100,8 +114,75 @@ class APIService {
         task.resume()
     }
 
-    // MARK: - Social Features
+    // MARK: - User Settings & OBF
+    func fetchUserSettings(userId: String, completion: @escaping (Result<UserSettingsResponse, APIError>) -> Void) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let _ = error { completion(.failure(.networkError)); return }
+            guard let http = response as? HTTPURLResponse, let data = data else { completion(.failure(.invalidResponse)); return }
+            guard (200...299).contains(http.statusCode) else {
+                completion(.failure(http.statusCode == 401 ? .authenticationRequired : .invalidResponse)); return
+            }
+            do {
+                let resp = try JSONDecoder().decode(UserSettingsResponse.self, from: data)
+                completion(.success(resp))
+            } catch { completion(.failure(.decodingError)) }
+        }.resume()
+    }
 
+    func updateUserSettings(userId: String, region: String? = nil, autoContributeToOBF: Bool? = nil, completion: ((Result<UserSettingsResponse.Settings, APIError>) -> Void)? = nil) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        var body: [String: Any] = [:]
+        if let region = region { body["region"] = region }
+        if let auto = autoContributeToOBF { body["autoContributeToOBF"] = auto }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let completion = completion else { return }
+            if let _ = error { completion(.failure(.networkError)); return }
+            guard let http = response as? HTTPURLResponse, let data = data else { completion(.failure(.invalidResponse)); return }
+            guard (200...299).contains(http.statusCode) else {
+                completion(.failure(http.statusCode == 401 ? .authenticationRequired : .invalidResponse)); return
+            }
+            do {
+                struct UpdateResp: Codable { let settings: UserSettingsResponse.Settings }
+                let resp = try JSONDecoder().decode(UpdateResp.self, from: data)
+                completion(.success(resp.settings))
+            } catch { completion(.failure(.decodingError)) }
+        }.resume()
+    }
+
+    func addOBFContribution(userId: String, productId: String?, completion: ((Result<UserSettingsResponse.OBF, APIError>) -> Void)? = nil) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("obf").appendingPathComponent("contributions")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        var body: [String: Any] = [:]
+        if let pid = productId { body["productId"] = pid }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let completion = completion else { return }
+            if let _ = error { completion(.failure(.networkError)); return }
+            guard let http = response as? HTTPURLResponse, let data = data else { completion(.failure(.invalidResponse)); return }
+            guard (200...299).contains(http.statusCode) else {
+                completion(.failure(http.statusCode == 401 ? .authenticationRequired : .invalidResponse)); return
+            }
+            do {
+                struct OBFResp: Codable { let obf: UserSettingsResponse.OBF }
+                let resp = try JSONDecoder().decode(OBFResp.self, from: data)
+                completion(.success(resp.obf))
+            } catch { completion(.failure(.decodingError)) }
+        }.resume()
+    }
+
+    // MARK: - Social Features
     func fetchUserFeed(userId: String, completion: @escaping (Result<[Activity], Error>) -> Void) {
         let url = baseURL.appendingPathComponent("users/\(userId)/feed")
         var request = URLRequest(url: url)
@@ -284,36 +365,27 @@ class APIService {
 
     func fetchProduct(barcode: String) -> AnyPublisher<Product, APIError> {
         let urlString = "https://world.openbeautyfacts.org/api/v2/product/\(barcode)?fields=code,product_name,brands,image_url,image_small_url,periods_after_opening,periods_after_opening_tags,ingredients_text_with_allergens,batch_code,manufacturing_date"
-        
         guard let url = URL(string: urlString) else {
             return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
         }
-        
         return URLSession.shared.dataTaskPublisher(for: url)
             .tryMap { data, response -> [String: Any] in
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    throw APIError.invalidResponse
-                }
-                
-                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    throw APIError.decodingError
-                }
-                
+                guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+                // Treat 404 specifically as product not found (better UX)
+                if httpResponse.statusCode == 404 { throw APIError.productNotFound }
+                guard (200...299).contains(httpResponse.statusCode) else { throw APIError.invalidResponse }
+                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.decodingError }
+                // OBF sometimes returns { status: 0 } for not found while still 200
+                if let status = json["status"] as? Int, status == 0 { throw APIError.productNotFound }
                 return json
             }
             .tryMap { json -> Product in
-                guard let product = Product.fromOpenBeautyFactsResponse(json) else {
-                    throw APIError.decodingError
-                }
+                guard let product = Product.fromOpenBeautyFactsResponse(json) else { throw APIError.decodingError }
                 return product
             }
             .mapError { error -> APIError in
-                if let apiError = error as? APIError {
-                    return apiError
-                } else {
-                    return APIError.networkError
-                }
+                if let apiError = error as? APIError { return apiError }
+                return .networkError
             }
             .eraseToAnyPublisher()
     }
@@ -675,7 +747,7 @@ class APIService {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
+            if error != nil { // was: if let error = error { completion(.failure(.networkError)); return }
                 completion(.failure(.networkError)); return
             }
             guard let http = response as? HTTPURLResponse,
@@ -688,12 +760,12 @@ class APIService {
             if let raw = String(data: data, encoding: .utf8) {
                 print("APIService.fetchUserProduct JSON: \(raw)")
             }
-             struct SingleResponse: Codable {
-                 struct Payload: Codable { let product: BackendUserProduct }
-                 let status: String
-                 let data: Payload
-             }
-             do {
+            struct SingleResponse: Codable {
+                struct Payload: Codable { let product: BackendUserProduct }
+                let status: String
+                let data: Payload
+            }
+            do {
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .custom { decoder in
                     let container = try decoder.singleValueContainer()
@@ -706,12 +778,12 @@ class APIService {
                     throw DecodingError.dataCorrupted(
                         DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateStr)"))
                 }
-                 let wrapper = try decoder.decode(SingleResponse.self, from: data)
-                 completion(.success(wrapper.data.product))
-             } catch {
+                let wrapper = try decoder.decode(SingleResponse.self, from: data)
+                completion(.success(wrapper.data.product))
+            } catch {
                 print("APIService.fetchUserProduct decode error: \(error)")
                 completion(.failure(.decodingError)); return
-             }
+            }
         }.resume()
     }
     
@@ -750,25 +822,24 @@ class APIService {
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        struct ResponseWrapper: Decodable {
+        struct CreateResponse: Decodable {
             let status: String
             let data: DataContainer
             struct DataContainer: Decodable {
-                let product: BackendUserProduct
+                let product: ProductIdOnly
+                struct ProductIdOnly: Decodable { let id: String; enum CodingKeys: String, CodingKey { case id = "_id" } }
             }
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
 
         return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { data, response -> Data in
-                guard let http = response as? HTTPURLResponse,
-                      (200...299).contains(http.statusCode) else {
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    if let http = response as? HTTPURLResponse, http.statusCode == 401 { throw APIError.authenticationRequired }
                     throw APIError.invalidResponse
                 }
                 return data
             }
-            .decode(type: ResponseWrapper.self, decoder: decoder)
+            .decode(type: CreateResponse.self, decoder: JSONDecoder())
             .map { $0.data.product.id }
             .mapError { error in
                 if let apiErr = error as? APIError { return apiErr }

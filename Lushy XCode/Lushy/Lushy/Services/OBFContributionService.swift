@@ -2,57 +2,36 @@ import Foundation
 import Combine
 import UIKit
 import SwiftUI
-import KeychainSwift
 
 class OBFContributionService {
     static let shared = OBFContributionService()
     
     private let baseUrl = "https://world.openbeautyfacts.org/cgi"
-    private let keychain = KeychainSwift()
-    
-    // Secure storage keys for OBF credentials
-    private let obfUserIdKey = "obf_user_id"
-    private let obfPasswordKey = "obf_user_password"
     
     // Request identifiers to track uploads in progress
     private var pendingUploads = Set<UUID>()
     
-    private init() {
-        // Initialize keychain if needed
-    }
+    private init() {}
     
-    /// Retrieve credentials from Keychain
+    // System credentials fetched from Info.plist (populate via build settings / xcconfig, not source control)
     private func getCredentials() -> (userId: String, password: String)? {
-        if let user = keychain.get(obfUserIdKey),
-           let pass = keychain.get(obfPasswordKey),
-           !user.isEmpty, !pass.isEmpty {
-            return (user, pass)
+        guard let user = Bundle.main.object(forInfoDictionaryKey: "OBF_SYSTEM_USER_ID") as? String, !user.isEmpty,
+              let pass = Bundle.main.object(forInfoDictionaryKey: "OBF_SYSTEM_PASSWORD") as? String, !pass.isEmpty else {
+            return nil
         }
-        // Removed DEBUG fallback credentials for security.
-        return nil
+        return (user, pass)
     }
     
-    /// Check if credentials are available
-    var hasCredentials: Bool {
-        return getCredentials() != nil
-    }
+    // Public flag
+    var hasCredentials: Bool { getCredentials() != nil }
     
-    /// Store credentials securely
-    func setCredentials(userId: String, password: String) {
-        keychain.set(userId, forKey: obfUserIdKey, withAccess: .accessibleAfterFirstUnlock)
-        keychain.set(password, forKey: obfPasswordKey, withAccess: .accessibleAfterFirstUnlock)
-    }
+    // Legacy API (no longer used; kept to avoid compile errors if referenced elsewhere)
+    @available(*, deprecated, message: "Manual credentials no longer supported. Provide system credentials via Info.plist.")
+    func setCredentials(userId: String, password: String) { /* no-op */ }
+    @available(*, deprecated, message: "Manual credentials no longer supported.")
+    func clearCredentials() { /* no-op */ }
     
-    /// Clear stored credentials
-    func clearCredentials() {
-        keychain.delete(obfUserIdKey)
-        keychain.delete(obfPasswordKey)
-    }
-    
-    /// Flag to track if upload is in progress
-    var isUploading: Bool {
-        return !pendingUploads.isEmpty
-    }
+    var isUploading: Bool { !pendingUploads.isEmpty }
     
     /// Format PAO to match required format (e.g., "12 M" not "12 months")
     private func formatPAO(_ pao: String) -> String {
@@ -112,11 +91,9 @@ class OBFContributionService {
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         print("⭐️ Starting OBF upload for product: \(name)")
-        
-        // Ensure we have credentials
         guard let creds = getCredentials() else {
-            let err = NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OBF credentials. Configure them in Settings."])
-            print("❌ OBF upload aborted: \(err.localizedDescription)")
+            let err = NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "OBF contribution temporarily unavailable."])
+            print("❌ OBF upload aborted: missing system credentials (check Info.plist keys OBF_SYSTEM_USER_ID / OBF_SYSTEM_PASSWORD)")
             completion(.failure(err))
             return
         }
@@ -277,7 +254,7 @@ class OBFContributionService {
         
         // Ensure we have credentials
         guard let creds = getCredentials() else {
-            completion(.failure(NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OBF credentials. Configure them in Settings."])) )
+            completion(.failure(NSError(domain: "OBFContributionService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing system OBF credentials."])) )
             return
         }
         
@@ -338,9 +315,10 @@ class OBFContributionService {
         task.resume()
     }
     
-    /// Retrieve stored user id (non-sensitive). Returns nil if none.
+    /// Retrieve stored user id (non-sensitive). Returns nil if none (system credentials hidden)
     func storedUserId() -> String? {
-        return keychain.get(obfUserIdKey)
+        guard let creds = getCredentials() else { return nil }
+        return creds.userId
     }
 }
 

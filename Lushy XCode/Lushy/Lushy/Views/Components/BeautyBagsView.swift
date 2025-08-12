@@ -53,7 +53,7 @@ struct AddBagSheet: View {
     @ObservedObject var viewModel: BeautyBagViewModel
     @Environment(\.presentationMode) var presentationMode
     let iconOptions = ["bag.fill", "shippingbox.fill", "case.fill", "suitcase.fill", "heart.fill", "star.fill"]
-    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach", "blue", "green"]
+    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"]
 
     var body: some View {
         NavigationView {

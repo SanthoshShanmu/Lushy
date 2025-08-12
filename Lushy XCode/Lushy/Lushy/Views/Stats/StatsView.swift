@@ -296,7 +296,7 @@ struct StatsView: View {
                         ForEach(Array(tags.prefix(2)), id: \.self) { tag in
                             HStack(spacing: 3) {
                                 Circle()
-                                    .fill(Color(tag.color ?? "blue"))
+                                    .fill(Color(tag.color ?? "lushyPink"))
                                     .frame(width: 7, height: 7)
                                 Text(tag.name ?? "")
                                     .font(.system(size: 10))
@@ -304,7 +304,7 @@ struct StatsView: View {
                             }
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color(tag.color ?? "blue").opacity(0.10))
+                            .background(Color(tag.color ?? "lushyPink").opacity(0.10))
                             .cornerRadius(8)
                         }
                     }
@@ -594,7 +594,7 @@ struct StatsView: View {
     }
     
     private func randomColor(for string: String) -> Color {
-        let colors: [Color] = [.lushyPink, .lushyPurple, .blue, .green, .orange, .yellow]
+        let colors: [Color] = [.lushyPink, .lushyPurple, .lushyMint, .lushyPeach, .lushyCream]
         var hash = 0
         for char in string.unicodeScalars {
             hash = Int(char.value) + ((hash << 5) - hash)

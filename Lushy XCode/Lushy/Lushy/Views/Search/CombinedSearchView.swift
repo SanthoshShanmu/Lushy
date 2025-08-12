@@ -52,7 +52,7 @@ struct CombinedSearchView: View {
                 .background(.ultraThinMaterial)
                 .cornerRadius(12)
                 .padding(.horizontal, 20)
-                .onChange(of: viewModel.query) { _ in viewModel.search() }
+                .onChange(of: viewModel.query) { _, _ in viewModel.search() }
                 .onSubmit { viewModel.search() }
 
             // Results or states

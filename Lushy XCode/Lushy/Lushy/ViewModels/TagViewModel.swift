@@ -5,7 +5,7 @@ import SwiftUI
 class TagViewModel: ObservableObject {
     @Published var tags: [ProductTag] = []
     @Published var newTagName: String = ""
-    @Published var newTagColor: String = "blue"
+    @Published var newTagColor: String = "lushyPink"
     
     private var cancellables = Set<AnyCancellable>()
 
@@ -77,7 +77,7 @@ class TagViewModel: ObservableObject {
                 _ = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id)
                 self.fetchTags()
                 self.newTagName = ""
-                self.newTagColor = "blue"
+                self.newTagColor = "lushyPink"
             })
             .store(in: &cancellables)
     }

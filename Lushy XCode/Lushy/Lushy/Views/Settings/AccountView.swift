@@ -16,16 +16,10 @@ struct AccountView: View {
     @State private var selectedRegion = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
     
     // Add these state properties at the top of AccountView:
-    @State private var showingOBFCredentialsSheet = false
-    @State private var contributionCount = 0 // This would be loaded from local storage or API
+    @State private var contributionCount = 0 // Only display
     
     // Add state to track if profile has been fetched
     @State private var hasFetchedProfile = false
-    
-    // OBF testing/alerts state
-    @State private var obfConnectionTesting = false
-    @State private var obfConnectionResult: String? = nil
-    @State private var showingOBFAlert = false
     
     var body: some View {
         ScrollView {
@@ -51,7 +45,7 @@ struct AccountView: View {
                             Button("Refresh Page") {
                                 fetchUserProfile()
                             }
-                            .foregroundColor(.blue)
+                            .foregroundColor(.lushyPink)
                         }
                         .font(.caption)
                     }
@@ -102,7 +96,7 @@ struct AccountView: View {
                                 NotificationCenter.default.post(name: NSNotification.Name("ShowLogin"), object: nil)
                             }) {
                                 Text("Log in to sync your products")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(.lushyPink)
                             }
                         }
                         .padding(.vertical, 8)
@@ -186,11 +180,17 @@ struct AccountView: View {
                     // Use new API for iOS 17+
                     .onChange(of: selectedRegion) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "userRegion")
+                        if let userId = AuthService.shared.userId {
+                            APIService.shared.updateUserSettings(userId: userId, region: newValue) { _ in }
+                        }
                     }
                     #else
                     // Use old API for iOS 16 and earlier
                     .onChange(of: selectedRegion) { newValue in
                         UserDefaults.standard.set(newValue, forKey: "userRegion")
+                        if let userId = AuthService.shared.userId {
+                            APIService.shared.updateUserSettings(userId: userId, region: newValue) { _ in }
+                        }
                     }
                     #endif
                     
@@ -203,88 +203,27 @@ struct AccountView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Open Beauty Facts").font(.headline)
                     
-                    Toggle("Auto-contribute new products", isOn: Binding(
-                        get: {
-                            // Default to true if never set (first time users)
-                            let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-                            return hasSetPreference ?
-                                UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") :
-                                true
-                        },
-                        set: { UserDefaults.standard.set($0, forKey: "auto_contribute_to_obf") }
-                    ))
-                    
-                    Text("Automatically upload products not found in the database to Open Beauty Facts")
+                    Text("Products you add that are not already in Open Beauty Facts are automatically contributed using the app's system account.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
-                    Button(action: {
-                        showingOBFCredentialsSheet = true
-                    }) {
-                        Label("Set OBF Credentials", systemImage: "key.fill")
-                    }
-                    
-                    // Show current stored OBF user id (non-sensitive)
-                    if let obfUser = OBFContributionService.shared.storedUserId(), !obfUser.isEmpty {
-                        HStack {
-                            Image(systemName: "person.text.rectangle")
-                            Text("OBF User: \(obfUser)")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                        }
-                    } else {
-                        Text("OBF User: Not set")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    
-                    // Test connection button
-                    Button(action: {
-                        obfConnectionTesting = true
-                        OBFContributionService.shared.testConnection { ok in
-                            DispatchQueue.main.async {
-                                obfConnectionTesting = false
-                                obfConnectionResult = ok ? "Successfully connected to Open Beauty Facts." : "Could not reach Open Beauty Facts. Please check your connection."
-                                showingOBFAlert = true
-                            }
-                        }
-                    }) {
-                        if obfConnectionTesting {
-                            HStack {
-                                ProgressView()
-                                Text("Testing OBF Connection...")
-                            }
-                        } else {
-                            Label("Test OBF Connection", systemImage: "network")
-                        }
-                    }
-                    
-                    // Clear credentials
-                    Button(role: .destructive) {
-                        OBFContributionService.shared.clearCredentials()
-                        obfConnectionResult = "OBF credentials cleared."
-                        showingOBFAlert = true
-                    } label: {
-                        Label("Clear OBF Credentials", systemImage: "trash")
-                    }
+                        .fixedSize(horizontal: false, vertical: true)
                     
                     Text("You've contributed \(contributionCount) products")
                         .font(.body)
                     
                     let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
                     if !contributions.isEmpty {
-                        NavigationLink("View My Contributions (\(contributions.count))") {
+                        NavigationLink("View Contributed Products (\(contributions.count))") {
                             List {
                                 ForEach(contributions, id: \.self) { productId in
-                                    Link(productId,
-                                         destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
+                                    Link(productId, destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
                                 }
                             }
-                            .navigationTitle("My Contributions")
+                            .navigationTitle("Contributions")
                         }
                     }
                     
-                    Link("View Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
+                    Link("Browse Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
                         .foregroundColor(.blue)
                 }
                 .glassCard(cornerRadius: 20)
@@ -298,8 +237,26 @@ struct AccountView: View {
                 hasFetchedProfile = true
                 fetchUserProfile()
             }
-            // Update contribution counter when view appears
+            // Update contribution counter when view appears (local fallback)
             contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count")
+            if let userId = AuthService.shared.userId {
+                APIService.shared.fetchUserSettings(userId: userId) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let resp):
+                            selectedRegion = resp.settings.region
+                            UserDefaults.standard.set(resp.settings.region, forKey: "userRegion")
+                            if let obf = resp.obf {
+                                contributionCount = obf.contributionCount
+                                UserDefaults.standard.set(obf.contributionCount, forKey: "obf_contribution_count")
+                                UserDefaults.standard.set(obf.contributedProducts, forKey: "obf_contributed_products")
+                            }
+                        case .failure(let err):
+                            print("Failed to fetch user settings: \(err.localizedDescription)")
+                        }
+                    }
+                }
+            }
         }
         .alert(isPresented: $showingLogoutConfirm) {
             Alert(
@@ -322,24 +279,10 @@ struct AccountView: View {
                     .edgesIgnoringSafeArea(.all)
                 )
         }
-        .sheet(isPresented: $showingOBFCredentialsSheet) {
-            OBFCredentialsView(isPresented: $showingOBFCredentialsSheet)
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.15), Color.lushyPurple.opacity(0.10)]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .edgesIgnoringSafeArea(.all)
-                )
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowLogin"))) { _ in
             isLoggedIn = false
             // Show login prompt via ContentView
             NotificationCenter.default.post(name: NSNotification.Name("ShowLoginPrompt"), object: nil)
-        }
-        .alert(obfConnectionResult ?? "", isPresented: $showingOBFAlert) {
-            Button("OK", role: .cancel) {}
         }
     }
     

@@ -570,7 +570,7 @@ struct GeneralProductDetailView: View {
                             AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { Color.gray.opacity(0.3) }
                                 .frame(maxWidth: .infinity, maxHeight: 200)
                         }
-                        Text(product.productName ?? "Unknown Product")
+                        Text(product.productName)
                             .font(.title2).fontWeight(.bold)
                         if let brand = product.brand {
                             Text(brand).font(.subheadline).foregroundColor(.secondary)

@@ -1,11 +1,11 @@
 import Foundation
 import Combine
-import KeychainSwift
 
 class AuthService {
     static let shared = AuthService()
     
-    private let keychain = KeychainSwift()
+    // Replaced Keychain with UserDefaults storage
+    private let defaults = UserDefaults.standard
     private let tokenKey = "lushy_auth_token"
     private let userIdKey = "lushy_user_id"
     
@@ -15,37 +15,38 @@ class AuthService {
     var cancellables = Set<AnyCancellable>()
     
     var token: String? {
-        get { keychain.get(tokenKey) }
+        get { defaults.string(forKey: tokenKey) }
         set {
-            if let newValue = newValue {
-                keychain.set(newValue, forKey: tokenKey)
+            if let value = newValue {
+                defaults.set(value, forKey: tokenKey)
                 isAuthenticated = true
             } else {
-                keychain.delete(tokenKey)
+                defaults.removeObject(forKey: tokenKey)
                 isAuthenticated = false
             }
         }
     }
     
     var userId: String? {
-        get { keychain.get(userIdKey) }
+        get { defaults.string(forKey: userIdKey) }
         set {
-            if let newValue = newValue {
-                keychain.set(newValue, forKey: userIdKey)
-                currentUserId = newValue
+            if let value = newValue {
+                defaults.set(value, forKey: userIdKey)
+                currentUserId = value
             } else {
-                keychain.delete(userIdKey)
+                defaults.removeObject(forKey: userIdKey)
                 currentUserId = nil
             }
         }
     }
     
     private init() {
-        // Check if user is already authenticated
-        if let _ = keychain.get(tokenKey),
-           let userId = keychain.get(userIdKey) {
-            self.isAuthenticated = true
-            self.currentUserId = userId
+        if let storedToken = defaults.string(forKey: tokenKey),
+           let storedUserId = defaults.string(forKey: userIdKey) {
+            token = storedToken
+            userId = storedUserId
+            isAuthenticated = true
+            currentUserId = storedUserId
         }
     }
     
