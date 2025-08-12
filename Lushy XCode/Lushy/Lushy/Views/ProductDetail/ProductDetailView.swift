@@ -20,7 +20,10 @@ struct ProductDetailView: View {
     @State private var editPAO: String = ""
     @State private var paoLabels: [String: String] = [:]
     @State private var paoOptions: [String] = []
-    @State private var paoCancellable: AnyCancellable?
+    // Track if user manually changed certain fields to avoid overriding after remote sync
+    @State private var userEditedShade = false
+    @State private var userEditedSize = false
+    @State private var userEditedSpf = false
     // New: combined associations sheet
     @State private var showAssociationsSheet = false
     // New: guard against discarding unsaved edit changes
@@ -32,21 +35,53 @@ struct ProductDetailView: View {
     @State private var showRemoveFromBagAlert = false
     @State private var bagToRemove: BeautyBag?
     @State private var showNoBagAlert = false
+    // Restore cancellable for PAO fetch
+    @State private var paoCancellable: AnyCancellable?
+    // Track if user manually changed PAO so we stop auto-syncing it
+    @State private var userEditedPAO = false
+    
+    // Extracted background gradient to reduce body complexity (fixes type-check slowdown)
+    private var backgroundGradient: LinearGradient {
+        let colors: [Color] = [
+            Color.lushyPink.opacity(0.1),
+            Color.lushyPurple.opacity(0.05),
+            Color.white
+        ]
+        return LinearGradient(gradient: Gradient(colors: colors), startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    
+    // Fallback PAO options if taxonomy fetch fails or is empty
+    private let fallbackPAOOptions = ["3M","6M","9M","12M","18M","24M","36M"]
+    
+    // Precomputed PAO list to reduce type-check complexity
+    private var allPAOCodes: [String] {
+        let union = Set(fallbackPAOOptions).union(Set(paoOptions))
+        return union.sorted { (a,b) in
+            let aNum = Int(a.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+            let bNum = Int(b.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+            return aNum < bNum
+        }
+    }
     
     // Helper to refetch PAO taxonomy on demand
     private func fetchPAOTaxonomy() {
         paoCancellable = APIService.shared.fetchPAOTaxonomy()
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
-                // No-op; UI offers retry if options remain empty
+                if paoOptions.isEmpty { paoLabels = Dictionary(uniqueKeysWithValues: fallbackPAOOptions.map { ($0, $0) }); paoOptions = fallbackPAOOptions }
             }, receiveValue: { dict in
-                paoLabels = dict
-                let sortedKeys = dict.keys.sorted { lhs, rhs in
+                var normalized: [String:String] = [:]
+                for (rawKey, label) in dict { normalized[rawKey.replacingOccurrences(of: " ", with: "")] = label }
+                // Always include quick presets even if backend omits them
+                for preset in fallbackPAOOptions where normalized[preset] == nil { normalized[preset] = preset }
+                paoLabels = normalized
+                let sortedKeys = normalized.keys.sorted { lhs, rhs in
                     let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
                     let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
                     return lhsNum < rhsNum
                 }
                 paoOptions = sortedKeys
+                if !editPAO.isEmpty && !paoOptions.contains(editPAO) { paoOptions.append(editPAO) }
             })
     }
     
@@ -61,143 +96,176 @@ struct ProductDetailView: View {
         return nil
     }
     
-    var body: some View {
-        ZStack {
-            // Dreamy gradient background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.lushyPink.opacity(0.1),
-                    Color.lushyPurple.opacity(0.05),
-                    Color.white
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .edgesIgnoringSafeArea(.all)
-            
-            ScrollView {
-                VStack(alignment: .leading, spacing: 25) {
-                    // Product header with dreamy styling
-                    _PrettyProductHeader(viewModel: viewModel)
-                    
-                    // Compliance & Dates
-                    _PrettyComplianceSection(viewModel: viewModel)
-                    
-                    // Usage info with soft cards
-                    _PrettyUsageInfo(viewModel: viewModel)
-                    
-                    // Actions with bubbly buttons
-                    _PrettyActionButtons(viewModel: viewModel)
-                    
-                    // Comments with soft styling
-                    _PrettyCommentsSection(viewModel: viewModel)
-                    
-                    // Reviews with girly theme
-                    _PrettyReviewsSection(viewModel: viewModel)
-                    
-                    // Bags & Tags with soft design
-                    _PrettyBagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
-                    _PrettyTagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
-                    
-                    // Soft delete option (now: remove from bag(s))
-                    Button(action: {
-                        let bags = viewModel.bagsForProduct()
-                        if bags.isEmpty {
-                            showNoBagAlert = true
-                        } else if bags.count == 1 {
-                            bagToRemove = bags.first
-                            showRemoveFromBagAlert = true
-                        } else {
-                            // Open assign sheet to uncheck desired bag(s)
-                            showAssignSheet = true
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "bag.badge.minus")
-                                .font(.system(size: 14, weight: .medium))
-                            Text("Remove from beauty bag")
-                                .font(.footnote)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 15)
-                        .padding(.horizontal, 20)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.gray.opacity(0.1))
-                        )
-                    }
-                    .padding(.top, 10)
-                    .padding(.horizontal)
+    // Break out scroll main content
+    private var mainScrollContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 25) {
+                // Product header with dreamy styling
+                _PrettyProductHeader(viewModel: viewModel)
+                
+                // Compliance & Dates
+                _PrettyComplianceSection(viewModel: viewModel)
+                
+                // Usage info with soft cards
+                _PrettyUsageInfo(viewModel: viewModel)
+                
+                // Actions with bubbly buttons
+                _PrettyActionButtons(viewModel: viewModel)
+                
+                // Comments with soft styling
+                _PrettyCommentsSection(viewModel: viewModel)
+                
+                // Reviews with girly theme
+                _PrettyReviewsSection(viewModel: viewModel)
+                
+                // Bags & Tags with soft design
+                _PrettyBagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
+                _PrettyTagsSection(viewModel: viewModel, showAssignSheet: $showAssignSheet)
+                
+                // Soft delete option (now: remove from bag(s))
+                removeFromBagButton
+            }
+            .padding(.bottom, 30)
+        }
+        .refreshable {
+            viewModel.fetchBagsAndTags(); viewModel.refreshRemoteDetail()
+        }
+    }
+    
+    private var removeFromBagButton: some View {
+        Button(action: {
+            let bags = viewModel.bagsForProduct()
+            if bags.isEmpty { showNoBagAlert = true }
+            else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
+            else { showAssignSheet = true }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "bag.badge.minus").font(.system(size: 14, weight: .medium))
+                Text("Remove from beauty bag").font(.footnote).fontWeight(.medium)
+            }
+            .foregroundColor(.secondary)
+            .padding(.vertical, 15).padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 20).fill(Color.gray.opacity(0.1)))
+        }
+        .padding(.top, 10).padding(.horizontal)
+    }
+    
+    // Error overlay extracted
+    @ViewBuilder private var errorOverlay: some View {
+        if let err = viewModel.error, !err.isEmpty {
+            VStack {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.white)
+                    Text(err).foregroundColor(.white).font(.subheadline)
+                    Spacer(minLength: 8)
+                    Button("Retry") { viewModel.refreshRemoteDetail(); viewModel.error = nil }
+                        .padding(8).background(Color.white.opacity(0.2)).cornerRadius(8).foregroundColor(.white)
+                    Button(action: { viewModel.error = nil }) { Image(systemName: "xmark.circle.fill").foregroundColor(.white) }
                 }
-                .padding(.bottom, 30)
+                .padding()
+                .background(Color.red.opacity(0.9))
+                .cornerRadius(14)
+                .padding(.horizontal)
+                .padding(.bottom, 20)
             }
-            .refreshable {
-                viewModel.fetchBagsAndTags()
-                viewModel.refreshRemoteDetail()
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+    
+    // Extracted toolbar menu to reduce type-check complexity in body
+    private var moreMenu: some View {
+        Menu {
+            // Delete full product
+            Button(role: .destructive) { showingDeleteAlert = true } label: {
+                Label("Remove Product", systemImage: "trash")
             }
+            // Remove from bag(s)
+            Button {
+                let bags = viewModel.bagsForProduct()
+                if bags.isEmpty { showNoBagAlert = true }
+                else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
+                else { showAssignSheet = true }
+            } label: { Label("Remove from Bag(s)…", systemImage: "bag.badge.minus") }
+            
+            Button {
+                viewModel.toggleFavorite()
+            } label: {
+                Label(
+                    viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
+                    systemImage: viewModel.product.favorite ? "heart.slash" : "heart"
+                )
+            }
+            
+            Button {
+                prepareEditSheet()
+                showEditSheet = true
+            } label: { Label("Edit", systemImage: "pencil") }
+            
+            if let barcode = viewModel.product.barcode, !barcode.isEmpty {
+                Button { UIPasteboard.general.string = barcode } label: {
+                    Label("Copy Barcode", systemImage: "doc.on.doc")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .font(.system(size: 20))
+                .foregroundColor(.lushyPink)
+        }
+    }
+    
+    // Helper to prepare edit sheet values (single source of truth)
+    private func prepareEditSheet() {
+        let p = viewModel.product
+        editName = p.productName ?? ""
+        editBrand = p.brand ?? ""
+        editShade = p.shade ?? ""
+        editSizeText = p.sizeInMl > 0 ? String(format: "%.0f", p.sizeInMl) : ""
+        editSpfText = p.spf > 0 ? String(p.spf) : ""
+        editPurchaseDate = p.purchaseDate ?? Date()
+        editIsOpened = p.openDate != nil
+        editOpenDate = p.openDate ?? Date()
+        editPAO = (p.periodsAfterOpening ?? "").replacingOccurrences(of: " ", with: "")
+        userEditedShade = false
+        userEditedSize = false
+        userEditedSpf = false
+        userEditedPAO = false
+        if paoOptions.isEmpty { paoLabels = Dictionary(uniqueKeysWithValues: fallbackPAOOptions.map { ($0, $0) }); paoOptions = fallbackPAOOptions }
+        if !editPAO.isEmpty && !paoOptions.contains(editPAO) { paoOptions.append(editPAO) }
+        fetchPAOTaxonomy()
+    }
+    
+    // Sync current product fields into edit form unless user already modified them
+    private func syncEditFieldsFromProduct(force: Bool) {
+        // Only proceed if sheet is showing or forced
+        if !showEditSheet && !force { return }
+        let p = viewModel.product
+        // Name & brand always sync if force OR fields still match previous baseline (empty when opened)
+        if force || editName.isEmpty { editName = p.productName ?? "" }
+        if force || editBrand.isEmpty { editBrand = p.brand ?? "" }
+        if force || (!userEditedShade) { editShade = p.shade ?? "" }
+        if force || (!userEditedSize) { editSizeText = p.sizeInMl > 0 ? String(format: "%.0f", p.sizeInMl) : "" }
+        if force || (!userEditedSpf) { editSpfText = p.spf > 0 ? String(p.spf) : "" }
+        if force || editPurchaseDate == Date() { editPurchaseDate = p.purchaseDate ?? Date() }
+        editIsOpened = p.openDate != nil
+        if let od = p.openDate { editOpenDate = od }
+        if (force || editPAO.isEmpty) && !userEditedPAO { editPAO = (p.periodsAfterOpening ?? "").replacingOccurrences(of: " ", with: "") }
+    }
+    
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // Dreamy gradient background (extracted)
+            backgroundGradient.ignoresSafeArea()
+            
+            mainScrollContent
+            
+            errorOverlay
         }
         .navigationTitle("Beauty Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    // Delete full product
-                    Button(role: .destructive) {
-                        showingDeleteAlert = true
-                    } label: {
-                        Label("Remove Product", systemImage: "trash")
-                    }
-                    // Remove from bag(s)
-                    Button {
-                        let bags = viewModel.bagsForProduct()
-                        if bags.isEmpty { showNoBagAlert = true }
-                        else if bags.count == 1 { bagToRemove = bags.first; showRemoveFromBagAlert = true }
-                        else { showAssignSheet = true }
-                    } label: {
-                        Label("Remove from Bag(s)…", systemImage: "bag.badge.minus")
-                    }
-                    
-                    Button {
-                        viewModel.toggleFavorite()
-                    } label: {
-                        Label(
-                            viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
-                            systemImage: viewModel.product.favorite ? "heart.slash" : "heart"
-                        )
-                    }
-                    
-                    Button {
-                        // Prefill edit fields
-                        editName = viewModel.product.productName ?? ""
-                        editBrand = viewModel.product.brand ?? ""
-                        editShade = viewModel.product.shade ?? ""
-                        editSizeText = viewModel.product.sizeInMl > 0 ? String(format: "%.0f", viewModel.product.sizeInMl) : ""
-                        editSpfText = viewModel.product.spf > 0 ? String(viewModel.product.spf) : ""
-                        editPurchaseDate = viewModel.product.purchaseDate ?? Date()
-                        editIsOpened = viewModel.product.openDate != nil
-                        editOpenDate = viewModel.product.openDate ?? Date()
-                        editPAO = viewModel.product.periodsAfterOpening ?? ""
-                        // Fetch PAO taxonomy
-                        fetchPAOTaxonomy()
-                        showEditSheet = true
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    
-                    if let barcode = viewModel.product.barcode, !barcode.isEmpty {
-                        Button {
-                            UIPasteboard.general.string = barcode
-                        } label: {
-                            Label("Copy Barcode", systemImage: "doc.on.doc")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.lushyPink)
-                }
+                moreMenu
             }
         }
         .alert(isPresented: $showingDeleteAlert) {
@@ -239,10 +307,10 @@ struct ProductDetailView: View {
                     Section(header: Text("Details")) {
                         TextField("Name", text: $editName)
                         TextField("Brand", text: $editBrand)
-                        TextField("Shade", text: $editShade)
-                        TextField("Size (ml)", text: $editSizeText)
+                        TextField("Shade", text: Binding(get: { editShade }, set: { editShade = $0; userEditedShade = true }))
+                        TextField("Size (ml)", text: Binding(get: { editSizeText }, set: { editSizeText = $0; userEditedSize = true }))
                             .keyboardType(.decimalPad)
-                        TextField("SPF", text: $editSpfText)
+                        TextField("SPF", text: Binding(get: { editSpfText }, set: { editSpfText = $0; userEditedSpf = true }))
                             .keyboardType(.numberPad)
                     }
                     Section(header: Text("Dates")) {
@@ -250,39 +318,23 @@ struct ProductDetailView: View {
                         Toggle("Opened", isOn: $editIsOpened)
                         if editIsOpened {
                             DatePicker("Open Date", selection: $editOpenDate, displayedComponents: .date)
-                            Picker("PAO", selection: $editPAO) {
-                                ForEach(paoOptions, id: \.self) { code in
-                                    Text(paoLabels[code] ?? code).tag(code)
-                                }
+                        }
+                    }
+                    // Simplified PAO selection UX (chips only)
+                    Section(header: Text("Shelf Life (PAO)")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            FlexibleChips(data: ["None"] + allPAOCodes, selection: $editPAO, labels: paoLabels)
+                            HStack(spacing: 12) {
+                                if !editPAO.isEmpty { Button("Clear") { editPAO = "" }.font(.caption) }
+                                if paoOptions.isEmpty { Button("Retry Load") { fetchPAOTaxonomy() }.font(.caption) }
+                                Spacer()
                             }
-                            // Quick PAO presets for better UX
-                            HStack(spacing: 8) {
-                                ForEach(["3M","6M","12M","24M"], id: \.self) { code in
-                                    Button(action: { editPAO = code }) {
-                                        Text(paoLabels[code] ?? code)
-                                            .font(.caption)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background((editPAO == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
-                                            .foregroundColor(editPAO == code ? .white : .primary)
-                                            .cornerRadius(12)
-                                    }
-                                }
-                                Button("Clear") { editPAO = "" }
-                                    .font(.caption)
-                            }
-                            // PAO taxonomy retry if list is empty
-                            if paoOptions.isEmpty {
-                                Button("Retry PAO Load") { fetchPAOTaxonomy() }
-                                    .font(.caption)
-                            }
-                            // Expiry preview when PAO is set
-                            if !editPAO.isEmpty, let preview = expiryPreview(openDate: editOpenDate, pao: editPAO) {
-                                HStack {
-                                    Image(systemName: "calendar").foregroundColor(.lushyMint)
-                                    Text("Will set expiry to \(preview)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                            // Expiry preview / advisory
+                            if !editPAO.isEmpty {
+                                if editIsOpened, let preview = expiryPreview(openDate: editOpenDate, pao: editPAO) {
+                                    HStack { Image(systemName: "calendar").foregroundColor(.lushyMint); Text("Will set expiry to \(preview)").font(.caption).foregroundColor(.secondary) }
+                                } else if !editIsOpened {
+                                    HStack { Image(systemName: "info.circle").foregroundColor(.secondary); Text("PAO applies once product is marked opened.").font(.caption).foregroundColor(.secondary) }
                                 }
                             }
                         }
@@ -292,11 +344,7 @@ struct ProductDetailView: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Cancel") {
-                            if editHasChanges {
-                                showEditDiscardConfirm = true
-                            } else {
-                                showEditSheet = false
-                            }
+                            if editHasChanges { showEditDiscardConfirm = true } else { showEditSheet = false }
                         }
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -312,55 +360,25 @@ struct ProductDetailView: View {
                                 purchaseDate: editPurchaseDate,
                                 isOpened: editIsOpened,
                                 openDate: editIsOpened ? editOpenDate : nil,
-                                periodsAfterOpening: editIsOpened ? (editPAO.isEmpty ? nil : editPAO) : nil
+                                periodsAfterOpening: editPAO.isEmpty ? nil : editPAO
                             )
                             showEditSheet = false
                         }
                         .disabled(editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
-                // Prevent swipe-down dismiss if there are unsaved edits
                 .interactiveDismissDisabled(editHasChanges)
                 .alert("Discard changes?", isPresented: $showEditDiscardConfirm) {
                     Button("Keep Editing", role: .cancel) {}
                     Button("Discard", role: .destructive) { showEditSheet = false }
-                } message: {
-                    Text("You have unsaved edits. Do you want to discard them?")
-                }
+                } message: { Text("You have unsaved edits. Do you want to discard them?") }
+                .onAppear { syncEditFieldsFromProduct(force: true) }
+                .onReceive(viewModel.$product) { _ in syncEditFieldsFromProduct(force: false) }
             }
         }
         // Unified Assign Tags & Bags Sheet
         .sheet(isPresented: $showAssignSheet) {
             AssignTagsBagsSheet(viewModel: viewModel, isPresented: $showAssignSheet)
-        }
-        // Error toast overlay with Retry
-        .overlay(alignment: .bottom) {
-            if let err = viewModel.error, !err.isEmpty {
-                VStack {
-                    HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.white)
-                        Text(err).foregroundColor(.white).font(.subheadline)
-                        Spacer(minLength: 8)
-                        Button("Retry") {
-                            viewModel.refreshRemoteDetail()
-                            viewModel.error = nil
-                        }
-                        .padding(8)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(8)
-                        .foregroundColor(.white)
-                        Button(action: { viewModel.error = nil }) {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.white)
-                        }
-                    }
-                    .padding()
-                    .background(Color.red.opacity(0.9))
-                    .cornerRadius(14)
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProductDeleted"))) { note in
             if let deletedId = note.object as? NSManagedObjectID,
@@ -407,8 +425,9 @@ struct ProductDetailView: View {
             if let pOpen = viewModel.product.openDate {
                 if Calendar.current.startOfDay(for: editOpenDate) != Calendar.current.startOfDay(for: pOpen) { return true }
             } else { return true }
-            if editPAO != (viewModel.product.periodsAfterOpening ?? "") { return true }
         }
+        // PAO comparison now independent of opened state
+        if editPAO != (viewModel.product.periodsAfterOpening ?? "") { return true }
         return false
     }
 }
@@ -839,6 +858,11 @@ private struct _PrettyCommentsSection: View {
 private struct _PrettyReviewsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
+    // Local formatter to avoid referencing outer scope helper
+    private func dateString(_ date: Date) -> String {
+        let df = DateFormatter(); df.dateStyle = .medium; return df.string(from: date)
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Reviews")
@@ -892,7 +916,7 @@ private struct _PrettyReviewsSection: View {
                 .font(.caption)
                 .padding(.top, 1)
             
-            Text(formatDate(review.createdAt ?? Date()))
+            Text(dateString(review.createdAt ?? Date()))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.top, 2)
@@ -910,12 +934,6 @@ private struct _PrettyReviewsSection: View {
                     .font(.caption)
             }
         }
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
     }
 }
 
@@ -1149,6 +1167,31 @@ private struct AssignTagsBagsSheet: View {
         for id in toRemoveTags {
             if let tag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? ProductTag {
                 viewModel.removeTagFromProduct(tag)
+            }
+        }
+    }
+}
+
+// Flexible chip layout for PAO selection
+private struct FlexibleChips: View {
+    let data: [String]
+    @Binding var selection: String
+    let labels: [String:String]
+    private let columns = [GridItem(.adaptive(minimum: 60), spacing: 8)]
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(data, id: \..self) { item in
+                Button(action: { selection = (item == "None" ? "" : item) }) {
+                    Text(item == "None" ? "None" : (labels[item] ?? item))
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(minWidth: 44)
+                        .background(selection == item || (item == "None" && selection.isEmpty) ? Color.lushyPurple : Color.gray.opacity(0.15))
+                        .foregroundColor(selection == item || (item == "None" && selection.isEmpty) ? .white : .primary)
+                        .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

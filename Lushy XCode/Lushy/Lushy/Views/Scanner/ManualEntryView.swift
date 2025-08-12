@@ -468,31 +468,42 @@ struct ManualEntryView: View {
                            selection: Binding(get: { viewModel.openDate ?? Date() },
                                                set: { viewModel.openDate = $0 }),
                            displayedComponents: .date)
-                // Better PAO UX: quick choices + labeled picker
-                Text("Period After Opening (PAO)").font(.subheadline).foregroundColor(.secondary)
-                HStack {
-                    ForEach(["3M","6M","12M","24M"], id: \.self) { code in
-                        Button(action: { periodsAfterOpening = code }) {
-                            Text(code)
-                                .font(.caption)
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background((periodsAfterOpening == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
-                                .foregroundColor(periodsAfterOpening == code ? .white : .primary)
-                                .cornerRadius(8)
-                        }
+            }
+            // PAO now independent of opened state
+            Text("Period After Opening (PAO)").font(.subheadline).foregroundColor(.secondary)
+            HStack {
+                ForEach(["3M","6M","12M","24M"], id: \.self) { code in
+                    Button(action: { periodsAfterOpening = code }) {
+                        Text(code)
+                            .font(.caption)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background((periodsAfterOpening == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
+                            .foregroundColor(periodsAfterOpening == code ? .white : .primary)
+                            .cornerRadius(8)
                     }
                 }
-                Picker("PAO", selection: $periodsAfterOpening) {
-                    ForEach(paoOptions, id: \.self) { code in
-                        Text(paoLabels[code] ?? code).tag(code)
-                    }
+                Button("Clear") { periodsAfterOpening = "" }
+                    .font(.caption)
+            }
+            Picker("PAO", selection: $periodsAfterOpening) {
+                ForEach(paoOptions, id: \.self) { code in
+                    Text(paoLabels[code] ?? code).tag(code)
                 }
-                .pickerStyle(MenuPickerStyle())
-                // Expiry preview
-                if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening) {
+            }
+            .pickerStyle(MenuPickerStyle())
+            // Expiry / advisory
+            if !periodsAfterOpening.isEmpty {
+                if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening), viewModel.isProductOpen {
                     HStack {
                         Image(systemName: "calendar").foregroundColor(.lushyMint)
                         Text("Will set expiry to \(preview)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else if !viewModel.isProductOpen {
+                    HStack {
+                        Image(systemName: "info.circle").foregroundColor(.secondary)
+                        Text("PAO will apply once you mark the product as opened.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

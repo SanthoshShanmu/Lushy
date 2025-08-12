@@ -2,6 +2,8 @@ import Foundation
 import CoreData
 import Combine
 
+extension Date { var msSinceEpoch: Int64 { Int64(self.timeIntervalSince1970 * 1000) } }
+
 class CoreDataManager {
     static let shared = CoreDataManager()
     
@@ -170,7 +172,7 @@ class CoreDataManager {
                             if let token = AuthService.shared.token {
                                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                             }
-                            let body: [String: Any] = ["openDate": openDate.timeIntervalSince1970]
+                            let body: [String: Any] = ["openDate": openDate.msSinceEpoch]
                             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                             URLSession.shared.dataTask(with: request) { _, _, _ in
                                 // Refresh feed after opening product
@@ -436,7 +438,7 @@ class CoreDataManager {
                     }
                     let body: [String: Any] = [
                         "isFinished": true,
-                        "finishDate": Date().timeIntervalSince1970
+                        "finishDate": Date().msSinceEpoch
                     ]
                     request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                     URLSession.shared.dataTask(with: request).resume()
@@ -794,13 +796,13 @@ class CoreDataManager {
                 var body: [String: Any] = [
                     "productName": productName,
                     "brand": brand ?? "",
-                    "purchaseDate": purchaseDate.timeIntervalSince1970
+                    "purchaseDate": purchaseDate.msSinceEpoch
                 ]
                 if let shade = shade { body["shade"] = shade }
                 if let sizeInMl = sizeInMl { body["sizeInMl"] = sizeInMl }
                 if let spf = spf { body["spf"] = spf }
                 if isOpened {
-                    if let od = product.openDate { body["openDate"] = od.timeIntervalSince1970 }
+                    if let od = product.openDate { body["openDate"] = od.msSinceEpoch }
                     if let pao = periodsAfterOpening { body["periodsAfterOpening"] = pao }
                 } else {
                     body["openDate"] = NSNull()

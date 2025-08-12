@@ -90,6 +90,9 @@ class APIService {
     // Base URL for our backend server
     let baseURL = URL(string: "http://localhost:5001/api")!
     
+    // Helper to convert Date to milliseconds since epoch (backend expects ms)
+    private func msSinceEpoch(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970 * 1000) }
+
     private init() {}
 
     func perform<T: Decodable>(request: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
@@ -809,7 +812,8 @@ class APIService {
             "productName": product.productName ?? "",
             "brand": product.brand ?? "",
             "imageUrl": product.imageUrl ?? "",
-            "purchaseDate": product.purchaseDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
+            // Use milliseconds to avoid being interpreted as 1970 on backend
+            "purchaseDate": product.purchaseDate != nil ? msSinceEpoch(product.purchaseDate!) : msSinceEpoch(Date()),
             "vegan": product.vegan,
             "crueltyFree": product.crueltyFree,
             "favorite": product.favorite

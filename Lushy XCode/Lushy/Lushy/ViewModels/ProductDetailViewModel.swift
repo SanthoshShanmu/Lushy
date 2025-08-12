@@ -108,12 +108,18 @@ class ProductDetailViewModel: ObservableObject {
                                 }
                             }
                         }
-                        // Sync new metadata fields
-                        if let shade = backendProd.shade {
-                            self?.product.shade = shade
+                        // Sync core metadata fields from backend (ensures edit sheet pre-populates with server values)
+                        self?.product.productName = backendProd.productName
+                        self?.product.brand = backendProd.brand
+                        self?.product.purchaseDate = backendProd.purchaseDate
+                        self?.product.openDate = backendProd.openDate // may be nil if not opened yet
+                        if let pao = backendProd.periodsAfterOpening { // allow PAO even before opened
+                            self?.product.periodsAfterOpening = pao
                         }
-                        self?.product.sizeInMl = backendProd.sizeInMl ?? 0.0
-                        self?.product.spf = Int16(backendProd.spf ?? 0)
+                        // Sync new metadata fields
+                        if let shade = backendProd.shade { self?.product.shade = shade }
+                        if let sizeValue = backendProd.sizeInMl { self?.product.sizeInMl = sizeValue }
+                        if let spfValue = backendProd.spf { self?.product.spf = Int16(spfValue) }
                         // Update bag relationships only if backend returned any
                         if let fetchedBags = backendProd.bags, !fetchedBags.isEmpty {
                             (self?.product.bags as? Set<BeautyBag> ?? []).forEach { self?.product.removeFromBags($0) }
