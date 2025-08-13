@@ -91,58 +91,90 @@ struct AddBagSheet: View {
 struct BeautyBagDetailView: View {
     let bag: BeautyBag
     @StateObject private var viewModel = BeautyBagViewModel()
-    @State private var isGridView: Bool = false
+    @State private var showHowToAdd = false
+    // Inject shared tab selection so we can switch tabs directly
+    @EnvironmentObject private var tabSelection: TabSelection
+    @Environment(\.dismiss) private var dismiss
 
-    private let gridColumns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
+    // Empty state view
+    @ViewBuilder private var emptyStateView: some View {
+        VStack(spacing: 26) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [.lushyPink.opacity(0.15), .lushyPurple.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 140, height: 140)
+                Image(systemName: "bag.badge.plus")
+                    .font(.system(size: 62, weight: .semibold))
+                    .foregroundColor(.lushyPink)
+            }
+            VStack(spacing: 8) {
+                Text("This bag is feeling a little empty ✨")
+                    .font(.title3).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                Text("Start by scanning a product barcode or add one manually to curate your collection.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+            }
+            HStack(spacing: 14) {
+                Button(action: {
+                    // Directly switch to the Scan tab instead of using NotificationCenter
+                    withAnimation { tabSelection.selected = .scan }
+                    // Dismiss this detail view after switching tabs
+                    dismiss()
+                }) {
+                    Label("Scan Product", systemImage: "barcode.viewfinder")
+                        .padding(.vertical, 14).padding(.horizontal, 18)
+                        .frame(maxWidth: .infinity)
+                        .background(LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                Button(action: { showHowToAdd = true }) {
+                    Label("How to Add", systemImage: "questionmark.circle")
+                        .padding(.vertical, 14).padding(.horizontal, 18)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.lushyPink.opacity(0.12))
+                        .foregroundColor(.lushyPink)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(isPresented: $showHowToAdd) {
+            VStack(spacing: 24) {
+                Text("Adding Products")
+                    .font(.title2).fontWeight(.bold)
+                VStack(alignment: .leading, spacing: 16) {
+                    Label("Tap Scan tab to scan a barcode and auto‑fill details.", systemImage: "barcode.viewfinder")
+                    Label("Or use Manual Entry from the scanner for products without barcodes.", systemImage: "square.and.pencil")
+                    Label("After adding, assign it to this bag in the product detail screen.", systemImage: "bag")
+                }
+                .font(.callout)
+                .foregroundColor(.secondary)
+                Button("Got it") { showHowToAdd = false }
+                    .padding(.horizontal, 32).padding(.vertical, 12)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.lushyPink))
+                    .foregroundColor(.white)
+            }
+            .padding(30)
+            .presentationDetents([.medium])
+        }
+    }
 
     var body: some View {
-        VStack {
-            Picker("", selection: $isGridView) {
-                Label("List", systemImage: "list.bullet").tag(false)
-                Label("Grid", systemImage: "square.grid.2x2.fill").tag(true)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(.horizontal)
-
-            if isGridView {
-                ScrollView {
-                    LazyVGrid(columns: gridColumns, spacing: 16) {
-                        ForEach(viewModel.products(in: bag), id: \.self) { product in
-                            NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: product))) {
-                                VStack(spacing: 8) {
-                                    // Optional thumbnail image
-                                    if let imageUrl = product.imageUrl,
-                                       let url = URL(string: imageUrl), url.isFileURL,
-                                       let uiImage = UIImage(contentsOfFile: url.path) {
-                                        Image(uiImage: uiImage)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(height: 60)
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    }
-                                    Text(product.productName ?? "Unnamed Product")
-                                        .font(.caption)
-                                        .multilineTextAlignment(.center)
-                                        .lineLimit(2)
-                                }
-                                .frame(height: 100)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color(.systemBackground))
-                                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                                )
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
+        let products = viewModel.products(in: bag)
+        Group {
+            if products.isEmpty {
+                emptyStateView
             } else {
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        ForEach(viewModel.products(in: bag), id: \.self) { product in
+                        ForEach(products, id: \.self) { product in
                             NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: product))) {
                                 PrettyProductRow(product: product)
                                     .frame(height: 80)
@@ -157,7 +189,6 @@ struct BeautyBagDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             viewModel.fetchBags()
-            // Refresh all products metadata from backend when viewing a bag
             SyncService.shared.fetchRemoteProducts()
         }
     }

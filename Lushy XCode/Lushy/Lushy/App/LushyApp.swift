@@ -5,6 +5,7 @@ import CoreData
 struct LushyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var tabSelection = TabSelection()
     @State private var showSplash = true
     @Environment(\.scenePhase) private var scenePhase
     @State private var lastBackgroundDate: Date?
@@ -20,13 +21,16 @@ struct LushyApp: App {
                 }
                 .edgesIgnoringSafeArea(.all) // Important for full-screen display
                 .environmentObject(authManager)
+                .environmentObject(tabSelection)
             } else if !authManager.isAuthenticated {
                 LoginView(isLoggedIn: .constant(false))
                     .environmentObject(authManager)
+                    .environmentObject(tabSelection)
             } else {
                 ContentView()
                     .environment(\.managedObjectContext, CoreDataManager.shared.viewContext)
                     .environmentObject(authManager)
+                    .environmentObject(tabSelection)
             }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
