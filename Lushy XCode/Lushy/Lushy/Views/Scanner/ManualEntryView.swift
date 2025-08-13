@@ -632,7 +632,8 @@ struct ManualEntryView: View {
         isSaving = true
         showingErrorAlert = false
         let context = CoreDataManager.shared.viewContext
-        // 1) Save locally
+        
+        // 1) Save locally first
         guard let objectID = viewModel.saveManualProduct(periodsAfterOpening: periodsAfterOpening, productImage: productImage) else {
             isSaving = false
             errorMessage = "Failed to save product locally."
@@ -655,13 +656,7 @@ struct ManualEntryView: View {
         }
         try? context.save()
 
-        // If product not found in OBF, silently contribute
-        if viewModel.productNotFound {
-            withAnimation { showingOBFSuccessToast = true }
-            viewModel.silentlyContributeToOBF(productImage: productImage)
-        }
-
-        // 2) Sync to backend using unified APIService method (removes duplicate code & date decode issues)
+        // 2) Sync to backend FIRST before OBF contribution to avoid conflicts
         print("ManualEntryView: Starting backend sync for product localID=\(objectID)")
         syncCancellable = APIService.shared.syncProductWithBackend(product: userProduct)
             .receive(on: DispatchQueue.main)
@@ -679,10 +674,14 @@ struct ManualEntryView: View {
                 print("ManualEntryView: Sync success backendId=\(backendId)")
                 userProduct.backendId = backendId
                 try? context.save()
-                // Post minimal notifications (avoid RefreshProfile storm) - feed only
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                
+                // 3) ONLY after backend sync, contribute to OBF if needed
+                if self.viewModel.productNotFound {
+                    self.viewModel.silentlyContributeToOBF(productImage: self.productImage)
+                }
+                
+                // 4) Navigate without excessive notifications
                 self.isSaving = false
-                // Navigate to detail
                 self.viewModel.selectedUserProduct = userProduct
                 self.viewModel.showProductDetail = true
                 self.dismiss()

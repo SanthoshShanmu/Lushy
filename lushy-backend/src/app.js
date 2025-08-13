@@ -3,6 +3,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 // Import routes
 const userProductRoutes = require('./routes/userProductRoutes');
@@ -36,6 +37,9 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // Enable CORS
 app.use(cors());
+
+// Serve uploaded images
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // API Routes
 app.use('/api/auth', authRoutes);

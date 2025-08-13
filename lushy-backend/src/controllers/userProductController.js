@@ -143,13 +143,21 @@ exports.getUserProduct = async (req, res) => {
 exports.createUserProduct = async (req, res) => {
   try {
     console.log('Creating product for user:', req.params.userId);
-    
-    // Add user ID to product data
+    const rawBody = req.body || {};
+    // Coerce primitive types from multipart form-data strings
+    const coerceNumber = v => (v === undefined || v === null || v === '' ? undefined : (isNaN(v) ? undefined : Number(v)));
+    if (rawBody.purchaseDate && /^(\d+)$/.test(rawBody.purchaseDate)) rawBody.purchaseDate = new Date(Number(rawBody.purchaseDate));
+    if (rawBody.openDate && /^(\d+)$/.test(rawBody.openDate)) rawBody.openDate = new Date(Number(rawBody.openDate));
+    if (rawBody.sizeInMl) rawBody.sizeInMl = coerceNumber(rawBody.sizeInMl);
+    if (rawBody.spf) rawBody.spf = coerceNumber(rawBody.spf);
     const productData = {
-      ...req.body,
-      user: new mongoose.Types.ObjectId(req.params.userId) // Fixed: added 'new'
+      ...rawBody,
+      user: new mongoose.Types.ObjectId(req.params.userId)
     };
-
+    // If image uploaded via multer
+    if (req.file) {
+      productData.imageUrl = `${req.protocol}://${req.get('host')}/uploads/products/${req.file.filename}`;
+    }
     // If barcode is provided but no product details, fetch from Open Beauty Facts
     if (productData.barcode && (!productData.productName || !productData.imageUrl)) {
       const externalData = await fetchProductDetails(productData.barcode);
@@ -272,9 +280,13 @@ exports.createUserProduct = async (req, res) => {
 // Update a product
 exports.updateUserProduct = async (req, res) => {
   try {
-    // Protect against updating userId
-    if (req.body.userId) {
-      delete req.body.userId;
+    if (req.body.userId) delete req.body.userId;
+    if (req.body.purchaseDate && /^(\d+)$/.test(req.body.purchaseDate)) req.body.purchaseDate = new Date(Number(req.body.purchaseDate));
+    if (req.body.openDate && /^(\d+)$/.test(req.body.openDate)) req.body.openDate = new Date(Number(req.body.openDate));
+    if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) req.body.sizeInMl = Number(req.body.sizeInMl);
+    if (req.body.spf && /^(\d+)$/.test(req.body.spf)) req.body.spf = Number(req.body.spf);
+    if (req.file) {
+      req.body.imageUrl = `${req.protocol}://${req.get('host')}/uploads/products/${req.file.filename}`;
     }
 
     // Calculate expiry date if openDate is being updated
@@ -562,12 +574,41 @@ exports.deleteUserProduct = async (req, res) => {
       });
     }
 
-    res.status(204).json({
+    // Cascade delete ALL activities related to this product
+    try {
+      const Activity = require('../models/activity');
+      
+      // Delete activities that directly target this product
+      const directResult = await Activity.deleteMany({
+        user: new mongoose.Types.ObjectId(req.params.userId),
+        targetType: 'UserProduct',
+        targetId: product._id
+      });
+      
+      // Also delete activities that might reference this product indirectly
+      // (like bag activities where the product was mentioned in description)
+      const indirectResult = await Activity.deleteMany({
+        user: new mongoose.Types.ObjectId(req.params.userId),
+        $or: [
+          // Activities where targetId matches the product ID regardless of targetType
+          { targetId: product._id },
+          // Activities that mention the product name in description
+          { description: { $regex: product.productName, $options: 'i' } }
+        ]
+      });
+      
+      const totalDeleted = directResult.deletedCount + indirectResult.deletedCount;
+      console.log(`Deleted product ${product._id} and ${totalDeleted} related activities (${directResult.deletedCount} direct, ${indirectResult.deletedCount} indirect).`);
+    } catch (e) {
+      console.error('Failed to cascade delete activities for product', product._id, e);
+    }
+
+    return res.status(204).json({
       status: 'success',
       data: null
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       status: 'error',
       message: error.message
     });
@@ -593,7 +634,7 @@ exports.getPAOTaxonomy = async (req, res) => {
 
 // Helper function to extract months from period string like "12 months"
 function extractMonths(periodString) {
-  const pattern = /(\\d+)\\s*[Mm]/;
+  const pattern = /(\d+)\s*[Mm]/;
   const match = periodString.match(pattern);
   
   if (match && match[1]) {

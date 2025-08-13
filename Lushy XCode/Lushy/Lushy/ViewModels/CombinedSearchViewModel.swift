@@ -2,11 +2,7 @@ import Foundation
 import Combine
 
 class CombinedSearchViewModel: ObservableObject {
-    @Published var query: String = "" {
-        didSet { search() }
-    }
-    // Debug: print when search is triggered
-    // Search is called via onChange in the view
+    @Published var query: String = ""
 
     @Published var userResults: [UserSummary] = []
     @Published var productResults: [ProductSearchSummary] = []
@@ -15,9 +11,24 @@ class CombinedSearchViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    func search() {
-        print("CombinedSearchViewModel.search: querying for '\(query)'")
-        guard !query.isEmpty else {
+    init() {
+        // Debounce query to avoid firing multiple rapid network requests
+        $query
+            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] value in
+                self?.search(for: value)
+            }
+            .store(in: &cancellables)
+    }
+
+    func search() { // legacy call sites
+        search(for: query)
+    }
+
+    private func search(for value: String) {
+        print("CombinedSearchViewModel.search: querying for '\(value)'")
+        guard !value.isEmpty else {
             DispatchQueue.main.async {
                 self.userResults = []
                 self.productResults = []
@@ -29,8 +40,9 @@ class CombinedSearchViewModel: ObservableObject {
         error = nil
 
         // Search users
-        APIService.shared.searchUsers(query: query) { result in
+        APIService.shared.searchUsers(query: value, completion: { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self else { return }
                 switch result {
                 case .success(let users):
                     self.userResults = users
@@ -38,11 +50,12 @@ class CombinedSearchViewModel: ObservableObject {
                     self.error = err.localizedDescription
                 }
             }
-        }
+        })
 
         // Search products with fallback
-        APIService.shared.searchProducts(query: query) { result in
+        APIService.shared.searchProducts(query: value) { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self else { return }
                 self.isLoading = false
                 switch result {
                 case .success(let products):

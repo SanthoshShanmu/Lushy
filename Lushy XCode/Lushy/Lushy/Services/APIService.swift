@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 enum APIError: Error, Equatable {
     case invalidURL
@@ -61,6 +62,8 @@ enum APIError: Error, Equatable {
 struct UserSearchResponse: Codable {
     let users: [UserSummary]
 }
+// Provide legacy alias expected by callers
+typealias UserSummaryResponse = [UserSummary]
 
 struct FeedResponse: Codable {
     let feed: [Activity]
@@ -290,6 +293,52 @@ class APIService {
         }.resume()
     }
     
+    // MARK: - Activity Interactions (Likes & Comments)
+    func likeActivity(activityId: String, completion: @escaping (Result<(likes: Int, liked: Bool), Error>) -> Void) {
+        let url = baseURL
+            .appendingPathComponent("activities")
+            .appendingPathComponent(activityId)
+            .appendingPathComponent("like")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
+                completion(.failure(APIError.invalidResponse)); return
+            }
+            struct LikeResp: Decodable { let likes: Int; let liked: Bool }
+            do {
+                let resp = try JSONDecoder().decode(LikeResp.self, from: data)
+                completion(.success((likes: resp.likes, liked: resp.liked)))
+            } catch { completion(.failure(error)) }
+        }.resume()
+    }
+    
+    func commentOnActivity(activityId: String, text: String, completion: @escaping (Result<[CommentSummary], Error>) -> Void) {
+        let url = baseURL
+            .appendingPathComponent("activities")
+            .appendingPathComponent(activityId)
+            .appendingPathComponent("comment")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let body = ["text": text]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
+                completion(.failure(APIError.invalidResponse)); return
+            }
+            struct CommentResp: Decodable { let comments: [CommentSummary] }
+            do {
+                let resp = try JSONDecoder().decode(CommentResp.self, from: data)
+                completion(.success(resp.comments))
+            } catch { completion(.failure(error)) }
+        }.resume()
+    }
+    
     func fetchUserProfile(userId: String, completion: @escaping (Result<UserProfileWrapper, Error>) -> Void) {
         let url = baseURL.appendingPathComponent("users/\(userId)/profile")
         var request = URLRequest(url: url)
@@ -348,7 +397,7 @@ class APIService {
         }.resume()
     }
 
-    func searchUsers(query: String, completion: @escaping (Result<[UserSummary], Error>) -> Void) {
+    func searchUsers(query: String, completion: @escaping (Result<UserSummaryResponse, Error>) -> Void) {
         var components = URLComponents(url: baseURL.appendingPathComponent("users/search"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         let request = URLRequest(url: components.url!)
@@ -360,6 +409,34 @@ class APIService {
                 completion(.failure(error))
             }
         }
+    }
+    // MARK: - Product Search (backend + OBF fallback handled server-side)
+    func searchProducts(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
+        var components = URLComponents(url: baseURL.appendingPathComponent("products").appendingPathComponent("search"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        guard let url = components.url else { completion(.failure(APIError.invalidURL)); return }
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = AuthService.shared.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let http = response as? HTTPURLResponse, let data = data else { completion(.failure(APIError.invalidResponse)); return }
+            guard (200...299).contains(http.statusCode) else { completion(.failure(APIError.invalidResponse)); return }
+            // Decode wrapper { status, results, data: { products: [] } }
+            struct Wrapper: Decodable {
+                let status: String
+                let results: Int?
+                let data: Inner?
+                struct Inner: Decodable { let products: [ProductSearchSummary]? }
+            }
+            do {
+                let wrapper = try JSONDecoder().decode(Wrapper.self, from: data)
+                let products = wrapper.data?.products ?? []
+                completion(.success(products))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
     }
     
     // MARK: - Open Beauty Facts API
@@ -792,46 +869,83 @@ class APIService {
     
     // Replace manual JSON parsing implementation of syncProductWithBackend with Codable decoding
 
-    func syncProductWithBackend(product: UserProduct) -> AnyPublisher<String, APIError> {
+    func syncProductWithBackend(product: UserProduct, image: UIImage? = nil) -> AnyPublisher<String, APIError> {
         guard let userId = AuthService.shared.userId else {
             return Fail(error: .authenticationRequired).eraseToAnyPublisher()
         }
-        let url = baseURL
+        // Decide create vs update
+        let isUpdate = (product.backendId != nil && !(product.backendId ?? "").isEmpty)
+        let url = isUpdate ? baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent(product.backendId!) : baseURL
             .appendingPathComponent("users")
             .appendingPathComponent(userId)
             .appendingPathComponent("products")
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        // Build payload including tags & bags
-        var payload: [String: Any] = [
+        request.httpMethod = isUpdate ? "PUT" : "POST"
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+
+        // Helper to convert to ms epoch
+        func ms(_ date: Date?) -> Int64? { guard let d = date else { return nil }; return Int64(d.timeIntervalSince1970 * 1000) }
+
+        // Build common fields
+        var fields: [String: Any] = [
             "barcode": product.barcode ?? "",
             "productName": product.productName ?? "",
             "brand": product.brand ?? "",
-            "imageUrl": product.imageUrl ?? "",
-            // Use milliseconds to avoid being interpreted as 1970 on backend
-            "purchaseDate": product.purchaseDate != nil ? msSinceEpoch(product.purchaseDate!) : msSinceEpoch(Date()),
             "vegan": product.vegan,
             "crueltyFree": product.crueltyFree,
             "favorite": product.favorite
         ]
+        if let purchase = ms(product.purchaseDate) { fields["purchaseDate"] = purchase }
+        if let open = ms(product.openDate) { fields["openDate"] = open }
+        if let pao = product.periodsAfterOpening { fields["periodsAfterOpening"] = pao }
+        if let shade = product.shade, !shade.isEmpty { fields["shade"] = shade }
+        if product.sizeInMl > 0 { fields["sizeInMl"] = product.sizeInMl }
+        if product.spf > 0 { fields["spf"] = Int(product.spf) }
         if let tagsSet = product.tags as? Set<ProductTag>, !tagsSet.isEmpty {
-            payload["tags"] = tagsSet.compactMap { $0.backendId }
+            let backendTagIds = tagsSet.compactMap { $0.backendId }
+            if !backendTagIds.isEmpty { fields["tags"] = backendTagIds }
         }
         if let bagsSet = product.bags as? Set<BeautyBag>, !bagsSet.isEmpty {
-            payload["bags"] = bagsSet.compactMap { $0.backendId }
+            let backendBagIds = bagsSet.compactMap { $0.backendId }
+            if !backendBagIds.isEmpty { fields["bags"] = backendBagIds }
         }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        struct CreateResponse: Decodable {
+        // If no image OR image already has remote URL, send JSON
+        if image == nil {
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: fields)
+        } else {
+            // Multipart form-data
+            let boundary = "Boundary-\(UUID().uuidString)"
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            var body = Data()
+            // Text fields
+            for (key, value) in fields {
+                body.appendString("--\(boundary)\r\n")
+                body.appendString("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
+                body.appendString("\(value)\r\n")
+            }
+            if let imgData = image?.jpegData(compressionQuality: 0.85) {
+                body.appendString("--\(boundary)\r\n")
+                body.appendString("Content-Disposition: form-data; name=\"image\"; filename=\"upload.jpg\"\r\n")
+                body.appendString("Content-Type: image/jpeg\r\n\r\n")
+                body.append(imgData)
+                body.appendString("\r\n")
+            }
+            body.appendString("--\(boundary)--\r\n")
+            request.httpBody = body
+        }
+
+        struct CreateOrUpdateResponse: Decodable {
             let status: String
             let data: DataContainer
             struct DataContainer: Decodable {
                 let product: ProductIdOnly
-                struct ProductIdOnly: Decodable { let id: String; enum CodingKeys: String, CodingKey { case id = "_id" } }
+                struct ProductIdOnly: Decodable { let id: String?; let _id: String? }
             }
         }
 
@@ -843,8 +957,8 @@ class APIService {
                 }
                 return data
             }
-            .decode(type: CreateResponse.self, decoder: JSONDecoder())
-            .map { $0.data.product.id }
+            .decode(type: CreateOrUpdateResponse.self, decoder: JSONDecoder())
+            .map { $0.data.product.id ?? $0.data.product._id ?? "" }
             .mapError { error in
                 if let apiErr = error as? APIError { return apiErr }
                 if error is DecodingError { return .decodingError }
@@ -854,212 +968,42 @@ class APIService {
     }
     
     // MARK: - PAO Taxonomy
-    /// Fetch periods-after-opening taxonomy from OpenBeautyFacts
-    func fetchPAOTaxonomy() -> AnyPublisher<[String: String], APIError> {
+    func fetchPAOTaxonomy() -> AnyPublisher<[String:String], APIError> {
         let urlString = "https://world.openbeautyfacts.org/periods-after-opening.json"
         guard let url = URL(string: urlString) else {
             return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
         }
+        struct Root: Decodable { struct Tag: Decodable { let id: String?; let name: String? }
+            let tags: [Tag]? }
         return URLSession.shared.dataTaskPublisher(for: url)
-            .tryMap { data, response -> Data in
-                guard let http = response as? HTTPURLResponse,
-                      (200...299).contains(http.statusCode) else {
-                    throw APIError.invalidResponse
-                }
-                return data
-            }
-            .tryMap { data -> [String: String] in
-                // JSON is a dictionary of code: label
-                guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: String] else {
-                    throw APIError.decodingError
+            .mapError { _ in APIError.networkError }
+            .map { $0.data }
+            .decode(type: Root.self, decoder: JSONDecoder())
+            .map { root -> [String:String] in
+                var dict: [String:String] = [:]
+                guard let tags = root.tags else { return dict }
+                for t in tags {
+                    guard let id = t.id, let name = t.name else { continue }
+                    // Extract digits from id to form month key
+                    let num = id.components(separatedBy: CharacterSet.decimalDigits.inverted).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !num.isEmpty {
+                        let key = num + "M"
+                        if dict[key] == nil { dict[key] = name }
+                    }
                 }
                 return dict
             }
-            .mapError { error in
-                if let apiError = error as? APIError {
-                    return apiError
-                } else if error is DecodingError {
-                    return APIError.decodingError
-                } else {
-                    return APIError.networkError
-                }
+            .mapError { err in
+                if err is DecodingError { return .decodingError }
+                return (err as? APIError) ?? .networkError
             }
             .eraseToAnyPublisher()
     }
-    
-    /// Like an activity
-    func likeActivity(activityId: String, completion: @escaping (Result<(likes: Int, liked: Bool), Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("activities/")
-            .appendingPathComponent(activityId)
-            .appendingPathComponent("like")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        if let token = AuthService.shared.token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error)); return
-            }
-            guard let data = data else {
-                completion(.failure(APIError.noData)); return
-            }
-            do {
-                struct LikeResponse: Codable { let likes: Int; let liked: Bool }
-                let resp = try JSONDecoder().decode(LikeResponse.self, from: data)
-                completion(.success((likes: resp.likes, liked: resp.liked)))
-            } catch {
-                completion(.failure(error))
-            }
-        }.resume()
-    }
+}
 
-    /// Comment on an activity
-    func commentOnActivity(activityId: String, text: String, completion: @escaping (Result<[CommentSummary], Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("activities/")
-            .appendingPathComponent(activityId)
-            .appendingPathComponent("comment")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        let body = ["text": text]
-        request.httpBody = try? JSONEncoder().encode(body)
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error)); return
-            }
-            guard let data = data else {
-                completion(.failure(APIError.noData)); return
-            }
-            do {
-                let wrapper = try JSONDecoder().decode([String: [CommentSummary]].self, from: data)
-                let comments = wrapper["comments"] ?? []
-                completion(.success(comments))
-            } catch {
-                completion(.failure(error))
-            }
-        }.resume()
-    }
-    
-    // MARK: - Product Search
-    /// Search products across all users by name
-    func searchProducts(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
-        // 1. Try backend search first so manually added (no barcode) products appear
-        var components = URLComponents(url: baseURL.appendingPathComponent("products/search"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "q", value: query)]
-        guard let url = components.url else { completion(.failure(APIError.invalidURL)); return }
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token { // optional auth
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        struct BackendSearchResponse: Decodable {
-            let status: String
-            let results: Int
-            let data: DataContainer
-            struct DataContainer: Decodable { let products: [ProductSearchSummary] }
-        }
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            // On error or invalid response, fallback immediately
-            if let _ = error { self.fallbackOBSearch(query: query, completion: completion); return }
-            guard let http = response as? HTTPURLResponse, let data = data, (200...299).contains(http.statusCode) else {
-                self.fallbackOBSearch(query: query, completion: completion); return
-            }
-            do {
-                let decoded = try JSONDecoder().decode(BackendSearchResponse.self, from: data)
-                if decoded.results == 0 {
-                    // Nothing in backend, use OBF fallback
-                    self.fallbackOBSearch(query: query, completion: completion)
-                } else {
-                    completion(.success(decoded.data.products))
-                }
-            } catch {
-                // Decoding failed, fallback to OBF
-                self.fallbackOBSearch(query: query, completion: completion)
-            }
-        }.resume()
-    }
-    
-    /// Fetch general product detail by product ID
-    func fetchProductDetail(productId: String, completion: @escaping (Result<BackendUserProduct, Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("products").appendingPathComponent(productId)
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error)); return
-            }
-            guard let data = data else {
-                completion(.failure(APIError.noData)); return
-            }
-
-            // Debug: print raw JSON for inspection
-            if let raw = String(data: data, encoding: .utf8) {
-                print("APIService.fetchProductDetail JSON: \(raw)")
-            }
-
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .custom { decoder in
-                    let container = try decoder.singleValueContainer()
-                    let dateStr = try container.decode(String.self)
-                    // Try fractional seconds parser
-                    let frac = ISO8601DateFormatter()
-                    frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                    if let d = frac.date(from: dateStr) { return d }
-                    // Fallback to standard ISO8601
-                    let basic = ISO8601DateFormatter()
-                    if let d = basic.date(from: dateStr) { return d }
-                    throw DecodingError.dataCorrupted(
-                        DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateStr)"))
-                }
-                let root = try decoder.decode(ProductDetailResponse.self, from: data)
-                completion(.success(root.data.product))
-            } catch {
-                print("APIService.fetchProductDetail decode error: \(error)")
-                completion(.failure(error))
-            }
-        }.resume()
-    }
-
-    // Wrapper for decoding product detail
-    private struct ProductDetailResponse: Codable {
-        struct DataContainer: Codable { let product: BackendUserProduct }
-        let status: String
-        let data: DataContainer
-    }
-    
-    // Client-side fallback search using OpenBeautyFacts when backend returns no results
-    private func fallbackOBSearch(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
-        var components = URLComponents(string: "https://world.openbeautyfacts.org/cgi/search.pl")!
-        components.queryItems = [
-            URLQueryItem(name: "search_terms", value: query),
-            URLQueryItem(name: "search_simple", value: "1"),
-            URLQueryItem(name: "action", value: "process"),
-            URLQueryItem(name: "json", value: "1"),
-            URLQueryItem(name: "fields", value: "code,product_name,brands,image_url,image_small_url"),
-            URLQueryItem(name: "page_size", value: "20")
-        ]
-        guard let url = components.url else {
-            completion(.failure(APIError.invalidURL)); return
-        }
-        URLSession.shared.dataTask(with: URLRequest(url: url)) { data, _, error in
-            if let error = error {
-                completion(.failure(error)); return
-            }
-            guard let data = data else {
-                completion(.failure(APIError.noData)); return
-            }
-            do {
-                struct OBResponse: Decodable { let products: [ProductSearchSummary] }
-                let resp = try JSONDecoder().decode(OBResponse.self, from: data)
-                completion(.success(resp.products))
-            } catch {
-                completion(.failure(error))
-            }
-        }.resume()
+// MARK: - Data append helper for multipart
+private extension Data {
+    mutating func appendString(_ string: String) {
+        if let d = string.data(using: .utf8) { append(d) }
     }
 }

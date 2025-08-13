@@ -27,7 +27,7 @@ struct TagSummary: Codable, Identifiable {
 // Backend user product model
 struct BackendUserProduct: Codable, Identifiable {
     let id: String
-    let barcode: String
+    let barcode: String // safe default "" when missing
     let productName: String
     let brand: String?
     let imageUrl: String?
@@ -61,6 +61,45 @@ struct BackendUserProduct: Codable, Identifiable {
         case shade
         case sizeInMl
         case spf
+    }
+
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, favorite: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?) {
+        self.id = id
+        self.barcode = barcode
+        self.productName = productName
+        self.brand = brand
+        self.imageUrl = imageUrl
+        self.purchaseDate = purchaseDate
+        self.openDate = openDate
+        self.periodsAfterOpening = periodsAfterOpening
+        self.vegan = vegan
+        self.crueltyFree = crueltyFree
+        self.favorite = favorite
+        self.tags = tags
+        self.bags = bags
+        self.shade = shade
+        self.sizeInMl = sizeInMl
+        self.spf = spf
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        barcode = (try? c.decode(String.self, forKey: .barcode)) ?? "" // default
+        productName = try c.decode(String.self, forKey: .productName)
+        brand = try? c.decode(String.self, forKey: .brand)
+        imageUrl = try? c.decode(String.self, forKey: .imageUrl)
+        purchaseDate = try c.decode(Date.self, forKey: .purchaseDate)
+        openDate = try? c.decode(Date.self, forKey: .openDate)
+        periodsAfterOpening = try? c.decode(String.self, forKey: .periodsAfterOpening)
+        vegan = (try? c.decode(Bool.self, forKey: .vegan)) ?? false
+        crueltyFree = (try? c.decode(Bool.self, forKey: .crueltyFree)) ?? false
+        favorite = (try? c.decode(Bool.self, forKey: .favorite)) ?? false
+        tags = try? c.decode([TagSummary].self, forKey: .tags)
+        bags = try? c.decode([BeautyBagSummary].self, forKey: .bags)
+        shade = try? c.decode(String.self, forKey: .shade)
+        sizeInMl = try? c.decode(Double.self, forKey: .sizeInMl)
+        spf = try? c.decode(Int.self, forKey: .spf)
     }
 }
 

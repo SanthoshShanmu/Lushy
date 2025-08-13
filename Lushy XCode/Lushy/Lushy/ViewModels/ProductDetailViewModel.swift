@@ -13,6 +13,8 @@ class ProductDetailViewModel: ObservableObject {
     @Published var allTags: [ProductTag] = []
     @Published var isLoading = false
     @Published var error: String?
+    // Flag to stop further network / observer work after deletion
+    @Published private(set) var isDeleted: Bool = false
 
     private var cancellables = Set<AnyCancellable>()
     private let productId: String
@@ -70,9 +72,12 @@ class ProductDetailViewModel: ObservableObject {
     
     /// Fetch a single product from backend and update local Core Data relationships
     func refreshRemoteDetail() {
+        // Prevent further remote lookups if product deleted
+        if isDeleted { return }
         guard let userId = AuthService.shared.userId,
               let prodBackendId = product.backendId else { return }
         APIService.shared.fetchUserProduct(userId: userId, productId: prodBackendId) { [weak self] result in
+            guard let self = self, !self.isDeleted else { return }
             switch result {
             case .success(let backendProd):
                 DispatchQueue.main.async {
@@ -83,7 +88,9 @@ class ProductDetailViewModel: ObservableObject {
                             let localTags = CoreDataManager.shared.fetchProductTags()
                             for summary in fetchedTags {
                                 if !localTags.contains(where: { $0.backendId == summary.id }) {
-                                    _ = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id)
+                                    if let newTagId = CoreDataManager.shared.createProductTag(name: summary.name, color: summary.color, backendId: summary.id) {
+                                        CoreDataManager.shared.updateProductTagBackendId(id: newTagId, backendId: summary.id)
+                                    }
                                 }
                             }
                         }
@@ -98,45 +105,49 @@ class ProductDetailViewModel: ObservableObject {
                                 }
                             }
                         }
+                        
+                        // Refresh local collections after creating new entities
+                        let refreshedTags = CoreDataManager.shared.fetchProductTags()
+                        let refreshedBags = CoreDataManager.shared.fetchBeautyBags()
+                        
                         // Update tag relationships only if backend returned any
                         if let fetchedTags = backendProd.tags, !fetchedTags.isEmpty {
-                            // Clear existing and attach new
-                            (self?.product.tags as? Set<ProductTag> ?? []).forEach { self?.product.removeFromTags($0) }
+                            (self.product.tags as? Set<ProductTag> ?? []).forEach { self.product.removeFromTags($0) }
                             for summary in fetchedTags {
-                                if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
-                                    self?.product.addToTags(tag)
+                                if let tag = refreshedTags.first(where: { $0.backendId == summary.id }) {
+                                    self.product.addToTags(tag)
                                 }
                             }
                         }
-                        // Sync core metadata fields from backend (ensures edit sheet pre-populates with server values)
-                        self?.product.productName = backendProd.productName
-                        self?.product.brand = backendProd.brand
-                        self?.product.purchaseDate = backendProd.purchaseDate
-                        self?.product.openDate = backendProd.openDate // may be nil if not opened yet
-                        if let pao = backendProd.periodsAfterOpening { // allow PAO even before opened
-                            self?.product.periodsAfterOpening = pao
-                        }
-                        // Sync new metadata fields
-                        if let shade = backendProd.shade { self?.product.shade = shade }
-                        if let sizeValue = backendProd.sizeInMl { self?.product.sizeInMl = sizeValue }
-                        if let spfValue = backendProd.spf { self?.product.spf = Int16(spfValue) }
+                        
                         // Update bag relationships only if backend returned any
                         if let fetchedBags = backendProd.bags, !fetchedBags.isEmpty {
-                            (self?.product.bags as? Set<BeautyBag> ?? []).forEach { self?.product.removeFromBags($0) }
+                            (self.product.bags as? Set<BeautyBag> ?? []).forEach { self.product.removeFromBags($0) }
                             for summary in fetchedBags {
-                                if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
-                                    self?.product.addToBags(bag)
+                                if let bag = refreshedBags.first(where: { $0.backendId == summary.id }) {
+                                    self.product.addToBags(bag)
                                 }
                             }
                         }
+                        
+                        // Sync core metadata fields from backend
+                        self.product.productName = backendProd.productName
+                        self.product.brand = backendProd.brand
+                        self.product.purchaseDate = backendProd.purchaseDate
+                        self.product.openDate = backendProd.openDate
+                        if let pao = backendProd.periodsAfterOpening { self.product.periodsAfterOpening = pao }
+                        if let shade = backendProd.shade { self.product.shade = shade }
+                        if let sizeValue = backendProd.sizeInMl { self.product.sizeInMl = sizeValue }
+                        if let spfValue = backendProd.spf { self.product.spf = Int16(spfValue) }
+                        
                         try? ctx.save()
                     }
-                    self?.refreshProduct()
+                    self.refreshProduct()
                 }
             case .failure:
-                // Surface error so UI can show a toast with retry
                 DispatchQueue.main.async { [weak self] in
-                    self?.error = "Failed to refresh from server. Pull to refresh or tap to retry."
+                    guard let self = self, !self.isDeleted else { return }
+                    self.error = "Failed to refresh from server. Pull to refresh or tap to retry."
                 }
             }
         }
@@ -206,12 +217,12 @@ class ProductDetailViewModel: ObservableObject {
     private func refreshProduct() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
+            if self.isDeleted { return }
             do {
                 // Check if the object still exists in the context
                 if self.product.managedObjectContext == nil {
-                    // Object has been deleted from the context
-                    NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
+                    // Mark deleted & broadcast once
+                    self.markAsDeletedAndCleanup()
                     return
                 }
                 let context = self.product.managedObjectContext ?? CoreDataManager.shared.viewContext
@@ -226,6 +237,7 @@ class ProductDetailViewModel: ObservableObject {
     }
     
     func fetchBagsAndTags() {
+        if isDeleted { return }
         // Load current local tags first
         allTags = CoreDataManager.shared.fetchProductTags()
         if let userId = AuthService.shared.userId {
@@ -378,39 +390,56 @@ class ProductDetailViewModel: ObservableObject {
     
     // Delete product and notify UI to dismiss detail view
     func deleteProduct() {
+        if isDeleted { return }
+        
+        // Mark as deleted immediately to prevent any further operations
+        markAsDeletedAndCleanup()
+        
         // Cancel any pending local notification for this product
         NotificationService.shared.cancelNotification(for: product)
+        
         let id = product.objectID
         let backendId = product.backendId
         let userId = AuthService.shared.userId
-        // Helper to perform local deletion & notifications
-        func performLocalDeletion() {
-            CoreDataManager.shared.deleteProduct(id: id)
+        
+        // Perform local deletion WITHOUT triggering notifications to avoid loops
+        let context = CoreDataManager.shared.viewContext
+        context.perform {
+            guard let productToDelete = try? context.existingObject(with: id) as? UserProduct else { return }
+            context.delete(productToDelete)
+            try? context.save()
+            
+            // Only fire backend deletion if we have the needed IDs
+            if let backendId = backendId, let userId = userId {
+                let url = APIService.shared.baseURL
+                    .appendingPathComponent("users")
+                    .appendingPathComponent(userId)
+                    .appendingPathComponent("products")
+                    .appendingPathComponent(backendId)
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                if let token = AuthService.shared.token { 
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") 
+                }
+                URLSession.shared.dataTask(with: request).resume()
+            }
+            
+            // Post single refresh notification on main thread after deletion completes
             DispatchQueue.main.async {
-                // Notify listeners so views can dismiss if needed
-                NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: id)
-                // Refresh profile & feed lists
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
             }
         }
-        // If we can sync with backend, attempt DELETE first
-        if let backendId = backendId, let userId = userId {
-            let url = APIService.shared.baseURL
-                .appendingPathComponent("users")
-                .appendingPathComponent(userId)
-                .appendingPathComponent("products")
-                .appendingPathComponent(backendId)
-            var request = URLRequest(url: url)
-            request.httpMethod = "DELETE"
-            if let token = AuthService.shared.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-            URLSession.shared.dataTask(with: request) { _, _, _ in
-                // Regardless of success/failure, remove locally to keep UX responsive
-                performLocalDeletion()
-            }.resume()
-        } else {
-            // No backend id or user -> just delete locally
-            performLocalDeletion()
+    }
+
+    private func markAsDeletedAndCleanup() {
+        if isDeleted { return }
+        isDeleted = true
+        // Stop any future sinks
+        cancellables.removeAll()
+        // Post single notification for UI dismissal
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
         }
     }
 }
