@@ -10,6 +10,7 @@ const userProductRoutes = require('./routes/userProductRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const authRoutes = require('./routes/authRoutes');
+const globalRatingRoutes = require('./routes/globalRatingRoutes');
 
 // Create Express app
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users/:userId/products', userProductRoutes);
 app.use('/api/users/:userId/wishlist', wishlistRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api', globalRatingRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {

@@ -24,16 +24,28 @@ class ProductDetailViewModel: ObservableObject {
         // Get user's region from UserDefaults
         let region = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
         
-        // Rules for different regions
-        let rules = [
-            "EU": "PAO symbol mandatory for cosmetics after opening.",
-            "US": "Manufacture date required, expiry guidelines recommended.",
-            "JP": "Both expiry date and PAO are required by regulation.",
-            "GLOBAL": "Use within 36 months of manufacture if no PAO specified."
-        ]
-        
-        // Return region-specific rule or global rule
-        return rules[region] ?? "Follow general cosmetic safety guidelines."
+        switch region {
+        case "EU":
+            return "🇪🇺 This product complies with EU cosmetics regulations. Check expiry dates and discontinue use if irritation occurs."
+        case "US":
+            return "🇺🇸 This product follows FDA cosmetics guidelines. Always patch test new products and check ingredient lists for allergens."
+        case "JP":
+            return "🇯🇵 This product meets Japanese cosmetics standards. Follow PAO guidelines and store in appropriate conditions."
+        default:
+            return "🌍 Follow local cosmetics regulations in your region. Always check expiry dates and discontinue use if irritation occurs."
+        }
+    }
+    
+    // Check if user has already reviewed this product
+    var hasUserReviewed: Bool {
+        guard let reviews = product.reviews as? Set<Review> else { return false }
+        return !reviews.isEmpty
+    }
+    
+    // Number of reviews for this product
+    var reviewCount: Int {
+        guard let reviews = product.reviews as? Set<Review> else { return 0 }
+        return reviews.count
     }
 
     // Compute days until expiry for UI badges
@@ -165,6 +177,11 @@ class ProductDetailViewModel: ObservableObject {
     func submitReview() {
         guard !reviewTitle.isEmpty && !reviewText.isEmpty else { return }
         
+        // Check if user has already reviewed this product
+        if hasUserReviewed {
+            return // Prevent multiple reviews
+        }
+        
         // Save review locally - CoreDataManager handles backend sync and activity creation
         CoreDataManager.shared.addReview(
             to: product.objectID,
@@ -172,6 +189,11 @@ class ProductDetailViewModel: ObservableObject {
             title: reviewTitle,
             text: reviewText
         )
+        
+        // Automatically mark product as finished after writing a review
+        if !product.isFinished {
+            CoreDataManager.shared.markProductAsFinished(id: product.objectID)
+        }
         
         // Reset form
         reviewRating = 3
@@ -191,26 +213,25 @@ class ProductDetailViewModel: ObservableObject {
         refreshProduct()
     }
     
-    // Replace the markAsEmpty() function with this:
     func markAsEmpty() {
-        // Check if product already has a review
+        // Always finish the product first
+        CoreDataManager.shared.markProductAsFinished(id: product.objectID)
+        
+        // After finishing, check if product already has a review
         let hasReview = (product.reviews?.count ?? 0) > 0
         
-        if hasReview {
-            // If already reviewed, directly mark as finished
-            CoreDataManager.shared.markProductAsFinished(id: product.objectID)
-            // This will trigger UI refresh via the notification subscription
-        } else {
+        if !hasReview {
             // If no review yet, offer to write one via the review form
             showReviewForm = true
         }
+        // If already reviewed, just finish without showing review form
     }
     
     // Toggle favorite status
     func toggleFavorite() {
         CoreDataManager.shared.toggleFavorite(id: product.objectID)
-        // Remove backend sync - CoreDataManager handles this
-        refreshProduct()
+        // Remove the refreshProduct() call to prevent infinite loop
+        // The Core Data observer will handle the refresh automatically
     }
     
     // Make sure refreshProduct() handles errors properly:
@@ -323,15 +344,16 @@ class ProductDetailViewModel: ObservableObject {
         refreshProduct()
     }
     
-    // Calculate average rating from reviews
-    var rating: Double {
-        let reviews = (product.reviews as? Set<Review>) ?? []
-        guard !reviews.isEmpty else { return 0.0 }
-        let total = reviews.reduce(0.0) { $0 + Double($1.rating) }
-        return total / Double(reviews.count)
+    // Create usage tracking view model
+    private var _usageTrackingViewModel: UsageTrackingViewModel?
+    var usageTrackingViewModel: UsageTrackingViewModel {
+        if _usageTrackingViewModel == nil {
+            _usageTrackingViewModel = UsageTrackingViewModel(product: product)
+        }
+        return _usageTrackingViewModel!
     }
 
-    // Increment usage count, marking as opened if first use
+    // Legacy increment usage count (kept for compatibility)
     func incrementUsage() {
         if product.openDate == nil {
             // First use also marks as opened

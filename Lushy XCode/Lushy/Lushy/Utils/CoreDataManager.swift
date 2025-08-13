@@ -427,51 +427,92 @@ class CoreDataManager {
         
         context.performAndWait {
             guard let product = try? context.existingObject(with: id) as? UserProduct else {
+                print("Failed to find product for finishing")
+                return
+            }
+            
+            // Check if already finished to prevent infinite loops
+            if product.isFinished {
+                print("Product already finished, skipping")
                 return
             }
             
             // Cancel any pending notifications
             NotificationService.shared.cancelNotification(for: product)
             
-            // Instead of deleting, add a "finished" flag
+            // Mark as finished
             product.setValue(true, forKey: "isFinished")
             product.setValue(Date(), forKey: "finishDate")
+            product.currentAmount = 0.0 // Ensure amount is 0
             
             do {
                 try context.save()
+                print("Product marked as finished successfully")
                 
-                // Sync to backend to create finished_product activity
+                // Sync to backend only once, with retry logic
                 if let userId = AuthService.shared.userId, let backendId = product.backendId {
-                    let url = APIService.shared.baseURL.appendingPathComponent("users/")
-                        .appendingPathComponent(userId)
-                        .appendingPathComponent("products/")
-                        .appendingPathComponent(backendId)
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "PUT"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    if let token = AuthService.shared.token {
-                        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    DispatchQueue.main.async {
+                        self.syncFinishedProductToBackend(userId: userId, backendId: backendId)
                     }
-                    let body: [String: Any] = [
-                        "isFinished": true,
-                        "finishDate": Date().msSinceEpoch
-                    ]
-                    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                    URLSession.shared.dataTask(with: request).resume()
                 }
                 
-                // Notify on the main thread after successful save
+                // Notify on the main thread after successful save - but avoid triggering more finish operations
                 DispatchQueue.main.async {
+                    // Post a specific notification for finished products instead of the generic context save
                     NotificationCenter.default.post(
-                        name: .NSManagedObjectContextDidSave,
-                        object: context
+                        name: NSNotification.Name("ProductFinished"),
+                        object: id
                     )
                     // Refresh feed to show the finished product activity
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
                 }
             } catch {
-                print("Error updating product: \(error)")
+                print("Error marking product as finished: \(error)")
             }
+        }
+    }
+    
+    // Separate method for backend sync with retry logic
+    private func syncFinishedProductToBackend(userId: String, backendId: String) {
+        let url = APIService.shared.baseURL.appendingPathComponent("users/")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products/")
+            .appendingPathComponent(backendId)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10.0 // Add timeout
+        
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "isFinished": true,
+            "finishDate": Date().msSinceEpoch,
+            "currentAmount": 0.0
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("Failed to sync finished product to backend: \(error)")
+                    return
+                }
+                
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                        print("Successfully synced finished product to backend")
+                    } else {
+                        print("Backend returned error status: \(httpResponse.statusCode)")
+                    }
+                }
+            }.resume()
+        } catch {
+            print("Failed to serialize finish request: \(error)")
         }
     }
 
@@ -827,6 +868,109 @@ class CoreDataManager {
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                 URLSession.shared.dataTask(with: request).resume()
             }
+        }
+    }
+    
+    // MARK: - Usage Tracking Operations
+    
+    // Add a new usage entry
+    func addUsageEntry(to productID: NSManagedObjectID, type: String, amount: Double, notes: String? = nil) {
+        let context = container.newBackgroundContext()
+        
+        context.performAndWait {
+            guard let product = try? context.existingObject(with: productID) as? UserProduct else { return }
+            
+            let usageEntry = UsageEntry(context: context)
+            usageEntry.usageType = type
+            usageEntry.usageAmount = amount
+            usageEntry.notes = notes
+            usageEntry.createdAt = Date()
+            usageEntry.userId = currentUserId()
+            usageEntry.userProduct = product
+            
+            // Update product's current amount
+            let newAmount = max(0, product.currentAmount - amount)
+            product.currentAmount = newAmount
+            
+            // Mark as opened if first usage and not already opened
+            if product.openDate == nil {
+                product.openDate = Date()
+                
+                // Calculate expiry if we have PAO
+                if let pao = product.periodsAfterOpening, let months = extractMonths(from: pao) {
+                    product.expireDate = Calendar.current.date(byAdding: .month, value: months, to: Date())
+                    NotificationService.shared.scheduleExpiryNotification(for: product)
+                }
+            }
+            
+            do {
+                try context.save()
+                
+                // Sync to backend
+                if let userId = AuthService.shared.userId, let backendId = product.backendId {
+                    DispatchQueue.main.async {
+                        let url = APIService.shared.baseURL
+                            .appendingPathComponent("users")
+                            .appendingPathComponent(userId)
+                            .appendingPathComponent("products")
+                            .appendingPathComponent(backendId)
+                            .appendingPathComponent("usage")
+                        
+                        var request = URLRequest(url: url)
+                        request.httpMethod = "POST"
+                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                        if let token = AuthService.shared.token {
+                            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                        }
+                        
+                        let body: [String: Any] = [
+                            "usageType": type,
+                            "usageAmount": amount,
+                            "notes": notes ?? "",
+                            "currentAmount": newAmount
+                        ]
+                        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                        URLSession.shared.dataTask(with: request).resume()
+                    }
+                }
+            } catch {
+                print("Failed to save usage entry: \(error)")
+            }
+        }
+    }
+    
+    // Fetch usage entries for a product
+    func fetchUsageEntries(for productID: NSManagedObjectID) -> [UsageEntry] {
+        let request: NSFetchRequest<UsageEntry> = UsageEntry.fetchRequest()
+        
+        do {
+            let product = try viewContext.existingObject(with: productID) as? UserProduct
+            request.predicate = NSPredicate(format: "userProduct == %@", product!)
+            request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            return try viewContext.fetch(request)
+        } catch {
+            print("Error fetching usage entries: \(error)")
+            return []
+        }
+    }
+    
+    // Update product's current amount
+    func updateProductAmount(id: NSManagedObjectID, newAmount: Double) {
+        let context = container.newBackgroundContext()
+        
+        context.performAndWait {
+            guard let product = try? context.existingObject(with: id) as? UserProduct else { return }
+            
+            product.currentAmount = max(0, newAmount)
+            
+            // Mark as finished if empty
+            if newAmount <= 0 && !product.isFinished {
+                product.setValue(true, forKey: "isFinished")
+                product.setValue(Date(), forKey: "finishDate")
+                NotificationService.shared.cancelNotification(for: product)
+            }
+            
+            try? context.save()
         }
     }
 }

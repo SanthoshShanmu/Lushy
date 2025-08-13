@@ -633,7 +633,7 @@ struct ManualEntryView: View {
         showingErrorAlert = false
         let context = CoreDataManager.shared.viewContext
         
-        // 1) Save locally first
+        // 1) Save locally first WITHOUT attaching bags/tags yet
         guard let objectID = viewModel.saveManualProduct(periodsAfterOpening: periodsAfterOpening, productImage: productImage) else {
             isSaving = false
             errorMessage = "Failed to save product locally."
@@ -647,16 +647,41 @@ struct ManualEntryView: View {
             return
         }
 
-        // Attach local selections so payload will include them
-        for tagID in selectedTagIDs {
-            if let tag = try? context.existingObject(with: tagID) as? ProductTag { userProduct.addToTags(tag) }
+        // Store selections for use after sync succeeds
+        let pendingTagIDs = selectedTagIDs
+        let pendingBagIDs = selectedBagIDs
+        
+        // Build tags/bags arrays for backend sync payload
+        var tagBackendIds: [String] = []
+        var bagBackendIds: [String] = []
+        
+        for tagID in pendingTagIDs {
+            if let tag = try? context.existingObject(with: tagID) as? ProductTag,
+               let backendId = tag.backendId {
+                tagBackendIds.append(backendId)
+            }
         }
-        for bagID in selectedBagIDs {
-            if let bag = try? context.existingObject(with: bagID) as? BeautyBag { userProduct.addToBags(bag) }
+        for bagID in pendingBagIDs {
+            if let bag = try? context.existingObject(with: bagID) as? BeautyBag,
+               let backendId = bag.backendId {
+                bagBackendIds.append(backendId)
+            }
+        }
+        
+        // Temporarily attach for sync payload (will be removed if sync fails)
+        for tagID in pendingTagIDs {
+            if let tag = try? context.existingObject(with: tagID) as? ProductTag { 
+                userProduct.addToTags(tag) 
+            }
+        }
+        for bagID in pendingBagIDs {
+            if let bag = try? context.existingObject(with: bagID) as? BeautyBag { 
+                userProduct.addToBags(bag) 
+            }
         }
         try? context.save()
 
-        // 2) Sync to backend FIRST before OBF contribution to avoid conflicts
+        // 2) Sync to backend
         print("ManualEntryView: Starting backend sync for product localID=\(objectID)")
         syncCancellable = APIService.shared.syncProductWithBackend(product: userProduct)
             .receive(on: DispatchQueue.main)
@@ -664,6 +689,19 @@ struct ManualEntryView: View {
                 switch completion {
                 case .failure(let err):
                     print("ManualEntryView: Sync failed -> \(err.localizedDescription)")
+                    // IMPORTANT: Remove local associations since sync failed
+                    for tagID in pendingTagIDs {
+                        if let tag = try? context.existingObject(with: tagID) as? ProductTag {
+                            userProduct.removeFromTags(tag)
+                        }
+                    }
+                    for bagID in pendingBagIDs {
+                        if let bag = try? context.existingObject(with: bagID) as? BeautyBag {
+                            userProduct.removeFromBags(bag)
+                        }
+                    }
+                    try? context.save()
+                    
                     self.isSaving = false
                     self.errorMessage = err.localizedDescription
                     self.showingErrorAlert = true
@@ -673,6 +711,7 @@ struct ManualEntryView: View {
             }, receiveValue: { backendId in
                 print("ManualEntryView: Sync success backendId=\(backendId)")
                 userProduct.backendId = backendId
+                // Associations are already attached and will remain since sync succeeded
                 try? context.save()
                 
                 // 3) ONLY after backend sync, contribute to OBF if needed

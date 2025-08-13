@@ -17,6 +17,11 @@ class HomeViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let managedObjectContext = CoreDataManager.shared.viewContext
     
+    // Add throttling for fetch operations
+    private var lastFetchTime: Date?
+    private let minimumFetchInterval: TimeInterval = 1.0 // Increased to 1 second between fetches
+    private var pendingFetchWorkItem: DispatchWorkItem?
+    
     init() {
         print("HomeViewModel: initializing")
         
@@ -24,16 +29,36 @@ class HomeViewModel: ObservableObject {
         
         print("HomeViewModel: setting up notification listener")
         
-        // Subscribe to context changes to keep the UI updated
+        // Subscribe to context changes with throttling to prevent excessive updates
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // Debounce rapid saves
             .sink { [weak self] _ in
-                print("HomeViewModel: received context did save notification")
-                self?.fetchProducts()
+                print("HomeViewModel: received context did save notification (debounced)")
+                self?.fetchProductsThrottled()
             }
             .store(in: &cancellables)
         
         print("HomeViewModel: initialization complete")
+    }
+    
+    // Enhanced throttled version of fetchProducts to prevent excessive calls
+    private func fetchProductsThrottled() {
+        // Cancel any pending fetch
+        pendingFetchWorkItem?.cancel()
+        
+        // Create new work item
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let now = Date()
+            self.lastFetchTime = now
+            self.fetchProducts()
+        }
+        
+        pendingFetchWorkItem = workItem
+        
+        // Execute after delay to batch multiple rapid calls
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
     }
     
     // Fetch products and sort into sections

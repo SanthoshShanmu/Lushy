@@ -9,6 +9,12 @@ class SyncService {
     private var isSyncing = false
     private var didInitialSync = false
     
+    // Add sync queue and semaphore to prevent concurrent operations
+    private let syncQueue = DispatchQueue(label: "com.lushy.syncservice", qos: .utility)
+    private let syncSemaphore = DispatchSemaphore(value: 1)
+    private var lastSyncTime: Date?
+    private let minimumSyncInterval: TimeInterval = 2.0 // Minimum 2 seconds between syncs
+    
     private init() {
         // Subscribe to user changes
         AuthService.shared.$currentUserId
@@ -34,9 +40,30 @@ class SyncService {
     
     // Public: Force refresh of all entities from backend in order
     func refreshAllFromBackend() {
-        fetchRemoteTags { [weak self] in
-            self?.fetchRemoteBags { [weak self] in
-                self?.fetchRemoteProducts()
+        // Throttle frequent refresh calls
+        syncQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Check if we need to throttle
+            let now = Date()
+            if let lastSync = self.lastSyncTime, 
+               now.timeIntervalSince(lastSync) < self.minimumSyncInterval {
+                print("SyncService: Throttling refresh request")
+                return
+            }
+            
+            self.lastSyncTime = now
+            
+            // Use semaphore to prevent concurrent syncs
+            self.syncSemaphore.wait()
+            defer { self.syncSemaphore.signal() }
+            
+            DispatchQueue.main.async {
+                self.fetchRemoteTags { [weak self] in
+                    self?.fetchRemoteBags { [weak self] in
+                        self?.fetchRemoteProducts()
+                    }
+                }
             }
         }
     }

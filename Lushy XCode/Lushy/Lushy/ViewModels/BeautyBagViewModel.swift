@@ -126,7 +126,16 @@ class BeautyBagViewModel: ObservableObject {
 
     // Returns the products contained in the specified beauty bag
     func products(in bag: BeautyBag) -> [UserProduct] {
-        (bag.products as? Set<UserProduct>)?
-            .sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
+        let allProducts = (bag.products as? Set<UserProduct>) ?? []
+        
+        // Filter out finished products
+        let activeProducts = allProducts.filter { product in
+            guard product.value(forKey: "isFinished") as? Bool != true else {
+                return false
+            }
+            return true
+        }
+        
+        return activeProducts.sorted { ($0.productName ?? "") < ($1.productName ?? "") }
     }
 }

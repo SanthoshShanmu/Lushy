@@ -1,30 +1,21 @@
 const express = require('express');
-const router = express.Router();
-const authRoutes = require('./authRoutes');
+const userRoutes = require('./userRoutes');
+const productRoutes = require('./productRoutes');
 const userProductRoutes = require('./userProductRoutes');
+const authRoutes = require('./authRoutes');
+const activityRoutes = require('./activityRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
 const notificationRoutes = require('./notificationRoutes');
-const userRoutes = require('./userRoutes');
-const activityRoutes = require('./activityRoutes');
-const productRoutes = require('./productRoutes');
 
-// Auth routes (no userId required)
-router.use('/auth', authRoutes);
+const router = express.Router();
 
-// User-specific routes (nested routes with userId)
-router.use('/users/:userId/products', userProductRoutes);
-router.use('/users/:userId/wishlist', wishlistRoutes);
-
-// Notification routes
-router.use('/notifications', notificationRoutes);
-
-// Activity routes (likes & comments)
-router.use('/activities', activityRoutes);
-
-// User routes
+// Mount all route modules
 router.use('/users', userRoutes);
-
-// Public product endpoints
+router.use('/users/:userId/products', userProductRoutes); // Add this line to mount user product routes
 router.use('/products', productRoutes);
+router.use('/auth', authRoutes);
+router.use('/activities', activityRoutes);
+router.use('/wishlist', wishlistRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

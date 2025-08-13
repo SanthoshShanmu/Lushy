@@ -11,6 +11,7 @@ extension UserProduct {
     @NSManaged public var barcode: String?
     @NSManaged public var brand: String?
     @NSManaged public var crueltyFree: Bool
+    @NSManaged public var currentAmount: Double
     @NSManaged public var expireDate: Date?
     @NSManaged public var favorite: Bool
     @NSManaged public var finishDate: Date?
@@ -29,6 +30,7 @@ extension UserProduct {
     @NSManaged public var reviews: NSSet?
     @NSManaged public var bags: NSSet?
     @NSManaged public var tags: NSSet?
+    @NSManaged public var usageEntries: NSSet?
     @NSManaged public var userId: String
     @NSManaged public var backendId: String?
     @objc(timesUsed)
@@ -101,6 +103,23 @@ extension UserProduct {
 
     @objc(removeTags:)
     @NSManaged public func removeFromTags(_ values: NSSet)
+
+}
+
+// MARK: Generated accessors for usageEntries
+extension UserProduct {
+
+    @objc(addUsageEntriesObject:)
+    @NSManaged public func addToUsageEntries(_ value: UsageEntry)
+
+    @objc(removeUsageEntriesObject:)
+    @NSManaged public func removeFromUsageEntries(_ value: UsageEntry)
+
+    @objc(addUsageEntries:)
+    @NSManaged public func addToUsageEntries(_ values: NSSet)
+
+    @objc(removeUsageEntries:)
+    @NSManaged public func removeFromUsageEntries(_ values: NSSet)
 
 }
 

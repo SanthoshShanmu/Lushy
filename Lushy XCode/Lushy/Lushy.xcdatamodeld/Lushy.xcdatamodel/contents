@@ -28,11 +28,21 @@
         <attribute name="title" optional="YES" attributeType="String"/>
         <relationship name="userProduct" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="reviews" inverseEntity="UserProduct"/>
     </entity>
+    <entity name="UsageEntry" representedClassName="UsageEntry" syncable="YES">
+        <attribute name="backendId" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="usageAmount" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="usageType" attributeType="String"/>
+        <attribute name="userId" attributeType="String"/>
+        <relationship name="userProduct" maxCount="1" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="usageEntries" inverseEntity="UserProduct"/>
+    </entity>
     <entity name="UserProduct" representedClassName="UserProduct" syncable="YES">
         <attribute name="backendId" optional="YES" attributeType="String"/>
         <attribute name="barcode" optional="YES" attributeType="String"/>
         <attribute name="brand" optional="YES" attributeType="String"/>
         <attribute name="crueltyFree" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="currentAmount" optional="YES" attributeType="Double" defaultValueString="100.0" usesScalarValueType="YES"/>
         <attribute name="expireDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="favorite" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="finishDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -42,7 +52,7 @@
         <attribute name="openDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="periodsAfterOpening" optional="YES" attributeType="String"/>
         <attribute name="productName" attributeType="String"/>
-        <attribute name="purchaseDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="purchaseDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="shade" optional="YES" attributeType="String"/>
         <attribute name="sizeInMl" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="spf" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
@@ -53,5 +63,6 @@
         <relationship name="comments" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Comment" inverseName="userProduct" inverseEntity="Comment"/>
         <relationship name="reviews" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Review" inverseName="userProduct" inverseEntity="Review"/>
         <relationship name="tags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="ProductTag" inverseName="products" inverseEntity="ProductTag"/>
+        <relationship name="usageEntries" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UsageEntry" inverseName="userProduct" inverseEntity="UsageEntry"/>
     </entity>
 </model>

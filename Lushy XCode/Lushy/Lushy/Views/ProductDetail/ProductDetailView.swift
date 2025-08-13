@@ -573,78 +573,22 @@ struct _PrettyUsageInfo: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 20) {
             HStack {
-                Image(systemName: "heart.circle.fill")
+                Image(systemName: "chart.line.uptrend.xyaxis")
                     .font(.system(size: 20))
                     .foregroundColor(.lushyPink)
-                Text("Usage Stats")
+                Text("Usage Tracking")
                     .font(.headline)
                     .fontWeight(.bold)
                 Spacer()
             }
             .padding(.horizontal)
             
-            HStack(spacing: 15) {
-                _PrettyStatCard(
-                    title: "Times Used",
-                    value: "\(viewModel.product.timesUsed)",
-                    icon: "wand.and.stars",
-                    color: .lushyPink
-                )
-                
-                _PrettyStatCard(
-                    title: "Love Rating",
-                    value: String(format: "%.1f", viewModel.rating),
-                    icon: "heart.fill",
-                    color: .lushyPurple
-                )
-            }
-            .padding(.horizontal)
+            // Enhanced usage tracking interface
+            UsageTrackingView(usageViewModel: viewModel.usageTrackingViewModel)
+                .padding(.horizontal)
         }
-    }
-}
-
-// MARK: - Pretty Stat Card
-struct _PrettyStatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(color)
-            
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(
-                    LinearGradient(
-                        colors: [color.opacity(0.05), Color.white],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(color.opacity(0.1), lineWidth: 1)
-                )
-        )
     }
 }
 
@@ -654,106 +598,34 @@ struct _PrettyActionButtons: View {
     
     var body: some View {
         VStack(spacing: 15) {
-            HStack(spacing: 15) {
-                Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    viewModel.toggleFavorite()
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text(viewModel.product.favorite ? "Loved" : "Love It")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(viewModel.product.favorite ? .white : .lushyPink)
-                    .padding(.vertical, 15)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(
-                                viewModel.product.favorite ?
-                                    LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing) :
-                                    LinearGradient(colors: [.white, .white], startPoint: .leading, endPoint: .trailing)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(.lushyPink.opacity(0.3), lineWidth: viewModel.product.favorite ? 0 : 1.5)
-                            ))
-                }
-
-                Button(action: {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    viewModel.incrementUsage()
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("Used It")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.vertical, 15)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(
-                                LinearGradient(colors: [.lushyMint, .lushyPeach], startPoint: .leading, endPoint: .trailing)
-                            )
-                    )
-                }
-            }
-            .padding(.horizontal)
-            
+            // Only Favorite Heart Button (removed Add to Bag button)
             Button(action: {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                viewModel.showReviewForm = true
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                viewModel.toggleFavorite()
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "star.bubble")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Write a Review")
+                    Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text(viewModel.product.favorite ? "Favorited" : "Favorite")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
-                .foregroundColor(.lushyPurple)
+                .foregroundColor(viewModel.product.favorite ? .white : .lushyPink)
                 .padding(.vertical, 15)
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.lushyPurple.opacity(0.1))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(.lushyPurple.opacity(0.2), lineWidth: 1)
-                        )
-                )
-            }
-            .padding(.horizontal)
-            
-            // Finish product button
-            Button(action: {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                viewModel.markAsEmpty()
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Finish Product")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-                .foregroundColor(.white)
-                .padding(.vertical, 15)
+                .padding(.horizontal, 20)
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 20)
                         .fill(
-                            LinearGradient(colors: [.lushyPeach, .lushyMint], startPoint: .leading, endPoint: .trailing)
+                            viewModel.product.favorite ?
+                                LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing) :
+                                LinearGradient(colors: [.white, .white], startPoint: .leading, endPoint: .trailing)
                         )
-            )}
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(.lushyPink.opacity(0.3), lineWidth: viewModel.product.favorite ? 0 : 1.5)
+                        ))
+            }
             .padding(.horizontal)
         }
     }
@@ -824,15 +696,28 @@ private struct _PrettyReviewsSection: View {
             
             reviewsContent
             
-            Button(action: {
-                viewModel.showReviewForm = true
-            }) {
-                Label("Write a Review", systemImage: "pencil")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+            // Only show "Write a Review" button if product is finished AND user hasn't reviewed yet
+            if viewModel.product.isFinished && !viewModel.hasUserReviewed {
+                Button(action: {
+                    viewModel.showReviewForm = true
+                }) {
+                    Label("Write a Review", systemImage: "pencil")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+            } else if !viewModel.product.isFinished {
+                Text("Finish using this product to write a review")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else if viewModel.hasUserReviewed {
+                Text("You have already reviewed this product")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
             }
         }
         .padding()
@@ -1055,7 +940,7 @@ private struct BagAssignSheet: View {
                             Text("Icon").font(.caption).foregroundColor(.secondary)
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 14) {
-                                    ForEach(iconOptions, id: \ .self) { icon in
+                                    ForEach(iconOptions, id: \.self) { icon in
                                         let selected = (icon == newBagIcon)
                                         Button(action: { newBagIcon = icon }) {
                                             Image(systemName: icon)
@@ -1081,7 +966,7 @@ private struct BagAssignSheet: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Color").font(.caption).foregroundColor(.secondary)
                             HStack(spacing: 12) {
-                                ForEach(colorOptions, id: \ .self) { colorName in
+                                ForEach(colorOptions, id: \.self) { colorName in
                                     let selected = (colorName == newBagColor)
                                     Button(action: { newBagColor = colorName }) {
                                         ZStack {

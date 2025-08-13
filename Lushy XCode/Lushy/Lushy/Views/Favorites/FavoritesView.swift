@@ -7,36 +7,111 @@ struct FavoritesView: View {
 
     var body: some View {
         ZStack {
-            Color.clear.pastelBackground()
+            // Dreamy gradient background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.lushyPink.opacity(0.1),
+                    Color.lushyPurple.opacity(0.05),
+                    Color.lushyCream.opacity(0.3),
+                    Color.white
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
             NavigationView {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
-                        if viewModel.favoriteProducts.isEmpty {
-                            VStack(spacing: 20) {
-                                Image(systemName: "star")
-                                    .font(.system(size: 40))
-                                    .foregroundStyle(LushyPalette.gradientPrimary)
-                                Text("You haven't added any favorites yet. Mark products as favorite in your bag.")
-                                    .lushyCaption()
+                    if viewModel.favoriteProducts.isEmpty {
+                        VStack(spacing: 24) {
+                            // Beautiful empty state
+                            VStack(spacing: 16) {
+                                Image(systemName: "heart.circle.fill")
+                                    .font(.system(size: 80))
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [.lushyPink, .lushyPurple],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                
+                                Text("No Favorites Yet")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.lushyPurple)
+                                
+                                Text("Heart products you love to see them here! ✨")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
-                            }
-                            .glassCard(cornerRadius: 20)
-                            .padding()
-                        } else {
-                            ForEach(viewModel.favoriteProducts) { product in
-                                PrettyProductRow(product: product)
-                                    .glassCard(cornerRadius: 16)
-                                    .onTapGesture {
-                                        selectedProduct = product
-                                        showProductDetail = true
-                                    }
                                     .padding(.horizontal)
                             }
+                            .padding(.vertical, 40)
+                            .padding(.horizontal, 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .fill(.ultraThinMaterial)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 24)
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [.lushyPink.opacity(0.3), .lushyPurple.opacity(0.2)],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+                            .shadow(color: .lushyPink.opacity(0.1), radius: 20, x: 0, y: 10)
+                        }
+                        .padding(.top, 60)
+                        .padding(.horizontal, 20)
+                    } else {
+                        LazyVStack(spacing: 20) {
+                            // Header with count
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("💖 Your Favorites")
+                                        .font(.title)
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(
+                                            LinearGradient(
+                                                colors: [.lushyPink, .lushyPurple],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                    
+                                    Text("\(viewModel.favoriteProducts.count) beloved product\(viewModel.favoriteProducts.count == 1 ? "" : "s")")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.top, 20)
+                            
+                            // Beautiful product grid
+                            LazyVGrid(columns: [
+                                GridItem(.flexible(), spacing: 16),
+                                GridItem(.flexible(), spacing: 16)
+                            ], spacing: 20) {
+                                ForEach(viewModel.favoriteProducts) { product in
+                                    EnhancedFavoriteCard(product: product)
+                                        .onTapGesture {
+                                            selectedProduct = product
+                                            showProductDetail = true
+                                        }
+                                }
+                            }
+                            .padding(.horizontal, 20)
                         }
                     }
                 }
-                .navigationTitle("Favorites")
+                .navigationTitle("")
+                .navigationBarHidden(true)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Menu {
@@ -59,8 +134,18 @@ struct FavoritesView: View {
                             }
                         } label: {
                             Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.lushyPink)
+                                .padding(12)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(.lushyPink.opacity(0.3), lineWidth: 1)
+                                        )
+                                )
                         }
-                        .neumorphicButtonStyle()
                     }
                 }
                 .onAppear {
@@ -73,5 +158,170 @@ struct FavoritesView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Enhanced Favorite Card
+struct EnhancedFavoriteCard: View {
+    let product: UserProduct
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Product Image with heart overlay
+            ZStack(alignment: .topTrailing) {
+                if let imageUrl = product.imageUrl, !imageUrl.isEmpty {
+                    // Try local file first
+                    let fileURL = URL(fileURLWithPath: imageUrl)
+                    if FileManager.default.fileExists(atPath: fileURL.path),
+                       let uiImage = UIImage(contentsOfFile: fileURL.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 120)
+                            .clipped()
+                    } else if let remoteURL = URL(string: imageUrl) {
+                        AsyncImage(url: remoteURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            productPlaceholder
+                        }
+                        .frame(height: 120)
+                        .clipped()
+                    } else {
+                        productPlaceholder
+                    }
+                } else {
+                    productPlaceholder
+                }
+                
+                // Favorite heart indicator
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(8)
+                    .background(
+                        Circle()
+                            .fill(.lushyPink)
+                            .shadow(color: .lushyPink.opacity(0.4), radius: 4, x: 0, y: 2)
+                    )
+                    .padding(12)
+            }
+            
+            // Product Info
+            VStack(alignment: .leading, spacing: 8) {
+                // Brand
+                if let brand = product.brand, !brand.isEmpty {
+                    Text(brand.uppercased())
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.lushyPurple)
+                        .tracking(0.5)
+                }
+                
+                // Product Name
+                Text(product.productName ?? "Unnamed Product")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                // Tags and metadata
+                HStack(spacing: 6) {
+                    if let shade = product.shade, !shade.isEmpty {
+                        Text(shade)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.lushyPurple.opacity(0.15))
+                            .foregroundColor(.lushyPurple)
+                            .cornerRadius(6)
+                    }
+                    
+                    if product.sizeInMl > 0 {
+                        Text("\(String(format: "%.0f", product.sizeInMl))ml")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.lushyMint.opacity(0.15))
+                            .foregroundColor(.lushyMint)
+                            .cornerRadius(6)
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Status indicators
+                HStack(spacing: 8) {
+                    if product.openDate != nil {
+                        HStack(spacing: 3) {
+                            Image(systemName: "circle.dotted")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                            Text("Opened")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    if product.isFinished {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                            Text("Finished")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.lushyPink.opacity(0.2), .lushyPurple.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .shadow(color: .lushyPink.opacity(0.08), radius: 12, x: 0, y: 6)
+        .scaleEffect(1.0)
+        .animation(.easeInOut(duration: 0.2), value: product.favorite)
+    }
+    
+    private var productPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(
+                LinearGradient(
+                    colors: [.lushyPink.opacity(0.1), .lushyPurple.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(height: 120)
+            .overlay(
+                VStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24))
+                        .foregroundColor(.lushyPink.opacity(0.5))
+                    Text("No Image")
+                        .font(.caption2)
+                        .foregroundColor(.lushyPink.opacity(0.7))
+                }
+            )
     }
 }

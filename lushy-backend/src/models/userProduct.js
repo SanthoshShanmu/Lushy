@@ -1,6 +1,29 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+// Usage Entry schema for detailed usage tracking
+const UsageEntrySchema = new Schema({
+  usageType: {
+    type: String,
+    required: true,
+    enum: ['light', 'medium', 'heavy', 'custom']
+  },
+  usageAmount: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 100
+  },
+  notes: {
+    type: String,
+    required: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
 // Comment schema
 const CommentSchema = new Schema({
   text: {
@@ -71,6 +94,24 @@ const UserProductSchema = new Schema({
     type: Boolean,
     default: false
   },
+  // Enhanced usage tracking
+  currentAmount: {
+    type: Number,
+    default: 100.0,
+    min: 0,
+    max: 100
+  },
+  timesUsed: {
+    type: Number,
+    default: 0
+  },
+  isFinished: {
+    type: Boolean,
+    default: false
+  },
+  finishDate: Date,
+  // Usage entries for detailed tracking
+  usageEntries: [UsageEntrySchema],
   // New optional metadata fields
   shade: { type: String },
   sizeInMl: { type: Number },

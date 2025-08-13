@@ -570,6 +570,8 @@ class APIService {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
+        print("APIService: Fetching user products from: \(urlString)")
+        
         let decoder = JSONDecoder()
         // Decode ISO8601 strings with fractional seconds
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -593,26 +595,39 @@ class APIService {
         // Start request
         return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { data, response -> Data in
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    if let httpResponse = response as? HTTPURLResponse,
-                       httpResponse.statusCode == 401 {
-                        throw APIError.authenticationRequired
-                    }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("APIService: fetchUserProductsFromBackend - Invalid HTTP response")
                     throw APIError.invalidResponse
                 }
-                // Debug: print server JSON for products
-                if let jsonStr = String(data: data, encoding: .utf8) {
-                    print("APIService: Products JSON: \(jsonStr)")
+                
+                print("APIService: fetchUserProductsFromBackend response status: \(httpResponse.statusCode)")
+                
+                // Log raw response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("APIService: fetchUserProductsFromBackend response: \(responseString)")
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode == 401 {
+                        print("APIService: fetchUserProductsFromBackend - Authentication required")
+                        throw APIError.authenticationRequired
+                    }
+                    print("APIService: fetchUserProductsFromBackend - HTTP error: \(httpResponse.statusCode)")
+                    throw APIError.invalidResponse
                 }
                 return data
             }
             .decode(type: ProductsResponse.self, decoder: decoder)
-            .map { $0.data.products }
+            .map { response in
+                print("APIService: Successfully decoded ProductsResponse with \(response.data.products.count) products")
+                return response.data.products
+            }
             .mapError { error -> APIError in
+                print("APIService: fetchUserProductsFromBackend error: \(error)")
                 if let apiError = error as? APIError {
                     return apiError
                 } else if error is DecodingError {
+                    print("APIService: fetchUserProductsFromBackend decoding error details: \(error)")
                     return APIError.decodingError
                 } else {
                     return APIError.networkError
@@ -940,12 +955,19 @@ class APIService {
             request.httpBody = body
         }
 
+        // Define response structure that matches backend MongoDB response
         struct CreateOrUpdateResponse: Decodable {
             let status: String
             let data: DataContainer
             struct DataContainer: Decodable {
-                let product: ProductIdOnly
-                struct ProductIdOnly: Decodable { let id: String?; let _id: String? }
+                let product: MongoProduct
+            }
+            struct MongoProduct: Decodable {
+                let _id: String  // MongoDB returns _id field directly
+                
+                enum CodingKeys: String, CodingKey {
+                    case _id
+                }
             }
         }
 
@@ -955,13 +977,41 @@ class APIService {
                     if let http = response as? HTTPURLResponse, http.statusCode == 401 { throw APIError.authenticationRequired }
                     throw APIError.invalidResponse
                 }
+                // Debug: print raw response for troubleshooting
+                if let jsonStr = String(data: data, encoding: .utf8) {
+                    print("APIService: syncProductWithBackend response: \(jsonStr)")
+                }
                 return data
             }
-            .decode(type: CreateOrUpdateResponse.self, decoder: JSONDecoder())
-            .map { $0.data.product.id ?? $0.data.product._id ?? "" }
+            .decode(type: CreateOrUpdateResponse.self, decoder: {
+                let decoder = JSONDecoder()
+                // Add custom date decoding strategy to handle ISO8601 dates with fractional seconds
+                decoder.dateDecodingStrategy = .custom { decoder in
+                    let container = try decoder.singleValueContainer()
+                    let dateString = try container.decode(String.self)
+                    // Try fractional seconds parser first
+                    let fractionalFormatter = ISO8601DateFormatter()
+                    fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    if let date = fractionalFormatter.date(from: dateString) {
+                        return date
+                    }
+                    // Fallback to default ISO8601 parser
+                    let basicFormatter = ISO8601DateFormatter()
+                    if let date = basicFormatter.date(from: dateString) {
+                        return date
+                    }
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Invalid date: \(dateString)"))
+                }
+                return decoder
+            }())
+            .map { $0.data.product._id }  // Extract _id from MongoDB response
             .mapError { error in
                 if let apiErr = error as? APIError { return apiErr }
-                if error is DecodingError { return .decodingError }
+                if error is DecodingError { 
+                    print("APIService: syncProductWithBackend decoding error: \(error)")
+                    return .decodingError 
+                }
                 return .networkError
             }
             .eraseToAnyPublisher()
