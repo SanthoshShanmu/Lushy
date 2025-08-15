@@ -32,10 +32,11 @@ struct ManualEntryView: View {
     @State private var showingProcessingToast = false
     @State private var isSaving = false  // Block UI during save
 
-    // Manual lookup states
+    // Manual lookup states - separate from scanner state
     @State private var manualFetchedProduct: Product? = nil
     @State private var manualLookupError: String = ""
     @State private var showManualLookupError = false
+    @State private var manualProductNotFound = false  // Local state for manual entry
     @State private var lookupCancellable: AnyCancellable? = nil
 
     // Add bag view model and sheet state
@@ -167,9 +168,12 @@ struct ManualEntryView: View {
             }
 #endif
             .onAppear {
-                // If we come from product not found, make sure user knows they're adding a new product
+                // If we come from product not found in scanner, transfer that state to local state
                 if viewModel.productNotFound {
-                    // The barcode is already filled in by the view model
+                    // Transfer the scanner's "not found" state to local state
+                    manualProductNotFound = true
+                    // Reset the scanner's state so it doesn't interfere
+                    viewModel.productNotFound = false
                 }
                 // Test OBF connectivity
                 OBFContributionService.shared.testConnection { isConnected in
@@ -300,7 +304,11 @@ struct ManualEntryView: View {
             isSaving = false
             showingErrorAlert = false
             errorMessage = ""
+            // Reset local manual lookup state
             manualFetchedProduct = nil
+            manualProductNotFound = false
+            manualLookupError = ""
+            showManualLookupError = false
             // Cancel subscriptions to avoid leaks
             paoCancellable?.cancel(); paoCancellable = nil
             lookupCancellable?.cancel(); lookupCancellable = nil
@@ -323,24 +331,27 @@ struct ManualEntryView: View {
                         errorMessage = "Please enter a barcode to look up"
                         showingErrorAlert = true
                     } else {
-                        // Reset prior state
+                        // Reset prior state - use local state only
                         manualFetchedProduct = nil
-                        viewModel.productNotFound = false
+                        manualProductNotFound = false
                         manualLookupError = ""
-                        // Perform manual lookup without affecting scanner
+                        showManualLookupError = false
+                        
+                        // Perform manual lookup without affecting scanner state
                         lookupCancellable = APIService.shared.fetchProduct(barcode: viewModel.manualBarcode)
                             .receive(on: DispatchQueue.main)
                             .sink(receiveCompletion: { completion in
                                 if case .failure(let error) = completion {
                                     if error == .productNotFound {
-                                        // Graceful not found path
-                                        viewModel.productNotFound = true
+                                        // Use local state - don't affect shared viewModel
+                                        manualProductNotFound = true
                                         manualLookupError = "Product not found. Please enter details below to add it."
                                         showManualLookupError = false
                                         // Clear any previously fetched product
                                         manualFetchedProduct = nil
                                         focusField = .productName
                                     } else {
+                                        manualProductNotFound = false
                                         manualLookupError = error.localizedDescription
                                         showManualLookupError = true
                                     }
@@ -350,7 +361,7 @@ struct ManualEntryView: View {
                                 viewModel.manualProductName = product.productName ?? ""
                                 viewModel.manualBrand = product.brands ?? ""
                                 if let pao = product.periodsAfterOpening { periodsAfterOpening = pao }
-                                viewModel.productNotFound = false
+                                manualProductNotFound = false
                             })
                     }
                 }
@@ -363,8 +374,8 @@ struct ManualEntryView: View {
                     .font(.caption)
                     .foregroundColor(.red)
             }
-            // Inline not-found / error banner
-            if viewModel.productNotFound {
+            // Inline not-found / error banner - use local state
+            if manualProductNotFound {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "questionmark.circle")
                         .foregroundColor(.orange)
@@ -394,7 +405,7 @@ struct ManualEntryView: View {
     @ViewBuilder private func productInformationSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Product Information").font(.headline)
-            if viewModel.productNotFound {
+            if manualProductNotFound {
                 Text("Enter the product details below. We'll save it locally and sync to your account; the core data may also be sent anonymously to improve the catalog.")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -715,7 +726,7 @@ struct ManualEntryView: View {
                 try? context.save()
                 
                 // 3) ONLY after backend sync, contribute to OBF if needed
-                if self.viewModel.productNotFound {
+                if self.manualProductNotFound {
                     self.viewModel.silentlyContributeToOBF(productImage: self.productImage)
                 }
                 
