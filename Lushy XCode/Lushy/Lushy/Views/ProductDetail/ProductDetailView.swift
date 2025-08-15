@@ -482,6 +482,17 @@ struct _PrettyProductHeader: View {
                             .foregroundColor(.lushyPeach)
                             .cornerRadius(12)
                     }
+                    // Add quantity display
+                    if viewModel.product.quantity > 1 {
+                        Text("Qty: \(viewModel.product.quantity)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyPink.opacity(0.2))
+                            .foregroundColor(.lushyPink)
+                            .cornerRadius(12)
+                    }
                 }
                 
                 // Expiry countdown

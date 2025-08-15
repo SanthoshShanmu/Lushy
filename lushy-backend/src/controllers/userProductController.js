@@ -158,6 +158,11 @@ exports.createUserProduct = async (req, res) => {
     if (req.file) {
       productData.imageUrl = `${req.protocol}://${req.get('host')}/uploads/products/${req.file.filename}`;
     }
+    
+    // REMOVED: Duplicate detection logic - each instance is tracked separately
+    
+    console.log('🆕 Creating new product instance');
+    
     // If barcode is provided but no product details, fetch from Open Beauty Facts
     if (productData.barcode && (!productData.productName || !productData.imageUrl)) {
       const externalData = await fetchProductDetails(productData.barcode);
@@ -206,7 +211,18 @@ exports.createUserProduct = async (req, res) => {
 
     const newProduct = await UserProduct.create(productData);
     
-    // Activity: Product added should be first
+    // Update quantity for similar products (including the new one)
+    if (newProduct.productName && newProduct.brand) {
+      await UserProduct.updateSimilarProductsQuantity(
+        newProduct.user,
+        newProduct.productName,
+        newProduct.brand,
+        newProduct.sizeInMl,
+        true // increment
+      );
+    }
+    
+    // Activity: Product added
     try {
       const Activity = require('../models/activity');
       const User = require('../models/user');
@@ -266,7 +282,11 @@ exports.createUserProduct = async (req, res) => {
        .populate('bags', 'name');
      res.status(201).json({
        status: 'success',
-       data: { product: populatedNewProduct }
+       data: { 
+         product: populatedNewProduct,
+         action: 'new_product',
+         message: 'New product added to your collection.'
+       }
      });
   } catch (error) {
     console.error('Product creation error:', error);
@@ -365,6 +385,17 @@ exports.updateUserProduct = async (req, res) => {
             createdAt: new Date()
           });
           console.log('Activity created: finished_product for user', req.params.userId, 'product:', product.productName);
+          
+          // Update quantity for similar products when a product is finished
+          if (product.productName && product.brand) {
+            await UserProduct.updateSimilarProductsQuantity(
+              product.user,
+              product.productName,
+              product.brand,
+              product.sizeInMl,
+              false // decrement
+            );
+          }
         } catch (e) {
           console.error('Finished product activity creation error:', e);
         }

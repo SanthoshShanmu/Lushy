@@ -116,6 +116,12 @@ const UserProductSchema = new Schema({
   shade: { type: String },
   sizeInMl: { type: Number },
   spf: { type: Number },
+  // Quantity field to track similar products
+  quantity: {
+    type: Number,
+    default: 1,
+    min: 0
+  },
   inWishlist: {
     type: Boolean,
     default: false
@@ -158,5 +164,60 @@ function extractMonths(periodString) {
   const match = periodString.match(/(\d+)\s*[Mm]/);
   return match ? parseInt(match[1]) : null;
 }
+
+// Helper function to find similar products
+UserProductSchema.statics.findSimilarProducts = async function(userId, productName, brand, sizeInMl) {
+  const query = {
+    user: userId,
+    productName: productName,
+    brand: brand
+  };
+  
+  // Include sizeInMl in comparison if it's specified
+  if (sizeInMl && sizeInMl > 0) {
+    query.sizeInMl = sizeInMl;
+  }
+  
+  return await this.find(query);
+};
+
+// Helper function to update quantity for similar products
+UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId, productName, brand, sizeInMl, increment = true) {
+  try {
+    // Find all similar products for this user
+    const query = {
+      user: userId,
+      productName: { $regex: new RegExp(`^${productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      brand: { $regex: new RegExp(`^${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    };
+    
+    // If size is specified, also match by size (within 10ml tolerance)
+    if (sizeInMl && sizeInMl > 0) {
+      query.sizeInMl = { $gte: sizeInMl - 10, $lte: sizeInMl + 10 };
+    }
+    
+    const similarProducts = await this.find(query);
+    
+    // Calculate new quantity
+    let totalQuantity = similarProducts.length;
+    if (!increment && totalQuantity > 0) {
+      totalQuantity = Math.max(0, totalQuantity - 1);
+    }
+    
+    // Update all similar products with the new quantity
+    await this.updateMany(query, { quantity: totalQuantity });
+    
+    console.log(`Updated quantity to ${totalQuantity} for ${similarProducts.length} similar products: ${productName} by ${brand}`);
+    
+    return totalQuantity;
+  } catch (error) {
+    console.error('Error updating similar products quantity:', error);
+    throw error;
+  }
+};
+
+// Index for efficient similarity queries
+UserProductSchema.index({ user: 1, productName: 1, brand: 1 });
+UserProductSchema.index({ user: 1, barcode: 1 });
 
 module.exports = mongoose.model('UserProduct', UserProductSchema);

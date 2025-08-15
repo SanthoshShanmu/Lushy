@@ -96,15 +96,7 @@ class CoreDataManager {
         let context = viewContext
         var objectID: NSManagedObjectID?
         context.performAndWait {
-            // Avoid creating duplicates only if we have a non-empty barcode
-            if let code = barcode, !code.isEmpty {
-                let fetchReq: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-                fetchReq.predicate = NSPredicate(format: "barcode == %@ AND userId == %@", code, currentUserId())
-                if let existing = (try? context.fetch(fetchReq))?.first {
-                    objectID = existing.objectID
-                    return
-                }
-            }
+            // Remove duplicate prevention - let backend handle duplicates properly
             let product = UserProduct(context: context)
             // Set properties
             product.barcode = (barcode?.isEmpty == true) ? nil : barcode
@@ -121,6 +113,7 @@ class CoreDataManager {
             product.sizeInMl = sizeInMl ?? 0.0
             product.spf = spf ?? 0
             product.userId = currentUserId()
+            product.quantity = 1
             // Set expiry date - either from override or calculate from PAO
             if let expiryOverride = expiryOverride {
                 product.expireDate = expiryOverride

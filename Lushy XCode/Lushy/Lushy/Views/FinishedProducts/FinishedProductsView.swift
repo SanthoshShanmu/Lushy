@@ -159,27 +159,51 @@ private struct FinishedProductCard: View {
     var body: some View {
         HStack(spacing: 16) {
             // Product image
-            AsyncImage(url: URL(string: product.imageUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        LinearGradient(
-                            colors: [.lushyPink.opacity(0.3), .lushyPurple.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            ZStack {
+                AsyncImage(url: URL(string: product.imageUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.lushyPink.opacity(0.3), .lushyPurple.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .overlay(
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 24))
-                            .foregroundColor(.lushyPink.opacity(0.5))
-                    )
+                        .overlay(
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 24))
+                                .foregroundColor(.lushyPink.opacity(0.5))
+                        )
+                }
+                .frame(width: 70, height: 70)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                
+                // Add quantity badge for finished products
+                if product.quantity > 1 {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Text("×\(product.quantity)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.green)
+                                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+                                )
+                                .offset(x: 8, y: -8)
+                        }
+                        Spacer()
+                    }
+                }
             }
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
             
             // Product info
             VStack(alignment: .leading, spacing: 6) {
@@ -211,6 +235,17 @@ private struct FinishedProductCard: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                
+                // Show quantity info if more than 1
+                if product.quantity > 1 {
+                    Text("Quantity: \(product.quantity)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(6)
+                }
             }
             
             Spacer()
@@ -235,7 +270,7 @@ private struct FinishedProductCard: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(
                             LinearGradient(
-                                colors: [.lushyPeach.opacity(0.3), .lushyPink.opacity(0.2)],
+                                colors: [.green.opacity(0.3), .green.opacity(0.1)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -243,7 +278,7 @@ private struct FinishedProductCard: View {
                         )
                 )
         )
-        .shadow(color: .lushyPeach.opacity(0.1), radius: 8, x: 0, y: 4)
+        .shadow(color: Color.green.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 

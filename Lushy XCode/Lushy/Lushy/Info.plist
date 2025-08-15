@@ -6,10 +6,5 @@
 	<string></string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string></string>
-	<!-- Inject system OBF credentials via build settings (do NOT hard-code secrets here) -->
-	<key>OBF_SYSTEM_USER_ID</key>
-	<string>$(OBF_SYSTEM_USER_ID)</string>
-	<key>OBF_SYSTEM_PASSWORD</key>
-	<string>$(OBF_SYSTEM_PASSWORD)</string>
 </dict>
 </plist>

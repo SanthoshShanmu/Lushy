@@ -175,12 +175,7 @@ struct ManualEntryView: View {
                     // Reset the scanner's state so it doesn't interfere
                     viewModel.productNotFound = false
                 }
-                // Test OBF connectivity
-                OBFContributionService.shared.testConnection { isConnected in
-                    DispatchQueue.main.async {
-                        print("✅ OBF connection test result: \(isConnected ? "Connected" : "Not connected")")
-                    }
-                }
+                
                 // Load bags and tags for selection
                 bagViewModel.fetchBags()
                 tagViewModel.fetchTags()
@@ -338,7 +333,7 @@ struct ManualEntryView: View {
                         showManualLookupError = false
                         
                         // Perform manual lookup without affecting scanner state
-                        lookupCancellable = APIService.shared.fetchProduct(barcode: viewModel.manualBarcode)
+                        lookupCancellable = APIService.shared.fetchProductHybrid(barcode: viewModel.manualBarcode)
                             .receive(on: DispatchQueue.main)
                             .sink(receiveCompletion: { completion in
                                 if case .failure(let error) = completion {
@@ -727,7 +722,7 @@ struct ManualEntryView: View {
                 
                 // 3) ONLY after backend sync, contribute to OBF if needed
                 if self.manualProductNotFound {
-                    self.viewModel.silentlyContributeToOBF(productImage: self.productImage)
+                    self.viewModel.silentlyContributeToOBF(productImage: self.productImage, wasNotFound: true)
                 }
                 
                 // 4) Navigate without excessive notifications

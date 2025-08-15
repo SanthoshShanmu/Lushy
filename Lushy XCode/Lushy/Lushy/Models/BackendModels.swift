@@ -43,6 +43,8 @@ struct BackendUserProduct: Codable, Identifiable {
     let shade: String?
     let sizeInMl: Double?
     let spf: Int?
+    // NEW: Product instance support
+    let quantity: Int
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -61,9 +63,10 @@ struct BackendUserProduct: Codable, Identifiable {
         case shade
         case sizeInMl
         case spf
+        case quantity
     }
 
-    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, favorite: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?) {
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, favorite: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?, quantity: Int = 1) {
         self.id = id
         self.barcode = barcode
         self.productName = productName
@@ -80,6 +83,7 @@ struct BackendUserProduct: Codable, Identifiable {
         self.shade = shade
         self.sizeInMl = sizeInMl
         self.spf = spf
+        self.quantity = quantity
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +104,7 @@ struct BackendUserProduct: Codable, Identifiable {
         shade = try? c.decode(String.self, forKey: .shade)
         sizeInMl = try? c.decode(Double.self, forKey: .sizeInMl)
         spf = try? c.decode(Int.self, forKey: .spf)
+        quantity = (try? c.decode(Int.self, forKey: .quantity)) ?? 1 // default to 1
     }
 }
 

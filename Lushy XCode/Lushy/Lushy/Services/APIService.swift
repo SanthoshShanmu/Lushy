@@ -188,6 +188,83 @@ class APIService {
         }.resume()
     }
 
+    // MARK: - OBF Contribution via Backend
+    
+    /// Contribute to Open Beauty Facts via backend proxy (secure)
+    func contributeToOBFViaBackend(
+        barcode: String?,
+        name: String,
+        brand: String,
+        category: String,
+        periodsAfterOpening: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        let url = baseURL.appendingPathComponent("products").appendingPathComponent("contribute-obf")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authentication
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // Prepare request body
+        var body: [String: Any] = [
+            "productName": name,
+            "brand": brand,
+            "category": category,
+            "periodsAfterOpening": periodsAfterOpening
+        ]
+        
+        if let barcode = barcode, !barcode.isEmpty {
+            body["barcode"] = barcode
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        
+        print("🔄 Contributing to OBF via backend: \(name) by \(brand)")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Backend OBF contribution network error: \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let data = data else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            // Parse response
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("📄 Backend OBF response: \(json)")
+                    
+                    if httpResponse.statusCode == 200,
+                       let status = json["status"] as? String,
+                       status == "success" {
+                        let productId = json["productId"] as? String ?? "unknown"
+                        print("✅ Successfully contributed to OBF via backend: \(productId)")
+                        completion(.success(productId))
+                    } else {
+                        let errorMessage = json["message"] as? String ?? "Unknown error"
+                        completion(.failure(NSError(domain: "APIService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage])))
+                    }
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
     // MARK: - Social Features
     func fetchUserFeed(userId: String, completion: @escaping (Result<[Activity], Error>) -> Void) {
         let url = baseURL.appendingPathComponent("users/\(userId)/feed")
@@ -305,8 +382,7 @@ class APIService {
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
-                completion(.failure(APIError.invalidResponse)); return
-            }
+                completion(.failure(APIError.invalidResponse)); return }
             struct LikeResp: Decodable { let likes: Int; let liked: Bool }
             do {
                 let resp = try JSONDecoder().decode(LikeResp.self, from: data)
@@ -329,8 +405,7 @@ class APIService {
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
-                completion(.failure(APIError.invalidResponse)); return
-            }
+                completion(.failure(APIError.invalidResponse)); return }
             struct CommentResp: Decodable { let comments: [CommentSummary] }
             do {
                 let resp = try JSONDecoder().decode(CommentResp.self, from: data)
@@ -439,6 +514,25 @@ class APIService {
         }.resume()
     }
     
+    // Combine-compatible version of searchProducts
+    func searchProductsPublisher(query: String) -> AnyPublisher<[ProductSearchSummary], APIError> {
+        return Future<[ProductSearchSummary], APIError> { promise in
+            self.searchProducts(query: query) { result in
+                switch result {
+                case .success(let products):
+                    promise(.success(products))
+                case .failure(let error):
+                    if let apiError = error as? APIError {
+                        promise(.failure(apiError))
+                    } else {
+                        promise(.failure(.networkError))
+                    }
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+    
     // MARK: - Open Beauty Facts API
     
     // Update the fetchProduct method to include new fields
@@ -466,6 +560,50 @@ class APIService {
             .mapError { error -> APIError in
                 if let apiError = error as? APIError { return apiError }
                 return .networkError
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Hybrid Product Lookup (Backend + OBF)
+    
+    /// Enhanced product lookup that searches backend first, then falls back to OBF
+    func fetchProductHybrid(barcode: String) -> AnyPublisher<Product, APIError> {
+        // First, search in your backend database
+        return searchProductsPublisher(query: barcode)
+            .map { searchResults -> Product? in
+                // Look for exact barcode match in your database
+                if let match = searchResults.first(where: { $0.barcode == barcode }) {
+                    // Convert ProductSearchSummary to Product
+                    return Product(
+                        id: match.barcode,
+                        code: match.barcode,
+                        productName: match.productName,
+                        brands: match.brand,
+                        imageUrl: match.imageUrl,
+                        ingredients: nil,
+                        periodsAfterOpening: nil,
+                        imageSmallUrl: match.imageUrl,
+                        periodsAfterOpeningTags: nil,
+                        batchCode: nil,
+                        manufactureDate: nil,
+                        complianceAdvisory: nil,
+                        regionSpecificGuidelines: nil
+                    )
+                }
+                return nil
+            }
+            .flatMap { backendProduct -> AnyPublisher<Product, APIError> in
+                if let product = backendProduct {
+                    // Found in backend, return it
+                    print("🎯 Product found in backend database: \(product.productName ?? "Unknown")")
+                    return Just(product)
+                        .setFailureType(to: APIError.self)
+                        .eraseToAnyPublisher()
+                } else {
+                    // Not found in backend, try Open Beauty Facts
+                    print("🔍 Product not in backend, searching Open Beauty Facts...")
+                    return self.fetchProduct(barcode: barcode)
+                }
             }
             .eraseToAnyPublisher()
     }
@@ -912,7 +1050,8 @@ class APIService {
             "brand": product.brand ?? "",
             "vegan": product.vegan,
             "crueltyFree": product.crueltyFree,
-            "favorite": product.favorite
+            "favorite": product.favorite,
+            "quantity": Int(product.quantity)
         ]
         if let purchase = ms(product.purchaseDate) { fields["purchaseDate"] = purchase }
         if let open = ms(product.openDate) { fields["openDate"] = open }
@@ -959,6 +1098,7 @@ class APIService {
         struct CreateOrUpdateResponse: Decodable {
             let status: String
             let data: DataContainer
+            
             struct DataContainer: Decodable {
                 let product: MongoProduct
             }
@@ -976,10 +1116,6 @@ class APIService {
                 guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                     if let http = response as? HTTPURLResponse, http.statusCode == 401 { throw APIError.authenticationRequired }
                     throw APIError.invalidResponse
-                }
-                // Debug: print raw response for troubleshooting
-                if let jsonStr = String(data: data, encoding: .utf8) {
-                    print("APIService: syncProductWithBackend response: \(jsonStr)")
                 }
                 return data
             }
@@ -1005,7 +1141,13 @@ class APIService {
                 }
                 return decoder
             }())
-            .map { $0.data.product._id }  // Extract _id from MongoDB response
+            .map { response -> String in
+                let backendId = response.data.product._id
+                
+                print("✅ Product synced successfully with backend ID: \(backendId)")
+                
+                return backendId
+            }
             .mapError { error in
                 if let apiErr = error as? APIError { return apiErr }
                 if error is DecodingError { 

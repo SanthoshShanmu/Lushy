@@ -68,6 +68,28 @@ struct PrettyProductRow: View {
                         .foregroundColor(.gray.opacity(0.7))
                         .frame(width: 58, height: 58)
                 }
+                
+                // Add quantity badge overlay
+                if product.quantity > 1 {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Text("×\(product.quantity)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.lushyPink)
+                                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+                                )
+                                .offset(x: 8, y: -8)
+                        }
+                        Spacer()
+                    }
+                }
             }
             
             VStack(alignment: .leading, spacing: 6) {

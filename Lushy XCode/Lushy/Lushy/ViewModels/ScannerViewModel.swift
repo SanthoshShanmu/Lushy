@@ -125,7 +125,7 @@ class ScannerViewModel: ObservableObject {
         errorMessage = nil
         productNotFound = false
         
-        APIService.shared.fetchProduct(barcode: barcode)
+        APIService.shared.fetchProductHybrid(barcode: barcode)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
                 self?.isLoading = false
@@ -145,8 +145,8 @@ class ScannerViewModel: ObservableObject {
                     case .networkError:
                         self?.errorMessage = "Network error. Please check your connection."
                     case .productNotFound:
-                        // Product not found in OpenBeautyFacts - this is the main case we want
-                        print("🔍 Product not found in database - barcode: \(barcode)")
+                        // Product not found in either backend or OpenBeautyFacts
+                        print("🔍 Product not found in backend or OBF database - barcode: \(barcode)")
                     default:
                         self?.errorMessage = "An unknown error occurred."
                     }
@@ -297,15 +297,7 @@ class ScannerViewModel: ObservableObject {
             }
         }
         
-        // Avoid duplicate adds: if product with same barcode already exists, navigate to it
-        if let existing = CoreDataManager.shared.fetchUserProducts().first(where: { $0.barcode == scannedProduct?.code }) {
-            DispatchQueue.main.async {
-                self.selectedUserProduct = existing
-                self.showProductDetail = true
-                self.scannedProduct = nil
-            }
-            return existing.objectID
-        }
+        // Remove duplicate prevention - let backend handle duplicates properly
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: product.code,
             productName: product.productName ?? "Unknown Product",
@@ -419,33 +411,36 @@ class ScannerViewModel: ObservableObject {
     }
     
     // Contribute to OpenBeautyFacts silently
-    func silentlyContributeToOBF(productImage: UIImage? = nil) {
-        // Only proceed if all conditions are met (productNotFound, name present, user setting)
-        guard shouldContributeToOBF() else { return }
+    func silentlyContributeToOBF(productImage: UIImage? = nil, wasNotFound: Bool? = nil) {
+        // Use the provided wasNotFound parameter if available, otherwise use the stored state
+        let shouldContribute = wasNotFound ?? shouldContributeToOBF()
+        
+        // Only proceed if all conditions are met
+        guard shouldContribute else { return }
         
         isContributingToOBF = true
         print("Starting OBF contribution for \(manualProductName)")
         
         // Use default PAO if not specified
-        let pao = "12 M" // Default to 12 months if not specified
+        let pao = periodsAfterOpening.isEmpty ? "12 M" : periodsAfterOpening
         
         // Determine a reasonable category based on product name
         let category = determineCategory(from: manualProductName)
         
-        OBFContributionService.shared.uploadProduct(
+        // Use secure backend proxy instead of direct OBF contribution
+        APIService.shared.contributeToOBFViaBackend(
             barcode: manualBarcode.isEmpty ? nil : manualBarcode,
             name: manualProductName,
             brand: manualBrand.isEmpty ? "Unknown" : manualBrand,
             category: category,
-            periodsAfterOpening: pao,
-            productImage: productImage
+            periodsAfterOpening: pao
         ) { [weak self] result in
             DispatchQueue.main.async {
                 self?.isContributingToOBF = false
                 
                 switch result {
                 case .success(let productId):
-                    print("Successfully uploaded to OBF with ID: \(productId)")
+                    print("Successfully contributed to OBF via backend with ID: \(productId)")
                     
                     // Increment contribution count locally
                     let count = UserDefaults.standard.integer(forKey: "obf_contribution_count")
@@ -456,20 +451,11 @@ class ScannerViewModel: ObservableObject {
                     contributedProducts.append(productId)
                     UserDefaults.standard.set(contributedProducts, forKey: "obf_contributed_products")
                     
-                    // Sync contribution with backend if authenticated
-                    if let userId = AuthService.shared.userId {
-                        APIService.shared.addOBFContribution(userId: userId, productId: productId) { result in
-                            if case .failure(let err) = result {
-                                print("Failed to sync OBF contribution: \(err.localizedDescription)")
-                            }
-                        }
-                    }
-                    
                     // Post notification for success toast
                     NotificationCenter.default.post(name: NSNotification.Name("OBFContributionSuccess"), object: nil)
                     
                 case .failure(let error):
-                    print("OBF upload failed: \(error.localizedDescription)")
+                    print("OBF contribution via backend failed: \(error.localizedDescription)")
                 }
             }
         }

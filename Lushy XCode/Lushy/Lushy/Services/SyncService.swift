@@ -294,6 +294,7 @@ class SyncService {
         localProduct.shade = backendProduct.shade
         localProduct.sizeInMl = backendProduct.sizeInMl ?? 0.0
         localProduct.spf = Int16(backendProduct.spf ?? 0)
+        localProduct.quantity = Int32(backendProduct.quantity)
         // Ensure required Core Data fields are populated
         localProduct.barcode = backendProduct.barcode
         localProduct.userId = AuthService.shared.userId ?? localProduct.userId
@@ -321,6 +322,7 @@ class SyncService {
         product.shade = backendProduct.shade
         product.sizeInMl = backendProduct.sizeInMl ?? 0.0
         product.spf = Int16(backendProduct.spf ?? 0)
+        product.quantity = Int32(backendProduct.quantity)
         product.userId = AuthService.shared.userId ?? "guest"
         product.backendId = backendProduct.id // <-- set backendId
         return product
@@ -347,14 +349,17 @@ class SyncService {
                     }
                 }
             }, receiveValue: { backendId in
-                // Assign returned backendId and save
+                print("✅ Product synced successfully with backend ID: \(backendId)")
+                
+                // New product created - assign backend ID and save
                 product.backendId = backendId
                 try? CoreDataManager.shared.viewContext.save()
-                print("Product synced successfully with backend ID: \(backendId)")
+                
                 // Refresh the feed to show the new activity
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
                 }
+                
                 // Persist any existing local tag relationships
                 if let tagSet = product.tags as? Set<ProductTag> {
                     for tag in tagSet {
