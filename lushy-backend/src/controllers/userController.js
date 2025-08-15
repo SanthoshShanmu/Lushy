@@ -80,7 +80,7 @@ exports.getUserProfile = async (req, res) => {
       const UserProduct = require('../models/userProduct');
       // Fetch products for user with populated tags and bags
       products = await UserProduct.find({ user: userId })
-        .select('productName brand favorite tags bags barcode imageUrl purchaseDate openDate periodsAfterOpening vegan crueltyFree')
+        .select('productName brand favorite tags bags barcode imageUrl purchaseDate openDate periodsAfterOpening vegan crueltyFree isFinished')
         .populate('tags', 'name color')
         .populate('bags', 'name');
     } catch (e) {}

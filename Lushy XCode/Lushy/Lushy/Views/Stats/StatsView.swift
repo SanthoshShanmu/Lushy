@@ -258,90 +258,86 @@ struct StatsView: View {
     }
     
     private func finishedProductRow(product: UserProduct) -> some View {
-        HStack(spacing: 15) {
-            // Product image
-            productImageView(urlString: product.imageUrl)
-                .frame(width: 60, height: 60)
-                .background(Color.lushyCream)
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.productName ?? "Unknown Product")
-                    .font(.headline)
-                    .lineLimit(1)
+        NavigationLink(destination: FinishedProductDetailView(product: product)) {
+            HStack(spacing: 15) {
+                // Product image
+                productImageView(urlString: product.imageUrl)
+                    .frame(width: 60, height: 60)
+                    .background(Color.lushyCream)
+                    .clipShape(Circle())
                 
-                if let brand = product.brand {
-                    Text(brand)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                
-                // Bag and tag indicators
-                HStack(spacing: 6) {
-                    if let bags = product.bags as? Set<BeautyBag>, let bag = bags.first {
-                        HStack(spacing: 3) {
-                            Image(systemName: bag.icon ?? "bag.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(bag.color ?? "lushyPink"))
-                            Text(bag.name ?? "Bag")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color(bag.color ?? "lushyPink").opacity(0.08))
-                        .cornerRadius(8)
-                    }
-                    if let tags = product.tags as? Set<ProductTag>, !tags.isEmpty {
-                        ForEach(Array(tags.prefix(2)), id: \.self) { tag in
-                            HStack(spacing: 3) {
-                                Circle()
-                                    .fill(Color(tag.color ?? "lushyPink"))
-                                    .frame(width: 7, height: 7)
-                                Text(tag.name ?? "")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color(tag.color ?? "lushyPink").opacity(0.10))
-                            .cornerRadius(8)
-                        }
-                    }
-                }
-                
-                HStack {
-                    Text(usageDurationText(product: product))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(product.productName ?? "Unknown Product")
+                        .font(.headline)
+                        .lineLimit(1)
                     
-                    if let openDate = product.openDate,
-                       let finishDate = product.value(forKey: "finishDate") as? Date {
-                        Spacer()
-                        Text(formattedDateRange(from: openDate, to: finishDate))
+                    if let brand = product.brand {
+                        Text(brand)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    // Show tags with small chips
+                    if let tags = product.tags as? Set<ProductTag>, !tags.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(Array(tags.prefix(2)), id: \.self) { tag in
+                                HStack(spacing: 3) {
+                                    Circle()
+                                        .fill(Color(tag.color ?? "lushyPink"))
+                                        .frame(width: 8, height: 8)
+                                    Text(tag.name ?? "")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color(tag.color ?? "lushyPink").opacity(0.10))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                    
+                    HStack {
+                        Text(usageDurationText(product: product))
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        
+                        if let openDate = product.openDate,
+                           let finishDate = product.value(forKey: "finishDate") as? Date {
+                            Spacer()
+                            Text(formattedDateRange(from: openDate, to: finishDate))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-            }
-            
-            Spacer()
-            
-            // Display rating if available
-            if let reviews = product.reviews as? Set<Review>, let review = reviews.first {
-                HStack {
-                    ForEach(1...5, id: \.self) { index in
-                        Image(systemName: index <= review.rating ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 10))
+                
+                Spacer()
+                
+                // Display rating if available
+                if let reviews = product.reviews as? Set<Review>, let review = reviews.first {
+                    HStack {
+                        ForEach(1...5, id: \.self) { index in
+                            Image(systemName: index <= review.rating ? "star.fill" : "star")
+                                .foregroundColor(.yellow)
+                                .font(.caption2)
+                        }
                     }
                 }
+                
+                // Finished indicator
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.title3)
             }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.8))
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            )
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(10)
-        .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+        .buttonStyle(PlainButtonStyle())
     }
     
     private func productImageView(urlString: String?) -> some View {

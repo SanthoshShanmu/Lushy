@@ -277,7 +277,7 @@ class CoreDataManager {
             // Save the context immediately
             try? context.save()
             
-            // Sync favorite status to backend to create activity
+            // Sync favorite status to backend to create activity - but don't post UI notifications
             if let userId = AuthService.shared.userId, let backendId = product.backendId {
                 let url = APIService.shared.baseURL.appendingPathComponent("users/")
                     .appendingPathComponent(userId)
@@ -292,10 +292,8 @@ class CoreDataManager {
                 let body: [String: Any] = ["favorite": newFavoriteStatus]
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                 URLSession.shared.dataTask(with: request) { _, _, _ in
-                    // Refresh feed after favorite toggle
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
-                    }
+                    // Remove the RefreshFeed notification to prevent loops
+                    // The Core Data context save will already notify any observers
                 }.resume()
             }
         }
@@ -463,8 +461,8 @@ class CoreDataManager {
                         name: NSNotification.Name("ProductFinished"),
                         object: id
                     )
-                    // Refresh feed to show the finished product activity
-                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    // Remove RefreshFeed notification to prevent infinite loops
+                    // The Core Data context save will automatically update any views observing Core Data
                 }
             } catch {
                 print("Error marking product as finished: \(error)")
@@ -707,10 +705,18 @@ class CoreDataManager {
         (tag.products as? Set<UserProduct>)?.sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
     }
 
-    // Fetch only products for the current user
-    func fetchUserProducts() -> [UserProduct] {
+    // Fetch only products for the current user (excluding finished products by default)
+    func fetchUserProducts(includeFinished: Bool = false) -> [UserProduct] {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-        request.predicate = NSPredicate(format: "userId == %@", currentUserId())
+        
+        if includeFinished {
+            // Include all products (for Stats view, etc.)
+            request.predicate = NSPredicate(format: "userId == %@", currentUserId())
+        } else {
+            // Exclude finished products by default
+            request.predicate = NSPredicate(format: "userId == %@ AND isFinished != YES", currentUserId())
+        }
+        
         return (try? viewContext.fetch(request)) ?? []
     }
     

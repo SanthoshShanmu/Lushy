@@ -19,6 +19,11 @@ class ProductDetailViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let productId: String
 
+    // Computed property to check if editing should be disabled (for finished products)
+    var isEditingDisabled: Bool {
+        return product.isFinished
+    }
+
     // Get compliance advisory for current region
     var complianceAdvisory: String {
         // Get user's region from UserDefaults
@@ -59,19 +64,22 @@ class ProductDetailViewModel: ObservableObject {
         self.product = product
         self.productId = product.backendId ?? ""
         
-        // Subscribe to Core Data saves to refresh product
+        // Subscribe to Core Data saves to refresh product with debouncing
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main) // Add debouncing
             .sink { [weak self] _ in self?.refreshProduct() }
             .store(in: &cancellables)
         // Subscribe to profile refresh to reload available bags
         NotificationCenter.default.publisher(for: NSNotification.Name("RefreshProfile"))
             .receive(on: RunLoop.main)
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // Add debouncing
             .sink { [weak self] _ in self?.fetchBagsAndTags() }
             .store(in: &cancellables)
         // Subscribe to tags sync to reload tags
         NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTags"))
             .receive(on: RunLoop.main)
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // Add debouncing
             .sink { [weak self] _ in self?.fetchBagsAndTags() }
             .store(in: &cancellables)
         // Initial load of bags, tags, and refresh product relationships
@@ -294,8 +302,8 @@ class ProductDetailViewModel: ObservableObject {
                     }
                     self.allBags = uniqueBags
                     self.allTags = CoreDataManager.shared.fetchProductTags()
-                    // After tags and bags are loaded, re-sync detailed product data
-                    self.refreshRemoteDetail()
+                    // Removed automatic refreshRemoteDetail() call here to prevent loops
+                    // Only refresh product locally after bags/tags are loaded
                     self.refreshProduct()
                 }
             }
@@ -389,8 +397,8 @@ class ProductDetailViewModel: ObservableObject {
             periodsAfterOpening: periodsAfterOpening
         )
         refreshProduct()
-        // Also refresh remote details to pull any server-side adjustments
-        refreshRemoteDetail()
+        // Removed automatic refreshRemoteDetail() call to prevent infinite loops
+        // Remote details will be refreshed when explicitly needed (onAppear, manual refresh, etc.)
     }
     
     // New: bulk update helpers so UI can edit tags/bags in one sheet

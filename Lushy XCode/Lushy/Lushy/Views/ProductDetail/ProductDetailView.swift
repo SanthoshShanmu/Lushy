@@ -466,8 +466,8 @@ struct _PrettyProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.lushyMint.opacity(0.2))
-                            .foregroundColor(.lushyMint)
+                            .background(Color.mossGreen.opacity(0.2))
+                            .foregroundColor(.mossGreen)
                             .cornerRadius(12)
                     }
                     if viewModel.product.spf > 0 {
@@ -475,8 +475,8 @@ struct _PrettyProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.lushyPeach.opacity(0.2))
-                            .foregroundColor(.lushyPeach)
+                            .background(Color.puce.opacity(0.2))
+                            .foregroundColor(.puce)
                             .cornerRadius(12)
                     }
                 }
@@ -645,7 +645,7 @@ private struct _PrettyCommentsSection: View {
             HStack {
                 TextField("Add a comment", text: $viewModel.newComment)
                     .padding(8)
-                    .background(Color(.systemGray6))
+                    .background(Color(.whiteSmoke))
                     .cornerRadius(8)
                 
                 Button(action: {
@@ -654,7 +654,7 @@ private struct _PrettyCommentsSection: View {
                     Image(systemName: "paperplane.fill")
                         .foregroundColor(.lushyPink)
                         .padding(10)
-                        .background(Color(.systemGray6))
+                        .background(Color(.whiteSmoke))
                         .cornerRadius(8)
                 }
                 .disabled(viewModel.newComment.isEmpty)

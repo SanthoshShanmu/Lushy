@@ -38,20 +38,11 @@ struct ContentView: View {
                 ScannerView(viewModel: scannerViewModel)
                     .tabItem { Image(systemName: "barcode.viewfinder"); Text("Scan") }
                     .tag(Tab.scan)
-                WishlistView()
+                // Consolidated More tab that includes Wishlist, Stats, Favorites, and other settings
+                MoreView()
                     .environmentObject(authManager)
-                    .tabItem { Image(systemName: "heart.fill"); Text("Wishlist") }
-                    .tag(Tab.wishlist)
-                StatsView()
-                    .tabItem { Image(systemName: "chart.bar.fill"); Text("Stats") }
-                    .tag(Tab.stats)
-                AccountView(isLoggedIn: $authManager.isAuthenticated)
-                    .environmentObject(authManager)
-                    .tabItem { Image(systemName: "gear"); Text("Settings") }
+                    .tabItem { Image(systemName: "ellipsis"); Text("More") }
                     .tag(Tab.settings)
-                FavoritesView(viewModel: favoritesViewModel)
-                    .tabItem { Image(systemName: "star.fill"); Text("Favorites") }
-                    .tag(Tab.favorites)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenProductDetail"))) { notification in
                 if let barcode = notification.object as? String {

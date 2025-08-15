@@ -107,7 +107,14 @@ struct FeedView: View {
         }
         .onAppear { viewModel.fetchFeed(for: currentUserId) }
         .onChange(of: currentUserId) { _, newUserId in viewModel.fetchFeed(for: newUserId) }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshFeed"))) { _ in viewModel.fetchFeed(for: currentUserId) }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshFeed"))
+            .debounce(for: .milliseconds(1000), scheduler: RunLoop.main) // Add 1 second debouncing
+        ) { _ in 
+            // Only refresh if not already loading to prevent loops
+            if !viewModel.isLoading {
+                viewModel.fetchFeed(for: currentUserId) 
+            }
+        }
     }
 
     var body: some View {

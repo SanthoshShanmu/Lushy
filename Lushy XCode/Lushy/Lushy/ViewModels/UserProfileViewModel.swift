@@ -22,6 +22,15 @@ class UserProfileViewModel: ObservableObject {
         return currentUserId == targetUserId
     }
     
+    // Computed properties for product counts
+    var activeProductsCount: Int {
+        return products.filter { !($0.isFinished == true) }.count
+    }
+    
+    var finishedProductsCount: Int {
+        return products.filter { $0.isFinished == true }.count
+    }
+    
     init(currentUserId: String, targetUserId: String) {
         self.currentUserId = currentUserId
         self.targetUserId = targetUserId
@@ -94,7 +103,8 @@ class UserProfileViewModel: ObservableObject {
                 case .success:
                     self?.isFollowing = true
                     self?.fetchProfile(force: true)
-                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    // Remove RefreshFeed notification to prevent loops
+                    // Following/unfollowing shouldn't trigger feed refreshes
                 case .failure(let err):
                     self?.error = err.localizedDescription
                 }
@@ -109,7 +119,8 @@ class UserProfileViewModel: ObservableObject {
                 case .success:
                     self?.isFollowing = false
                     self?.fetchProfile(force: true)
-                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    // Remove RefreshFeed notification to prevent loops
+                    // Following/unfollowing shouldn't trigger feed refreshes
                 case .failure(let err):
                     self?.error = err.localizedDescription
                 }

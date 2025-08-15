@@ -52,7 +52,7 @@ struct UserProfileView: View {
                         ProfileHeaderView(profile: profile, viewModel: viewModel)
                         
                         // Stats Section (customized)
-                        HStack(spacing: 30) {
+                        HStack(spacing: 20) {
                             // Followers
                             if viewModel.isViewingOwnProfile {
                                 NavigationLink(destination: FollowersListView(followers: profile.followers ?? [], currentUserId: viewModel.currentUserId)) {
@@ -91,12 +91,20 @@ struct UserProfileView: View {
                                 )
                             }
 
-                            // Bags
+                            // Products (active only)
                             StatItem(
-                                icon: "bag.fill",
-                                count: viewModel.bags.count,
-                                label: "Bags",
+                                icon: "sparkles",
+                                count: viewModel.activeProductsCount,
+                                label: "Products",
                                 color: .lushyMint
+                            )
+                            
+                            // Finished Products
+                            StatItem(
+                                icon: "checkmark.circle.fill",
+                                count: viewModel.finishedProductsCount,
+                                label: "Finished",
+                                color: .lushyPeach
                             )
                         }
                         .padding(.horizontal)
@@ -341,7 +349,24 @@ struct FavoritesSection: View {
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(favorites) { product in
-                    FavoriteCard(product: product)
+                    // Create a local UserProduct for navigation
+                    let localProduct: UserProduct = {
+                        if let existing = CoreDataManager.shared.fetchUserProduct(backendId: product.id) {
+                            return existing
+                        } else {
+                            let context = CoreDataManager.shared.viewContext
+                            let stub = UserProduct(context: context)
+                            stub.backendId = product.id
+                            stub.productName = product.name
+                            stub.brand = product.brand
+                            stub.favorite = true
+                            return stub
+                        }
+                    }()
+                    
+                    NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
+                        FavoriteCard(product: product)
+                    }
                 }
             }
         }
@@ -456,6 +481,11 @@ struct ProductsSection: View {
     @Binding var wishlistMessage: String?
     @Binding var showingWishlistAlert: Bool
 
+    // Filter out finished products for main display
+    private var activeProducts: [UserProductSummary] {
+        return products.filter { !($0.isFinished == true) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -471,7 +501,7 @@ struct ProductsSection: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                ForEach(products) { summary in
+                ForEach(activeProducts) { summary in
                     // Fetch or create a local UserProduct for navigation
                     let localProduct: UserProduct = {
                         if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {

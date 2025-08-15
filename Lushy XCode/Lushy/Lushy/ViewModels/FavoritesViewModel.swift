@@ -28,10 +28,16 @@ class FavoritesViewModel: ObservableObject {
     func fetchFavorites() {
         fetchAllBagsAndTags()
         let allProducts = CoreDataManager.shared.fetchUserProducts()
+        
         let favorites = allProducts.filter { $0.favorite }
         
-        // Don't filter out finished products - favorites should show all beloved products
-        var products = favorites
+        // Filter out finished products from main favorites display
+        var products = favorites.filter { product in
+            guard product.value(forKey: "isFinished") as? Bool != true else {
+                return false
+            }
+            return true
+        }
         
         if let bag = selectedBag {
             products = products.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }

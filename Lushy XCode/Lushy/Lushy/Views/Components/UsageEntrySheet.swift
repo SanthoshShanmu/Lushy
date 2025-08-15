@@ -120,7 +120,7 @@ struct UsageEntrySheet: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     LinearGradient(
-                        colors: canSave ? [.lushyMint, .lushyPeach] : [.gray.opacity(0.5)],
+                        colors: canSave ? [.mossGreen, .lushyPeach] : [.gray.opacity(0.5)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -159,7 +159,7 @@ struct UsageTypeCard: View {
     
     private var cardColor: Color {
         switch type {
-        case "light": return .lushyMint
+        case "light": return .mossGreen
         case "medium": return .lushyPeach
         case "heavy": return .lushyPink
         case "custom": return .lushyPurple

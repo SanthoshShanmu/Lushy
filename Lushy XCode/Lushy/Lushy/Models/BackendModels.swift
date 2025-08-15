@@ -182,6 +182,7 @@ struct UserProductSummary: Identifiable, Codable {
     let name: String
     let brand: String?
     let isFavorite: Bool?
+    let isFinished: Bool?  // Add finished status property
     let tags: [TagSummary]?  // added to decode tag associations
     let bags: [BeautyBagSummary]?  // added to decode bag associations
 
@@ -190,6 +191,7 @@ struct UserProductSummary: Identifiable, Codable {
         case name = "productName"  // Map productName from backend to name in iOS
         case brand
         case isFavorite = "favorite"  // Map favorite from backend to isFavorite in iOS
+        case isFinished = "isFinished"  // Map isFinished from backend
         case tags
         case bags
     }

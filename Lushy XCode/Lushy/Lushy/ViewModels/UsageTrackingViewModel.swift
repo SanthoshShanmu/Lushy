@@ -98,9 +98,15 @@ class UsageTrackingViewModel: ObservableObject {
         currentAmount = 0
         product.currentAmount = 0
         
-        // Use async dispatch to prevent UI conflicts
+        // Use async dispatch to prevent UI conflicts and add additional guards
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            
+            // Double-check the product isn't already finished
+            guard !self.product.isFinished else {
+                self.isFinishingProduct = false
+                return
+            }
             
             CoreDataManager.shared.markProductAsFinished(id: self.product.objectID)
             self.isShowingFinishConfirmation = false
@@ -115,6 +121,11 @@ class UsageTrackingViewModel: ObservableObject {
     // Check if product can be finished early (has some usage or is opened)
     var canFinishEarly: Bool {
         return !product.isFinished && (!usageEntries.isEmpty || product.openDate != nil)
+    }
+    
+    // Add computed property to check if usage tracking should be disabled
+    var isUsageTrackingDisabled: Bool {
+        return product.isFinished
     }
     
     private func calculateUsageInsights() {

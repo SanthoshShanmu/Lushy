@@ -13,8 +13,13 @@ struct UsageTrackingView: View {
             // Usage Insights
             insightsSection
             
-            // Quick Usage Buttons
-            quickUsageSection
+            // Show finished message instead of usage buttons if product is finished
+            if usageViewModel.isUsageTrackingDisabled {
+                finishedSection
+            } else {
+                // Quick Usage Buttons
+                quickUsageSection
+            }
             
             // Recent Usage History
             recentUsageSection
@@ -30,6 +35,36 @@ struct UsageTrackingView: View {
         } message: {
             Text("This will mark the product as finished and allow you to add a review. This action cannot be undone.")
         }
+    }
+    
+    // Add finished section
+    private var finishedSection: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.green)
+                Text("Product Finished!")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.green)
+                Spacer()
+            }
+            
+            Text("This product has been marked as finished. No further usage tracking is available.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.green.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                )
+        )
     }
     
     private var progressSection: some View {
