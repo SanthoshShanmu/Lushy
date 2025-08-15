@@ -53,6 +53,7 @@ struct FinishedProductsView: View {
                                 LazyVStack(spacing: 16) {
                                     ForEach(viewModel.finishedProducts, id: \.objectID) { product in
                                         FinishedProductCard(product: product)
+                                            .environmentObject(viewModel)
                                             .onTapGesture {
                                                 selectedProduct = product
                                                 showProductDetail = true
@@ -149,6 +150,7 @@ struct FinishedProductsView: View {
 // MARK: - Finished Product Card
 private struct FinishedProductCard: View {
     let product: UserProduct
+    @EnvironmentObject private var viewModel: FinishedProductsViewModel
     
     private func dateString(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -182,12 +184,13 @@ private struct FinishedProductCard: View {
                 .frame(width: 70, height: 70)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 
-                // Add quantity badge for finished products
-                if product.quantity > 1 {
+                // Show finished instances count (not total quantity)
+                let finishedCount = viewModel.finishedInstancesCount(for: product)
+                if finishedCount > 1 {
                     VStack {
                         HStack {
                             Spacer()
-                            Text("×\(product.quantity)")
+                            Text("×\(finishedCount)")
                                 .font(.caption2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -236,9 +239,10 @@ private struct FinishedProductCard: View {
                     }
                 }
                 
-                // Show quantity info if more than 1
-                if product.quantity > 1 {
-                    Text("Quantity: \(product.quantity)")
+                // Show finished instances count if more than 1
+                let finishedCount = viewModel.finishedInstancesCount(for: product)
+                if finishedCount > 1 {
+                    Text("Finished: \(finishedCount) times")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 8)

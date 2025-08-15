@@ -497,6 +497,12 @@ class CoreDataManager {
                 if let httpResponse = response as? HTTPURLResponse {
                     if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
                         print("Successfully synced finished product to backend")
+                        
+                        // After successful backend sync, refresh products to get updated quantities
+                        // The backend will have decremented quantities for similar products
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            SyncService.shared.fetchRemoteProducts()
+                        }
                     } else {
                         print("Backend returned error status: \(httpResponse.statusCode)")
                     }
