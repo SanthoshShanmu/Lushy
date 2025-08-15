@@ -166,10 +166,13 @@ struct ProductDetailView: View {
                 )
             }
             
-            Button {
-                prepareEditSheet()
-                showEditSheet = true
-            } label: { Label("Edit", systemImage: "pencil") }
+            // Only show edit button if product is not finished
+            if !viewModel.isEditingDisabled {
+                Button {
+                    prepareEditSheet()
+                    showEditSheet = true
+                } label: { Label("Edit", systemImage: "pencil") }
+            }
             
             if let barcode = viewModel.product.barcode, !barcode.isEmpty {
                 Button { UIPasteboard.general.string = barcode } label: {
@@ -466,8 +469,8 @@ struct _PrettyProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.mossGreen.opacity(0.2))
-                            .foregroundColor(.mossGreen)
+                            .background(Color.lushyMint.opacity(0.2))
+                            .foregroundColor(.lushyMint)
                             .cornerRadius(12)
                     }
                     if viewModel.product.spf > 0 {
@@ -475,8 +478,8 @@ struct _PrettyProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.puce.opacity(0.2))
-                            .foregroundColor(.puce)
+                            .background(Color.lushyPeach.opacity(0.2))
+                            .foregroundColor(.lushyPeach)
                             .cornerRadius(12)
                     }
                 }
@@ -645,7 +648,7 @@ private struct _PrettyCommentsSection: View {
             HStack {
                 TextField("Add a comment", text: $viewModel.newComment)
                     .padding(8)
-                    .background(Color(.whiteSmoke))
+                    .background(Color(.systemGray6))
                     .cornerRadius(8)
                 
                 Button(action: {
@@ -654,7 +657,7 @@ private struct _PrettyCommentsSection: View {
                     Image(systemName: "paperplane.fill")
                         .foregroundColor(.lushyPink)
                         .padding(10)
-                        .background(Color(.whiteSmoke))
+                        .background(Color(.systemGray6))
                         .cornerRadius(8)
                 }
                 .disabled(viewModel.newComment.isEmpty)
@@ -787,10 +790,13 @@ private struct _PrettyBagsSection: View {
                 Text("Beauty Bags")
                     .font(.headline)
                 Spacer()
-                Button(action: {
-                    viewModel.fetchBagsAndTags()
-                    showBagAssignSheet = true
-                }) { Image(systemName: "plus") }
+                // Only show plus button if product is not finished
+                if !viewModel.isEditingDisabled {
+                    Button(action: {
+                        viewModel.fetchBagsAndTags()
+                        showBagAssignSheet = true
+                    }) { Image(systemName: "plus") }
+                }
             }
             if viewModel.bagsForProduct().isEmpty {
                 Text("Not in any bag.")
@@ -803,9 +809,12 @@ private struct _PrettyBagsSection: View {
                             .foregroundColor(Color(bag.color ?? "lushyPink"))
                         Text(bag.name ?? "Unnamed Bag")
                         Spacer()
-                        Button(action: { viewModel.removeProductFromBag(bag) }) {
-                            Image(systemName: "minus.circle")
-                                .foregroundColor(.red)
+                        // Only show remove button if product is not finished
+                        if !viewModel.isEditingDisabled {
+                            Button(action: { viewModel.removeProductFromBag(bag) }) {
+                                Image(systemName: "minus.circle")
+                                    .foregroundColor(.red)
+                            }
                         }
                     }
                 }
@@ -829,10 +838,13 @@ private struct _PrettyTagsSection: View {
                 Text("Tags")
                     .font(.headline)
                 Spacer()
-                Button(action: {
-                    viewModel.fetchBagsAndTags()
-                    showTagAssignSheet = true
-                }) { Image(systemName: "plus") }
+                // Only show plus button if product is not finished
+                if !viewModel.isEditingDisabled {
+                    Button(action: {
+                        viewModel.fetchBagsAndTags()
+                        showTagAssignSheet = true
+                    }) { Image(systemName: "plus") }
+                }
             }
             if viewModel.tagsForProduct().isEmpty {
                 Text("No tags.")
@@ -849,9 +861,12 @@ private struct _PrettyTagsSection: View {
                                 Text(tag.name ?? "")
                                     .font(.caption)
                                     .foregroundColor(.primary)
-                                Button(action: { viewModel.removeTagFromProduct(tag) }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
+                                // Only show remove button if product is not finished
+                                if !viewModel.isEditingDisabled {
+                                    Button(action: { viewModel.removeTagFromProduct(tag) }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                             }
                             .padding(.horizontal, 10)
