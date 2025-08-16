@@ -1,0 +1,292 @@
+import SwiftUI
+
+struct CommentBottomSheetView: View {
+    let activityId: String
+    @State var commentList: [CommentSummary]
+    @State var commentsCount: Int
+    @State private var newCommentText = ""
+    @Environment(\.dismiss) private var dismiss
+    
+    let onCommentAdded: (([CommentSummary], Int) -> Void)?
+    
+    init(activityId: String, commentList: [CommentSummary], commentsCount: Int, onCommentAdded: (([CommentSummary], Int) -> Void)? = nil) {
+        self.activityId = activityId
+        self._commentList = State(initialValue: commentList)
+        self._commentsCount = State(initialValue: commentsCount)
+        self.onCommentAdded = onCommentAdded
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Handle bar
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 36, height: 4)
+                .padding(.top, 8)
+            
+            // Header
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Comments")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("\(commentsCount)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color.lushyPink.opacity(0.1))
+                        )
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                
+                Divider()
+                    .padding(.horizontal, 20)
+            }
+            
+            // Comments list
+            if commentList.isEmpty {
+                emptyCommentsView
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(commentList) { comment in
+                            CommentRowView(comment: comment)
+                                .padding(.horizontal, 20)
+                        }
+                    }
+                    .padding(.vertical, 16)
+                }
+            }
+            
+            Spacer()
+            
+            // Comment input
+            commentInputView
+        }
+        .background(
+            Color.white
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        )
+    }
+    
+    private var emptyCommentsView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "message.circle")
+                .font(.system(size: 48))
+                .foregroundColor(.lushyPink.opacity(0.6))
+            
+            Text("No comments yet")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("Be the first to share your thoughts!")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 60)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var commentInputView: some View {
+        VStack(spacing: 0) {
+            Divider()
+            
+            HStack(spacing: 12) {
+                // User avatar placeholder
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.lushyPink.opacity(0.7),
+                                Color.lushyPurple.opacity(0.5)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    )
+                
+                // Text input
+                HStack {
+                    TextField("Add a comment...", text: $newCommentText, axis: .vertical)
+                        .lineLimit(1...4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    
+                    if !newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button(action: submitComment) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [.lushyPink, .lushyPurple],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                )
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.gray.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.lushyPink.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(Color.white)
+        }
+    }
+    
+    private func submitComment() {
+        let trimmedText = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        
+        APIService.shared.commentOnActivity(activityId: activityId, text: trimmedText) { result in
+            DispatchQueue.main.async {
+                if case .success(let comments) = result {
+                    self.commentList = comments
+                    self.commentsCount = comments.count
+                    self.onCommentAdded?(comments, comments.count)
+                    self.newCommentText = ""
+                }
+            }
+        }
+    }
+}
+
+struct CommentRowView: View {
+    let comment: CommentSummary
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // User avatar
+            Circle()
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.lushyPink.opacity(0.7),
+                            Color.lushyPurple.opacity(0.5),
+                            Color.lushyMint.opacity(0.3)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(comment.user.name.prefix(1).uppercased())
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                )
+            
+            // Comment content
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(comment.user.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text(timeAgoString(from: comment.createdAt))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(comment.text)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                // Optional: Add like button for comments
+                HStack(spacing: 16) {
+                    Button(action: {
+                        // TODO: Implement comment liking
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "heart")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text("Like")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.clear)
+        )
+    }
+    
+    private func timeAgoString(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withFractionalSeconds,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        
+        // Fallback without fractional seconds
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        
+        return "Unknown"
+    }
+}
+
+#Preview {
+    CommentBottomSheetView(
+        activityId: "sample",
+        commentList: [],
+        commentsCount: 0
+    )
+}

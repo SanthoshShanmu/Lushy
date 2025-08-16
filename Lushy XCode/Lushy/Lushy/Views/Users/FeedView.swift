@@ -228,56 +228,18 @@ struct ActivityCard: View {
             commentList = activity.comments ?? []
         }
         .sheet(isPresented: $showCommentSheet) {
-            NavigationView {
-                VStack(spacing: 16) {
-                    Text("Comments")
-                        .font(.headline)
-                        .padding(.top)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(commentList) { comment in
-                                VStack(alignment: .leading) {
-                                    Text(comment.user.name)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                    Text(comment.text)
-                                        .font(.body)
-                                    Text(comment.createdAt)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Divider()
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    HStack {
-                        TextField("Add a comment...", text: $newCommentText)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        Button("Submit") {
-                            APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
-                                if case .success(let comments) = result {
-                                    DispatchQueue.main.async {
-                                        commentList = comments
-                                        commentsCount = comments.count
-                                        newCommentText = ""
-                                        showCommentSheet = false
-                                    }
-                                }
-                            }
-                        }
-                        .disabled(newCommentText.isEmpty)
-                    }
-                    .padding()
-                    Spacer()
-                }
-                .navigationBarTitle("Comments", displayMode: .inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { showCommentSheet = false }
-                    }
-                }
+            CommentBottomSheetView(
+                activityId: activity.id,
+                commentList: commentList,
+                commentsCount: commentsCount
+            ) { updatedComments, updatedCount in
+                commentList = updatedComments
+                commentsCount = updatedCount
             }
+            .presentationDetents([.fraction(0.75), .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+            .presentationBackground(.clear)
         }
     }
     
@@ -469,56 +431,18 @@ struct ReviewActivityCard: View {
             commentList = activity.comments ?? []
         }
         .sheet(isPresented: $showCommentSheet) {
-            NavigationView {
-                VStack(spacing: 16) {
-                    Text("Comments")
-                        .font(.headline)
-                        .padding(.top)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(commentList) { comment in
-                                VStack(alignment: .leading) {
-                                    Text(comment.user.name)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                    Text(comment.text)
-                                        .font(.body)
-                                    Text(comment.createdAt)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Divider()
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    HStack {
-                        TextField("Add a comment...", text: $newCommentText)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        Button("Submit") {
-                            APIService.shared.commentOnActivity(activityId: activity.id, text: newCommentText) { result in
-                                if case .success(let comments) = result {
-                                    DispatchQueue.main.async {
-                                        commentList = comments
-                                        commentsCount = comments.count
-                                        newCommentText = ""
-                                        showCommentSheet = false
-                                    }
-                                }
-                            }
-                        }
-                        .disabled(newCommentText.isEmpty)
-                    }
-                    .padding()
-                    Spacer()
-                }
-                .navigationBarTitle("Comments", displayMode: .inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { showCommentSheet = false }
-                    }
-                }
+            CommentBottomSheetView(
+                activityId: activity.id,
+                commentList: commentList,
+                commentsCount: commentsCount
+            ) { updatedComments, updatedCount in
+                commentList = updatedComments
+                commentsCount = updatedCount
             }
+            .presentationDetents([.fraction(0.75), .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+            .presentationBackground(.clear)
         }
     }
 
