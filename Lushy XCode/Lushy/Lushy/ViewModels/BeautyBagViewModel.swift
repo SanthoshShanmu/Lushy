@@ -31,10 +31,15 @@ class BeautyBagViewModel: ObservableObject {
                 let context = CoreDataManager.shared.viewContext
                 context.performAndWait {
                     let localBags = CoreDataManager.shared.fetchBeautyBags()
-                    let existingByBackend = Dictionary<String, BeautyBag>(uniqueKeysWithValues: localBags.compactMap { bag in
-                        guard let bid = bag.backendId else { return nil }
-                        return (bid, bag)
-                    })
+                    
+                    // Create dictionary safely, handling duplicates by keeping the first occurrence
+                    var existingByBackend = [String: BeautyBag]()
+                    for bag in localBags {
+                        if let bid = bag.backendId, existingByBackend[bid] == nil {
+                            existingByBackend[bid] = bag
+                        }
+                    }
+                    
                     let remoteIds = Set(summaries.map { $0.id })
                     for summary in summaries {
                         if let _ = existingByBackend[summary.id] {

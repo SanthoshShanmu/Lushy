@@ -37,6 +37,14 @@
         <attribute name="userId" attributeType="String"/>
         <relationship name="userProduct" maxCount="1" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="usageEntries" inverseEntity="UserProduct"/>
     </entity>
+    <entity name="UsageJourneyEvent" representedClassName="UsageJourneyEvent" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="eventType" attributeType="String"/>
+        <attribute name="rating" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="text" optional="YES" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <relationship name="userProduct" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="UserProduct" inverseName="journeyEvents" inverseEntity="UserProduct"/>
+    </entity>
     <entity name="UserProduct" representedClassName="UserProduct" syncable="YES">
         <attribute name="backendId" optional="YES" attributeType="String"/>
         <attribute name="barcode" optional="YES" attributeType="String"/>
@@ -62,6 +70,7 @@
         <attribute name="vegan" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="bags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="BeautyBag" inverseName="products" inverseEntity="BeautyBag"/>
         <relationship name="comments" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Comment" inverseName="userProduct" inverseEntity="Comment"/>
+        <relationship name="journeyEvents" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UsageJourneyEvent" inverseName="userProduct" inverseEntity="UsageJourneyEvent"/>
         <relationship name="reviews" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Review" inverseName="userProduct" inverseEntity="Review"/>
         <relationship name="tags" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="ProductTag" inverseName="products" inverseEntity="ProductTag"/>
         <relationship name="usageEntries" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="UsageEntry" inverseName="userProduct" inverseEntity="UsageEntry"/>

@@ -32,6 +32,7 @@ extension UserProduct {
     @NSManaged public var bags: NSSet?
     @NSManaged public var tags: NSSet?
     @NSManaged public var usageEntries: NSSet?
+    @NSManaged public var journeyEvents: NSSet?
     @NSManaged public var userId: String
     @NSManaged public var backendId: String?
     @objc(timesUsed)
@@ -121,6 +122,23 @@ extension UserProduct {
 
     @objc(removeUsageEntries:)
     @NSManaged public func removeFromUsageEntries(_ values: NSSet)
+
+}
+
+// MARK: Generated accessors for journeyEvents
+extension UserProduct {
+
+    @objc(addJourneyEventsObject:)
+    @NSManaged public func addToJourneyEvents(_ value: UsageJourneyEvent)
+
+    @objc(removeJourneyEventsObject:)
+    @NSManaged public func removeFromJourneyEvents(_ value: UsageJourneyEvent)
+
+    @objc(addJourneyEvents:)
+    @NSManaged public func addToJourneyEvents(_ values: NSSet)
+
+    @objc(removeJourneyEvents:)
+    @NSManaged public func removeFromJourneyEvents(_ values: NSSet)
 
 }
 

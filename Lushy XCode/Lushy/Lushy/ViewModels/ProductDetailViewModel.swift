@@ -173,11 +173,19 @@ class ProductDetailViewModel: ObservableObject {
         }
     }
     
-    // Add a comment to the product
+    // Add a comment to the product - now creates Usage Journey event
     func addComment() {
         guard !newComment.isEmpty else { return }
         
-        CoreDataManager.shared.addComment(to: product.objectID, text: newComment)
+        // Create Usage Journey event instead of regular comment
+        CoreDataManager.shared.addUsageJourneyEventNew(
+            to: product.objectID,
+            type: UsageJourneyEvent.EventType.thought,
+            text: newComment,
+            title: nil,
+            rating: 0
+        )
+        
         newComment = "" // Reset comment field
     }
     

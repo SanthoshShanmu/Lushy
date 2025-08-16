@@ -127,6 +127,20 @@ class CoreDataManager {
                 try context.save()
                 objectID = product.objectID
                 print("Product saved locally (optional barcode): \(productName)")
+                
+                // Create Usage Journey event for purchasing product
+                if let productID = objectID {
+                    DispatchQueue.main.async {
+                        self.addUsageJourneyEventNew(
+                            to: productID,
+                            type: .purchase,
+                            text: nil,
+                            title: nil,
+                            rating: 0,
+                            date: purchaseDate
+                        )
+                    }
+                }
             } catch {
                 print("Failed to save user product: \(error)")
             }
@@ -151,6 +165,18 @@ class CoreDataManager {
                 
                 do {
                     try context.save()
+                    
+                    // Create Usage Journey event for opening product
+                    DispatchQueue.main.async {
+                        self.addUsageJourneyEventNew(
+                            to: id,
+                            type: .open,
+                            text: nil,
+                            title: nil,
+                            rating: 0,
+                            date: openDate
+                        )
+                    }
                     
                     // Sync open date to backend to create opened_product activity
                     if let userId = AuthService.shared.userId, let backendId = userProduct.backendId {
@@ -217,6 +243,17 @@ class CoreDataManager {
                 
                 do {
                     try context.save()
+                    
+                    // Create Usage Journey event for review
+                    DispatchQueue.main.async {
+                        self.addUsageJourneyEventNew(
+                            to: productID,
+                            type: .review,
+                            text: text,
+                            title: title,
+                            rating: Int16(rating)
+                        )
+                    }
                     
                     // Sync review to backend to create review_added activity
                     if let userId = AuthService.shared.userId, let backendId = userProduct.backendId {
@@ -432,13 +469,26 @@ class CoreDataManager {
             NotificationService.shared.cancelNotification(for: product)
             
             // Mark as finished
+            let finishDate = Date()
             product.setValue(true, forKey: "isFinished")
-            product.setValue(Date(), forKey: "finishDate")
+            product.setValue(finishDate, forKey: "finishDate")
             product.currentAmount = 0.0 // Ensure amount is 0
             
             do {
                 try context.save()
                 print("Product marked as finished successfully")
+                
+                // Create Usage Journey event for finishing product
+                DispatchQueue.main.async {
+                    self.addUsageJourneyEventNew(
+                        to: id,
+                        type: .finished,
+                        text: nil,
+                        title: nil,
+                        rating: 0,
+                        date: finishDate
+                    )
+                }
                 
                 // Sync to backend only once, with retry logic
                 if let userId = AuthService.shared.userId, let backendId = product.backendId {
@@ -976,6 +1026,56 @@ class CoreDataManager {
             }
             
             try? context.save()
+        }
+    }
+    
+    // MARK: - Usage Journey Operations
+    
+    // Add a new usage journey event
+    func addUsageJourneyEventNew(
+        to productID: NSManagedObjectID,
+        type: UsageJourneyEvent.EventType,
+        text: String?,
+        title: String?,
+        rating: Int16,
+        date: Date = Date()
+    ) {
+        let context = container.newBackgroundContext()
+        
+        context.performAndWait {
+            guard let product = try? context.existingObject(with: productID) as? UserProduct else { return }
+            
+            let event = UsageJourneyEvent(
+                context: context,
+                type: type,
+                text: text,
+                title: title,
+                rating: rating,
+                date: date
+            )
+            event.userProduct = product
+            
+            do {
+                try context.save()
+                print("Usage journey event created: \(type.displayName)")
+            } catch {
+                print("Failed to save usage journey event: \(error)")
+            }
+        }
+    }
+    
+    // Fetch usage journey events for a product
+    func fetchUsageJourneyEvents(for productID: NSManagedObjectID) -> [UsageJourneyEvent] {
+        let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
+        
+        do {
+            let product = try viewContext.existingObject(with: productID) as? UserProduct
+            request.predicate = NSPredicate(format: "userProduct == %@", product!)
+            request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+            return try viewContext.fetch(request)
+        } catch {
+            print("Error fetching usage journey events: \(error)")
+            return []
         }
     }
 }

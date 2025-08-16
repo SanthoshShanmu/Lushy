@@ -37,6 +37,7 @@ struct ProductDetailView: View {
     @State private var userEditedPAO = false
     @State private var showBagAssignSheet = false
     @State private var showTagAssignSheet = false
+    @State private var showUsageJourney = false
     
     // Extracted background gradient to reduce body complexity (fixes type-check slowdown)
     private var backgroundGradient: LinearGradient {
@@ -110,8 +111,8 @@ struct ProductDetailView: View {
                 // Actions with bubbly buttons
                 _PrettyActionButtons(viewModel: viewModel)
                 
-                // Comments with soft styling
-                _PrettyCommentsSection(viewModel: viewModel)
+                // Usage Journey preview
+                _PrettyUsageJourneySection(viewModel: viewModel)
                 
                 // Reviews with girly theme
                 _PrettyReviewsSection(viewModel: viewModel)
@@ -645,52 +646,121 @@ struct _PrettyActionButtons: View {
     }
 }
 
-// MARK: - Comments Section Component
-private struct _PrettyCommentsSection: View {
+// MARK: - Usage Journey Section Component
+private struct _PrettyUsageJourneySection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Comments")
-                .font(.headline)
-            
-            commentsContent
-            
-            HStack {
-                TextField("Add a comment", text: $viewModel.newComment)
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                
-                Button(action: {
-                    viewModel.addComment()
-                }) {
-                    Image(systemName: "paperplane.fill")
+        NavigationLink(destination: UsageJourneyView(product: viewModel.product)) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "map.fill")
+                        .font(.title3)
                         .foregroundColor(.lushyPink)
-                        .padding(10)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
+                    Text("Usage Journey")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .disabled(viewModel.newComment.isEmpty)
+                
+                Text("Track your experience with this product over time")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                // Journey preview stats
+                HStack(spacing: 20) {
+                    JourneyStatItem(
+                        icon: "calendar",
+                        label: "Events",
+                        value: "\(journeyEventCount)",
+                        color: .lushyMint
+                    )
+                    
+                    JourneyStatItem(
+                        icon: "bubble.left.fill",
+                        label: "Thoughts",
+                        value: "\(thoughtCount)",
+                        color: .lushyPeach
+                    )
+                    
+                    JourneyStatItem(
+                        icon: "star.fill",
+                        label: "Reviews",
+                        value: "\(reviewCount)",
+                        color: .lushyPink
+                    )
+                }
             }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.lushyPink.opacity(0.05), Color.lushyPurple.opacity(0.05)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.lushyPink.opacity(0.2), lineWidth: 1)
+                    )
+            )
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        .buttonStyle(PlainButtonStyle())
     }
     
-    @ViewBuilder
-    private var commentsContent: some View {
-        if let comments = viewModel.product.comments as? Set<Comment>, !comments.isEmpty {
-            ForEach(Array(comments), id: \.self) { comment in
-                CommentView(comment: comment)
-            }
-        } else {
-            Text("No comments yet.")
+    private var journeyEventCount: Int {
+        // Count milestone events: purchase, open, finish
+        var count = 0
+        if viewModel.product.purchaseDate != nil { count += 1 }
+        if viewModel.product.openDate != nil { count += 1 }
+        if viewModel.product.isFinished { count += 1 }
+        
+        // Add journey events count using Core Data fetch
+        let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
+        request.predicate = NSPredicate(format: "userProduct == %@", viewModel.product)
+        let journeyEventCount = (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
+        count += journeyEventCount
+        return count
+    }
+    
+    private var thoughtCount: Int {
+        // Count journey events with type "thought" using Core Data fetch
+        let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
+        request.predicate = NSPredicate(format: "userProduct == %@ AND eventType == %@", viewModel.product, "thought")
+        return (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
+    }
+    
+    private var reviewCount: Int {
+        return (viewModel.product.reviews as? Set<Review>)?.count ?? 0
+    }
+}
+
+struct JourneyStatItem: View {
+    let icon: String
+    let label: String
+    let value: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
                 .font(.caption)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.caption)
+                .fontWeight(.bold)
+            
+            Text(label)
+                .font(.caption2)
                 .foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
