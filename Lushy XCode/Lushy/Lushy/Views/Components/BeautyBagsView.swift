@@ -279,10 +279,8 @@ struct BeautyBagsView: View {
             .sheet(isPresented: $showingAddBag) {
                 ModernAddBagSheet(viewModel: viewModel)
             }
-            .sheet(isPresented: $showingEditBag) {
-                if let bag = bagToEdit {
-                    ModernEditBagSheet(viewModel: viewModel, bag: bag, isPresented: $showingEditBag)
-                }
+            .sheet(item: $bagToEdit) { bag in
+                ModernEditBagSheet(viewModel: viewModel, bag: bag, isPresented: $showingEditBag)
             }
             .onAppear {
                 viewModel.fetchBags()
@@ -305,6 +303,9 @@ struct BeautyBagsView: View {
                         }
                     }
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("DismissEditBagSheet"))) { _ in
+                bagToEdit = nil
             }
         }
     }
@@ -757,7 +758,11 @@ struct ModernEditBagSheet: View {
                         // Save button
                         Button(action: {
                             viewModel.updateBag(bag, name: editName, color: editColor, icon: editIcon)
-                            isPresented = false
+                            // Clear bagToEdit to dismiss the sheet since it's presented with .sheet(item:)
+                            DispatchQueue.main.async {
+                                // Reset the bagToEdit to nil in the parent view to dismiss the sheet
+                                NotificationCenter.default.post(name: NSNotification.Name("DismissEditBagSheet"), object: nil)
+                            }
                         }) {
                             HStack(spacing: 12) {
                                 Image(systemName: "checkmark.circle.fill")
@@ -789,8 +794,11 @@ struct ModernEditBagSheet: View {
             .navigationBarHidden(true)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { isPresented = false }
-                        .foregroundColor(.lushyPink)
+                    Button("Cancel") { 
+                        // Clear bagToEdit to dismiss the sheet
+                        NotificationCenter.default.post(name: NSNotification.Name("DismissEditBagSheet"), object: nil)
+                    }
+                    .foregroundColor(.lushyPink)
                 }
             }
         }

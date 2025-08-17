@@ -959,6 +959,9 @@ private struct BagAssignSheet: View {
     @State private var newBagName = ""
     @State private var newBagIcon = "bag.fill"
     @State private var newBagColor = "lushyPink"
+    @State private var isCreatingBag = false
+    @State private var cancellables = Set<AnyCancellable>()
+    
     // Added predefined options instead of free text fields
     private let iconOptions = ["bag.fill","shippingbox.fill","case.fill","suitcase.fill","heart.fill","star.fill"]
     private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
@@ -1068,13 +1071,21 @@ private struct BagAssignSheet: View {
                             }
                         }
                         Button(action: createBag) {
-                            Label("Add Bag", systemImage: "plus.circle.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding(10)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPink.opacity(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.3 : 0.9)))
-                                .foregroundColor(.white)
+                            HStack {
+                                if isCreatingBag {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .foregroundColor(.white)
+                                } else {
+                                    Label("Add Bag", systemImage: "plus.circle.fill")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPink.opacity(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingBag ? 0.3 : 0.9)))
+                            .foregroundColor(.white)
                         }
-                        .disabled(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingBag)
                     }
                     .padding()
                     .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
@@ -1091,14 +1102,47 @@ private struct BagAssignSheet: View {
     }
 
     private func toggle(_ bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
+    
     private func createBag() {
-        if let newId = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon),
-           let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newId) as? BeautyBag {
-            selectedBagIDs.insert(bag.objectID)
-            viewModel.fetchBagsAndTags()
-        }
-        newBagName = ""; newBagIcon = "bag.fill"; newBagColor = "lushyPink"
+        guard !newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let userId = AuthService.shared.userId else { return }
+        
+        isCreatingBag = true
+        
+        // Use the same pattern as BeautyBagViewModel - create on backend first, then locally
+        APIService.shared.createBag(userId: userId, name: newBagName, color: newBagColor, icon: newBagIcon)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                self.isCreatingBag = false
+                if case .failure(let error) = completion {
+                    print("Failed to create bag remotely: \(error)")
+                }
+            }, receiveValue: { summary in
+                self.isCreatingBag = false
+                // Persist the bag locally with the backend ID
+                if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: self.newBagColor, icon: self.newBagIcon) {
+                    CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
+                    
+                    // Auto-select the newly created bag
+                    if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newID) as? BeautyBag {
+                        self.selectedBagIDs.insert(bag.objectID)
+                    }
+                }
+                
+                // Refresh the bags in the view model
+                self.viewModel.fetchBagsAndTags()
+                
+                // Clear the form
+                self.newBagName = ""
+                self.newBagIcon = "bag.fill"
+                self.newBagColor = "lushyPink"
+                
+                // Trigger a refresh to ensure relationships and purges
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+            })
+            .store(in: &cancellables)
     }
+    
     private func applyChanges() {
         let current = Set(viewModel.bagsForProduct().map { $0.objectID })
         let toAdd = selectedBagIDs.subtracting(current)

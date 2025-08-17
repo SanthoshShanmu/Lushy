@@ -118,15 +118,35 @@ exports.createBag = async (req, res) => {
   try {
     const userId = req.params.userId;
     const { name, color = 'lushyPink', icon = 'bag.fill' } = req.body;
+    
+    // Validate that userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID format.' });
+    }
+    
     const BeautyBag = require('../models/beautyBag');
+    
+    // Convert userId string to ObjectId for querying
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
     // Prevent duplicate bag names per user
-    const existing = await BeautyBag.findOne({ user: userId, name });
+    const existing = await BeautyBag.findOne({ user: userObjectId, name });
     if (existing) {
       return res.status(200).json({ bag: existing });
     }
-    const newBag = await BeautyBag.create({ user: userId, name, color, icon });
+    
+    // Create new bag with proper ObjectId
+    const newBag = await BeautyBag.create({ 
+      user: userObjectId, 
+      name, 
+      color, 
+      icon 
+    });
+    
+    console.log(`✅ Created beauty bag: ${name} for user ${userId}`);
     res.status(201).json({ bag: newBag });
   } catch (err) {
+    console.error('❌ Error creating bag:', err);
     res.status(500).json({ message: 'Failed to create bag.', error: err.message });
   }
 };
@@ -135,10 +155,21 @@ exports.createBag = async (req, res) => {
 exports.getUserBags = async (req, res) => {
   try {
     const userId = req.params.userId;
+    
+    // Validate that userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID format.' });
+    }
+    
     const BeautyBag = require('../models/beautyBag');
-    const bags = await BeautyBag.find({ user: userId }).select('name color icon');
+    
+    // Convert userId string to ObjectId for querying
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    const bags = await BeautyBag.find({ user: userObjectId }).select('name color icon');
     res.json({ bags });
   } catch (err) {
+    console.error('❌ Error fetching bags:', err);
     res.status(500).json({ message: 'Failed to fetch bags.', error: err.message });
   }
 };
@@ -148,10 +179,23 @@ exports.updateBag = async (req, res) => {
   try {
     const { userId, bagId } = req.params;
     const { name, color, icon } = req.body;
+    
+    // Validate that userId and bagId are valid ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID format.' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(bagId)) {
+      return res.status(400).json({ message: 'Invalid bag ID format.' });
+    }
+    
     const BeautyBag = require('../models/beautyBag');
     
+    // Convert userId string to ObjectId for querying
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const bagObjectId = new mongoose.Types.ObjectId(bagId);
+    
     const updatedBag = await BeautyBag.findOneAndUpdate(
-      { _id: bagId, user: userId },
+      { _id: bagObjectId, user: userObjectId },
       { name, color, icon },
       { new: true }
     );
@@ -160,8 +204,10 @@ exports.updateBag = async (req, res) => {
       return res.status(404).json({ message: 'Bag not found.' });
     }
     
+    console.log(`✅ Updated beauty bag: ${name} for user ${userId}`);
     res.json({ message: 'Bag updated successfully.', bag: updatedBag });
   } catch (err) {
+    console.error('❌ Error updating bag:', err);
     res.status(500).json({ message: 'Failed to update bag.', error: err.message });
   }
 };
@@ -170,13 +216,30 @@ exports.updateBag = async (req, res) => {
 exports.deleteBag = async (req, res) => {
   try {
     const { userId, bagId } = req.params;
+    
+    // Validate that userId and bagId are valid ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID format.' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(bagId)) {
+      return res.status(400).json({ message: 'Invalid bag ID format.' });
+    }
+    
     const BeautyBag = require('../models/beautyBag');
-    const deleted = await BeautyBag.findOneAndDelete({ _id: bagId, user: userId });
+    
+    // Convert strings to ObjectIds for querying
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const bagObjectId = new mongoose.Types.ObjectId(bagId);
+    
+    const deleted = await BeautyBag.findOneAndDelete({ _id: bagObjectId, user: userObjectId });
     if (!deleted) {
       return res.status(404).json({ message: 'Bag not found.' });
     }
+    
+    console.log(`✅ Deleted beauty bag: ${deleted.name} for user ${userId}`);
     res.json({ message: 'Bag deleted successfully.' });
   } catch (err) {
+    console.error('❌ Error deleting bag:', err);
     res.status(500).json({ message: 'Failed to delete bag.', error: err.message });
   }
 };
