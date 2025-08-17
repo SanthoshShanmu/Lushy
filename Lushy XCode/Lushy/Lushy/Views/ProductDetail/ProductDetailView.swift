@@ -780,29 +780,7 @@ private struct _PrettyReviewsSection: View {
             
             reviewsContent
             
-            // Only show "Write a Review" button if product is finished AND user hasn't reviewed yet
-            if viewModel.product.isFinished && !viewModel.hasUserReviewed {
-                Button(action: {
-                    viewModel.showReviewForm = true
-                }) {
-                    Label("Write a Review", systemImage: "pencil")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-            } else if !viewModel.product.isFinished {
-                Text("Finish using this product to write a review")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .italic()
-            } else if viewModel.hasUserReviewed {
-                Text("You have already reviewed this product")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .italic()
-            }
+            // Remove the "Write a Review" button since reviews are now automatic when finishing products
         }
         .padding()
         .background(Color(.systemBackground))
@@ -817,9 +795,16 @@ private struct _PrettyReviewsSection: View {
                 reviewRow(review)
             }
         } else {
-            Text("No reviews yet.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if viewModel.product.isFinished {
+                Text("No review yet.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Review will be available after finishing this product")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
         }
     }
     

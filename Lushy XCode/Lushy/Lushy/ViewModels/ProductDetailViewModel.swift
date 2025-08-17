@@ -82,6 +82,22 @@ class ProductDetailViewModel: ObservableObject {
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // Add debouncing
             .sink { [weak self] _ in self?.fetchBagsAndTags() }
             .store(in: &cancellables)
+        
+        // Subscribe to ProductFinished notifications to automatically show review form
+        NotificationCenter.default.publisher(for: NSNotification.Name("ProductFinished"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                guard let self = self else { return }
+                
+                // Check if the finished product is this specific product
+                if let finishedProductID = notification.object as? NSManagedObjectID,
+                   finishedProductID == self.product.objectID {
+                    // Automatically show the review form when this product is finished
+                    self.showReviewForm = true
+                }
+            }
+            .store(in: &cancellables)
+        
         // Initial load of bags, tags, and refresh product relationships
         fetchBagsAndTags()
         // Sync remote metadata, tags, bags for this product
@@ -217,7 +233,7 @@ class ProductDetailViewModel: ObservableObject {
         reviewText = ""
         showReviewForm = false
         
-        // Refresh product
+        // Refresh product to update UI
         refreshProduct()
     }
     
@@ -233,14 +249,9 @@ class ProductDetailViewModel: ObservableObject {
         // Always finish the product first
         CoreDataManager.shared.markProductAsFinished(id: product.objectID)
         
-        // After finishing, check if product already has a review
-        let hasReview = (product.reviews?.count ?? 0) > 0
-        
-        if !hasReview {
-            // If no review yet, offer to write one via the review form
-            showReviewForm = true
-        }
-        // If already reviewed, just finish without showing review form
+        // Force review writing for finished products
+        // Don't check if user has already reviewed - just show the form
+        showReviewForm = true
     }
     
     // Toggle favorite status

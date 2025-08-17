@@ -267,7 +267,7 @@ class APIService {
 
     // MARK: - Social Features
     func fetchUserFeed(userId: String, completion: @escaping (Result<[Activity], Error>) -> Void) {
-        let url = baseURL.appendingPathComponent("users/\(userId)/feed")
+        let url = baseURL.appendingPathComponent("activities").appendingPathComponent("feed")
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.cachePolicy = .reloadIgnoringLocalCacheData // Always fetch fresh data

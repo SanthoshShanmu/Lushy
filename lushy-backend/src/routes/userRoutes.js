@@ -18,8 +18,6 @@ router.post('/:userId/bags', userController.createBag);
 router.delete('/:userId/bags/:bagId', userController.deleteBag);
 // Search users
 router.get('/search', userController.searchUsers);
-// Get activity feed for a user (requires auth to track likes)
-router.get('/:userId/feed', authMiddleware.authenticate, activityController.getUserFeed);
 // Create activity
 router.post('/:userId/activities', activityController.createActivity);
 // Get product tags

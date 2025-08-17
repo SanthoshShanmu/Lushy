@@ -56,6 +56,10 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToScanTab"))) { _ in
                 tabSelection.selected = .scan
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
+                // Navigate back to home tab after review submission
+                tabSelection.selected = .home
+            }
         }
     }
 }

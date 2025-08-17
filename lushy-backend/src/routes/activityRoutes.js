@@ -6,6 +6,9 @@ const authMiddleware = require('../middleware/auth');
 // Require authentication for activity interactions
 router.use(authMiddleware.authenticate);
 
+// Get activity feed for the authenticated user
+router.get('/feed', activityController.getFeed);
+
 // Like an activity
 router.post('/:activityId/like', activityController.likeActivity);
 

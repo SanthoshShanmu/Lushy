@@ -58,7 +58,10 @@ struct FeedView: View {
 
     // Extracted navigation link for activities
     @ViewBuilder private func activityLink(for activity: Activity) -> some View {
-        if activity.targetType == "UserProduct", let productId = activity.targetId {
+        if activity.type == "bundled_product_added" {
+            // Bundled activities - show bundled card without navigation
+            BundledActivityCard(activity: activity, currentUserId: currentUserId)
+        } else if activity.targetType == "UserProduct", let productId = activity.targetId {
             NavigationLink(destination: GeneralProductDetailView(userId: currentUserId, productId: productId)) {
                 if activity.type == "review_added" {
                     ReviewActivityCard(activity: activity, currentUserId: currentUserId)
@@ -479,6 +482,196 @@ struct ReviewActivityCard: View {
             return date.timeAgoDisplay
         }
         return "Unknown"
+    }
+}
+
+// MARK: - Bundled Activity Card Component
+struct BundledActivityCard: View {
+    let activity: Activity
+    let currentUserId: String
+    @State private var likesCount: Int = 0
+    @State private var commentsCount: Int = 0
+    @State private var isLiked: Bool = false
+    @State private var commentList: [CommentSummary] = []
+    @State private var showCommentSheet = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header with user info and time
+            HStack {
+                Circle()
+                    .fill(LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(activity.user.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(activity.user.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text(timeAgoString(from: activity.createdAt))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            
+            // Bundled products content
+            VStack(alignment: .leading, spacing: 12) {
+                Text(activity.description ?? "Added products to their collection")
+                    .font(.body)
+                    .fontWeight(.medium)
+                
+                if let bundledActivities = activity.bundledActivities {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(Array(bundledActivities.prefix(4)), id: \.id) { bundledActivity in
+                            bundledProductCard(bundledActivity)
+                        }
+                    }
+                    
+                    if bundledActivities.count > 4 {
+                        Text("+ \(bundledActivities.count - 4) more products")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.lushyMint.opacity(0.1), Color.lushyPeach.opacity(0.1)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            
+            // Interaction buttons
+            HStack(spacing: 24) {
+                Button(action: toggleLike) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .foregroundColor(isLiked ? .red : .secondary)
+                        Text("\(likesCount)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Button(action: { showCommentSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left")
+                            .foregroundColor(.secondary)
+                        Text("\(commentsCount)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.top, 8)
+        }
+        .onAppear {
+            likesCount = activity.likes ?? 0
+            commentsCount = activity.comments?.count ?? 0
+            isLiked = activity.liked ?? false
+            commentList = activity.comments ?? []
+        }
+        .sheet(isPresented: $showCommentSheet) {
+            CommentBottomSheetView(
+                activityId: activity.id,
+                commentList: commentList,
+                commentsCount: commentsCount
+            ) { updatedComments, updatedCount in
+                commentList = updatedComments
+                commentsCount = updatedCount
+            }
+            .presentationDetents([.fraction(0.75), .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+            .presentationBackground(.clear)
+        }
+    }
+    
+    private func bundledProductCard(_ bundledActivity: BundledActivityItem) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.2))
+                .frame(height: 60)
+                .overlay(
+                    Image(systemName: "sparkles")
+                        .font(.title2)
+                        .foregroundColor(.lushyPink)
+                )
+            
+            if let description = bundledActivity.description {
+                let productName = extractProductName(from: description)
+                Text(productName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(8)
+    }
+    
+    private func extractProductName(from description: String) -> String {
+        // Extract product name from "Added {productName} to their collection"
+        if description.hasPrefix("Added ") && description.contains(" to their collection") {
+            let start = description.index(description.startIndex, offsetBy: 6) // "Added ".count
+            let end = description.range(of: " to their collection")?.lowerBound ?? description.endIndex
+            return String(description[start..<end])
+        }
+        return "Product"
+    }
+    
+    private func toggleLike() {
+        // Note: Bundled activities don't support likes yet
+        // This is a placeholder for future implementation
+    }
+    
+    private func timeAgoString(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withFractionalSeconds,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        formatter.formatOptions = [
+            .withFullDate, .withTime,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withColonSeparatorInTimeZone
+        ]
+        if let date = formatter.date(from: dateString) {
+            return date.timeAgoDisplay
+        }
+        return "Unknown time"
     }
 }
 

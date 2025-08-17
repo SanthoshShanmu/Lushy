@@ -214,10 +214,25 @@ struct Activity: Codable, Identifiable {
     let comments: [CommentSummary]?  // comments on this activity
     let liked: Bool?  // whether the current user has liked this activity
     let createdAt: String
+    let bundledActivities: [BundledActivityItem]?  // for bundled product additions
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt
+        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt, bundledActivities
+    }
+}
+
+// Model for individual activities within a bundle
+struct BundledActivityItem: Codable, Identifiable {
+    let id: String
+    let description: String?
+    let targetId: String?
+    let targetType: String?
+    let createdAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case description, targetId, targetType, createdAt
     }
 }
 

@@ -1,77 +1,103 @@
 const Activity = require('../models/activity');
+const User = require('../models/user');
 const mongoose = require('mongoose');
 
 // Get activity feed for a user
-exports.getUserFeed = async (req, res) => {
+exports.getFeed = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    console.log('Fetching feed for user:', userId);
+    const userId = req.user.id;
+    console.log('Getting feed for user:', userId);
     
-    const User = require('../models/user');
-    const user = await User.findById(userId);
+    // Get user's following list
+    const user = await User.findById(userId).populate('following', '_id');
     if (!user) {
-      console.log('User not found:', userId);
-      return res.status(404).json({ message: 'User not found.' });
+      return res.status(404).json({ status: 'fail', message: 'User not found' });
     }
     
-    console.log('User found:', user.name, 'Following:', user.following?.length || 0);
+    const followingIds = user.following.map(u => u._id);
+    const feedUserIds = [new mongoose.Types.ObjectId(userId), ...followingIds];
+    console.log('Feed user IDs:', feedUserIds.map(id => id.toString()));
     
-    // Ensure all IDs are ObjectIds
-    const feedUserIds = [userId, ...(user.following || [])].map(id => {
-      if (typeof id === 'string') return new mongoose.Types.ObjectId(id);
-      if (id instanceof mongoose.Types.ObjectId) return id;
-      if (id && id._id) return new mongoose.Types.ObjectId(id._id);
-      return id;
-    });
-    
-    console.log('Feed user IDs:', feedUserIds);
-    
-    // Only fetch relevant activity types for the feed
+    // Only fetch product_added and review_added activities for the feed
     const relevantActivityTypes = [
       'product_added',
-      'add_tag',           // include tag additions in feed
-      'review_added',
-      'favorite_product',
-      'unfavorite_product', 
-      'opened_product',
-      'finished_product',
-      'add_to_bag',
-      'bag_created'
+      'review_added'
     ];
     
     console.log('Searching for activity types:', relevantActivityTypes);
-    
-    // First, let's check all activities in the database
-    const allActivities = await Activity.find({});
-    console.log('Total activities in database:', allActivities.length);
-    allActivities.forEach(activity => {
-      console.log('Activity:', {
-        id: activity._id,
-        user: activity.user,
-        type: activity.type,
-        description: activity.description,
-        createdAt: activity.createdAt
-      });
-    });
     
     const activities = await Activity.find({ 
       user: { $in: feedUserIds },
       type: { $in: relevantActivityTypes }
     })
       .sort({ createdAt: -1 })
-      .limit(100)
+      .limit(200) // Fetch more to allow for proper bundling
       .populate('user', 'name email')
       .populate('comments.user', 'name');
       
     console.log('Found matching activities:', activities.length);
-    activities.forEach(activity => {
-      console.log('Matching activity:', {
-        id: activity._id,
-        user: activity.user?.name,
-        type: activity.type,
-        description: activity.description
-      });
-    });
+    
+    // Bundle product_added activities by user and time window (1 hour)
+    const bundledActivities = [];
+    const processedActivityIds = new Set();
+    
+    for (const activity of activities) {
+      // Skip if already processed
+      if (processedActivityIds.has(activity._id.toString())) {
+        continue;
+      }
+      
+      if (activity.type === 'product_added') {
+        // Find other product_added activities from the same user within 1 hour
+        const activityTime = new Date(activity.createdAt);
+        const oneHourBefore = new Date(activityTime.getTime() - 60 * 60 * 1000);
+        const oneHourAfter = new Date(activityTime.getTime() + 60 * 60 * 1000);
+        
+        const relatedActivities = activities.filter(a => 
+          a.type === 'product_added' &&
+          a.user._id.toString() === activity.user._id.toString() &&
+          new Date(a.createdAt) >= oneHourBefore &&
+          new Date(a.createdAt) <= oneHourAfter &&
+          !processedActivityIds.has(a._id.toString())
+        );
+        
+        // Mark all related activities as processed
+        relatedActivities.forEach(a => processedActivityIds.add(a._id.toString()));
+        
+        if (relatedActivities.length > 1) {
+          // Create bundled activity
+          const bundledActivity = {
+            _id: `bundled_${activity._id}`,
+            type: 'bundled_product_added',
+            user: activity.user,
+            description: `Added ${relatedActivities.length} products to their collection`,
+            createdAt: activity.createdAt,
+            bundledActivities: relatedActivities.map(a => ({
+              _id: a._id,
+              description: a.description,
+              targetId: a.targetId,
+              targetType: a.targetType,
+              createdAt: a.createdAt
+            })),
+            liked: false, // Will be computed below
+            likes: 0,
+            comments: []
+          };
+          bundledActivities.push(bundledActivity);
+        } else {
+          // Single activity, add as is
+          bundledActivities.push(activity);
+        }
+      } else {
+        // Review activities - add as is
+        bundledActivities.push(activity);
+        processedActivityIds.add(activity._id.toString());
+      }
+    }
+    
+    // Sort bundled activities by creation time and limit to 100
+    bundledActivities.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const finalActivities = bundledActivities.slice(0, 100);
     
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -80,15 +106,24 @@ exports.getUserFeed = async (req, res) => {
     
     // Compute liked flag for each activity
     const currentUserId = req.user.id;
-    const feedWithLiked = activities.map(act => {
-      const obj = act.toObject();
-      obj.liked = (act.likedBy || []).some(id => id.toString() === currentUserId);
-      return obj;
+    const feedWithLiked = finalActivities.map(act => {
+      if (act.type === 'bundled_product_added') {
+        // For bundled activities, liked flag is always false for now
+        return { ...act, liked: false };
+      } else {
+        const obj = act.toObject();
+        obj.liked = (act.likedBy || []).some(id => id.toString() === currentUserId);
+        return obj;
+      }
     });
+    
     res.json({ feed: feedWithLiked || [] });
   } catch (err) {
     console.error('Feed error:', err);
-    res.status(500).json({ message: 'Server error', error: err.message, stack: err.stack });
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error'
+    });
   }
 };
 

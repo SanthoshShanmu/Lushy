@@ -11,6 +11,8 @@ const wishlistRoutes = require('./routes/wishlistRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const authRoutes = require('./routes/authRoutes');
 const globalRatingRoutes = require('./routes/globalRatingRoutes');
+const activityRoutes = require('./routes/activityRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 // Create Express app
 const app = express();
@@ -44,6 +46,8 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/activities', activityRoutes);
 app.use('/api/users/:userId/products', userProductRoutes);
 app.use('/api/users/:userId/wishlist', wishlistRoutes);
 app.use('/api/notifications', notificationRoutes);

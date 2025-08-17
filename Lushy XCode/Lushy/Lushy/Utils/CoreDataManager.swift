@@ -277,10 +277,8 @@ class CoreDataManager {
                             ]
                             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                             URLSession.shared.dataTask(with: request) { _, _, _ in
-                                // Refresh feed after adding review
-                                DispatchQueue.main.async {
-                                    NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
-                                }
+                                // Remove the RefreshFeed notification to prevent infinite loops
+                                // The Core Data context save will already notify any observers
                             }.resume()
                         }
                     }
