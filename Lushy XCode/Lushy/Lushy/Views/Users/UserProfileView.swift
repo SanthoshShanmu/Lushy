@@ -533,6 +533,11 @@ struct ProductsSection: View {
     private var activeProducts: [UserProductSummary] {
         return products.filter { !($0.isFinished == true) }
     }
+    
+    // Show only top 5 most recent products for preview
+    private var recentProducts: [UserProductSummary] {
+        return Array(activeProducts.prefix(5))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -543,13 +548,27 @@ struct ProductsSection: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                 Spacer()
+                
+                // Show "Show All" button if there are more than 5 products
+                if activeProducts.count > 5 {
+                    NavigationLink(destination: AllProductsView(viewModel: viewModel)) {
+                        HStack(spacing: 4) {
+                            Text("Show All")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.lushyPink)
+                    }
+                }
             }
             
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                ForEach(activeProducts) { summary in
+                ForEach(recentProducts) { summary in
                     // Fetch or create a local UserProduct for navigation
                     let localProduct: UserProduct = {
                         if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
