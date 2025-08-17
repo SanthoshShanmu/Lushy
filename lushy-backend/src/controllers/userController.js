@@ -72,7 +72,7 @@ exports.getUserProfile = async (req, res) => {
     let products = [];
     try {
       const BeautyBag = require('../models/beautyBag');
-      bags = await BeautyBag.find({ user: userId }).select('name');
+      bags = await BeautyBag.find({ user: userId }).select('name color icon');
       // Remove duplicate bag entries by name
       bags = bags.filter((bag, idx) => bags.findIndex(b => b.name === bag.name) === idx);
     } catch (e) {}
@@ -117,14 +117,14 @@ exports.searchUsers = async (req, res) => {
 exports.createBag = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const { name } = req.body;
+    const { name, color = 'lushyPink', icon = 'bag.fill' } = req.body;
     const BeautyBag = require('../models/beautyBag');
     // Prevent duplicate bag names per user
     const existing = await BeautyBag.findOne({ user: userId, name });
     if (existing) {
       return res.status(200).json({ bag: existing });
     }
-    const newBag = await BeautyBag.create({ user: userId, name });
+    const newBag = await BeautyBag.create({ user: userId, name, color, icon });
     res.status(201).json({ bag: newBag });
   } catch (err) {
     res.status(500).json({ message: 'Failed to create bag.', error: err.message });
@@ -136,10 +136,33 @@ exports.getUserBags = async (req, res) => {
   try {
     const userId = req.params.userId;
     const BeautyBag = require('../models/beautyBag');
-    const bags = await BeautyBag.find({ user: userId }).select('name');
+    const bags = await BeautyBag.find({ user: userId }).select('name color icon');
     res.json({ bags });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch bags.', error: err.message });
+  }
+};
+
+// Update a beauty bag
+exports.updateBag = async (req, res) => {
+  try {
+    const { userId, bagId } = req.params;
+    const { name, color, icon } = req.body;
+    const BeautyBag = require('../models/beautyBag');
+    
+    const updatedBag = await BeautyBag.findOneAndUpdate(
+      { _id: bagId, user: userId },
+      { name, color, icon },
+      { new: true }
+    );
+    
+    if (!updatedBag) {
+      return res.status(404).json({ message: 'Bag not found.' });
+    }
+    
+    res.json({ message: 'Bag updated successfully.', bag: updatedBag });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update bag.', error: err.message });
   }
 };
 

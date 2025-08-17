@@ -14,6 +14,8 @@ router.get('/:userId/profile', userController.getUserProfile);
 router.get('/:userId/bags', userController.getUserBags);
 // Create a new beauty bag for the user
 router.post('/:userId/bags', userController.createBag);
+// Update a beauty bag for the user
+router.put('/:userId/bags/:bagId', userController.updateBag);
 // Delete a beauty bag for the user
 router.delete('/:userId/bags/:bagId', userController.deleteBag);
 // Search users

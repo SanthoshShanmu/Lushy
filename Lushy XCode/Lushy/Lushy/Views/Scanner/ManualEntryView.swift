@@ -49,6 +49,9 @@ struct ManualEntryView: View {
     // At top of ManualEntryView, add syncCancellable state
     @State private var syncCancellable: AnyCancellable?  // for product sync
 
+    // Add state for bag assign sheet
+    @State private var showBagAssignSheet = false
+
     // Consider there are unsaved changes if any input is filled/selected or an image chosen
     private var hasUnsavedChanges: Bool {
         if isSaving { return false }
@@ -536,29 +539,36 @@ struct ManualEntryView: View {
             HStack {
                 Text("Add to Beauty Bags").font(.headline)
                 Spacer()
-                Button(action: { showAddBagSheet = true }) {
+                Button(action: { showBagAssignSheet = true }) {
                     Image(systemName: "plus.circle.fill")
                         .foregroundColor(.lushyPink)
                 }
             }
             .padding(.bottom, 4)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    if bagViewModel.bags.isEmpty {
-                        Text("No bags yet.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    ForEach(bagViewModel.bags, id: \.objectID) { bag in
-                        MultipleSelectionRow(
-                            title: bag.name ?? "Unnamed Bag",
-                            isSelected: selectedBagIDs.contains(bag.objectID),
-                            icon: bag.icon,
-                            color: bag.color
-                        ) {
-                            selectedBagIDs.toggleMembership(of: bag.objectID)
+            
+            // Display selected bags
+            if selectedBagIDs.isEmpty {
+                Text("No bags selected")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(bagViewModel.bags.filter { selectedBagIDs.contains($0.objectID) }, id: \.objectID) { bag in
+                            HStack(spacing: 6) {
+                                Image(systemName: bag.icon ?? "bag.fill")
+                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                Text(bag.name ?? "Unnamed Bag")
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(bag.color ?? "lushyPink").opacity(0.15))
+                            .cornerRadius(14)
                         }
                     }
+                    .padding(.horizontal, 4)
                 }
             }
         }
@@ -566,10 +576,12 @@ struct ManualEntryView: View {
         .onAppear {
             bagViewModel.fetchBags()
         }
-        .sheet(isPresented: $showAddBagSheet, onDismiss: {
-            bagViewModel.fetchBags()
-        }) {
-            AddBagSheet(viewModel: bagViewModel)
+        .sheet(isPresented: $showBagAssignSheet) {
+            ManualEntryBagAssignSheet(
+                bagViewModel: bagViewModel,
+                selectedBagIDs: $selectedBagIDs,
+                isPresented: $showBagAssignSheet
+            )
         }
     }
 
@@ -818,6 +830,170 @@ struct MultipleSelectionRow: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Manual Entry Bag Assign Sheet
+struct ManualEntryBagAssignSheet: View {
+    @ObservedObject var bagViewModel: BeautyBagViewModel
+    @Binding var selectedBagIDs: Set<NSManagedObjectID>
+    @Binding var isPresented: Bool
+    @State private var newBagName = ""
+    @State private var newBagIcon = "bag.fill"
+    @State private var newBagColor = "lushyPink"
+    
+    // Predefined options for bag creation
+    private let iconOptions = ["bag.fill","shippingbox.fill","case.fill","suitcase.fill","heart.fill","star.fill"]
+    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Select Beauty Bags")
+                        .font(.title3).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    if bagViewModel.bags.isEmpty {
+                        Text("You have no bags yet. Create one below.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 14)], spacing: 14) {
+                        ForEach(bagViewModel.bags, id: \.self) { bag in
+                            let selected = selectedBagIDs.contains(bag.objectID)
+                            Button(action: { toggle(bag) }) {
+                                VStack(spacing: 10) {
+                                    Image(systemName: bag.icon ?? "bag.fill")
+                                        .font(.system(size: 28, weight: .semibold))
+                                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                    Text(bag.name ?? "Bag")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .fill(Color(bag.color ?? "lushyPink").opacity(selected ? 0.18 : 0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18)
+                                                .stroke(selected ? Color(bag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
+                                        )
+                                )
+                                .overlay(
+                                    Group { if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(Color(bag.color ?? "lushyPink")).offset(x: 50, y: -50) } }
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .animation(.spring(), value: selectedBagIDs)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Create New Bag")
+                            .font(.headline)
+                        TextField("Bag Name", text: $newBagName)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        // Icon selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Icon").font(.caption).foregroundColor(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(iconOptions, id: \.self) { icon in
+                                        let selected = (icon == newBagIcon)
+                                        Button(action: { newBagIcon = icon }) {
+                                            Image(systemName: icon)
+                                                .font(.system(size: 24))
+                                                .foregroundColor(selected ? .white : .lushyPurple)
+                                                .padding(12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .fill(selected ? Color.lushyPurple : Color.lushyPurple.opacity(0.12))
+                                                )
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .stroke(selected ? Color.lushyPurple : Color.clear, lineWidth: 2)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        
+                        // Color selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Color").font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 12) {
+                                ForEach(colorOptions, id: \.self) { colorName in
+                                    let selected = (colorName == newBagColor)
+                                    Button(action: { newBagColor = colorName }) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color(colorName))
+                                                .frame(width: 34, height: 34)
+                                            if selected {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.white)
+                                                    .shadow(radius: 2)
+                                            }
+                                        }
+                                        .overlay(Circle().stroke(selected ? Color.white : Color.clear, lineWidth: 2))
+                                        .shadow(color: Color(colorName).opacity(0.4), radius: 4, x: 0, y: 2)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        Button(action: createBag) {
+                            Label("Add Bag", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPink.opacity(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.3 : 0.9)))
+                                .foregroundColor(.white)
+                        }
+                        .disabled(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
+                }
+                .padding([.horizontal, .bottom])
+            }
+            .navigationTitle("Assign Bags")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .navigationBarTrailing) { Button("Save") { isPresented = false } }
+            }
+        }
+    }
+
+    private func toggle(_ bag: BeautyBag) { 
+        if selectedBagIDs.contains(bag.objectID) { 
+            selectedBagIDs.remove(bag.objectID) 
+        } else { 
+            selectedBagIDs.insert(bag.objectID) 
+        } 
+    }
+    
+    private func createBag() {
+        // Create bag using the BeautyBagViewModel
+        bagViewModel.newBagName = newBagName
+        bagViewModel.newBagIcon = newBagIcon
+        bagViewModel.newBagColor = newBagColor
+        bagViewModel.createBag()
+        
+        // Clear form
+        newBagName = ""
+        newBagIcon = "bag.fill"
+        newBagColor = "lushyPink"
     }
 }
 

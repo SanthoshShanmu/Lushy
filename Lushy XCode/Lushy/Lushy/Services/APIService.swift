@@ -775,7 +775,7 @@ class APIService {
     }
     
     // Create a new beauty bag for a user
-    func createBag(userId: String, name: String) -> AnyPublisher<BeautyBagSummary, APIError> {
+    func createBag(userId: String, name: String, color: String = "lushyPink", icon: String = "bag.fill") -> AnyPublisher<BeautyBagSummary, APIError> {
         let url = baseURL.appendingPathComponent("users")
             .appendingPathComponent(userId)
             .appendingPathComponent("bags")
@@ -785,7 +785,7 @@ class APIService {
          if let token = AuthService.shared.token {
              request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
          }
-         let body = ["name": name]
+         let body = ["name": name, "color": color, "icon": icon]
          request.httpBody = try? JSONSerialization.data(withJSONObject: body)
          return URLSession.shared.dataTaskPublisher(for: request)
              .tryMap { data, response -> BeautyBagSummary in
@@ -794,7 +794,7 @@ class APIService {
                  }
                  let wrapper = try JSONDecoder().decode(BagResponse.self, from: data)
                  let bag = wrapper.bag
-                 return BeautyBagSummary(id: bag._id, name: bag.name)
+                 return BeautyBagSummary(id: bag._id, name: bag.name, color: bag.color, icon: bag.icon)
              }
              .mapError { error in
                  (error as? APIError) ?? .networkError
@@ -808,9 +808,39 @@ class APIService {
         struct BagData: Codable {
             let _id: String
             let name: String
+            let color: String
+            let icon: String
         }
     }
     
+    // Update a beauty bag for a user
+    func updateBag(userId: String, bagId: String, name: String, color: String, icon: String) -> AnyPublisher<Void, APIError> {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("bags")
+            .appendingPathComponent(bagId)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let body = ["name": name, "color": color, "icon": icon]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { _, response in
+                guard let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return ()
+            }
+            .mapError { error in (error as? APIError) ?? .networkError }
+            .eraseToAnyPublisher()
+    }
+
     // Delete a beauty bag for a user
     func deleteBag(userId: String, bagId: String) -> AnyPublisher<Void, APIError> {
         let url = baseURL

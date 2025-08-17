@@ -211,8 +211,10 @@ class SyncService {
                         if let bag = existingByBackend[summary.id] {
                             // update properties if needed
                             bag.name = summary.name
+                            bag.color = summary.color ?? "lushyPink"
+                            bag.icon = summary.icon ?? "bag.fill"
                         } else {
-                            if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
+                            if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: summary.color ?? "lushyPink", icon: summary.icon ?? "bag.fill") {
                                 CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
                             }
                         }

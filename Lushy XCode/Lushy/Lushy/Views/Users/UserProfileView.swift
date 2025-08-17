@@ -445,31 +445,79 @@ struct BagCard: View {
     let bag: BeautyBagSummary
     
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "bag.fill")
-                .font(.title2)
-                .foregroundColor(.lushyPink)
+        VStack(spacing: 0) {
+            // Top section with icon - larger and more prominent
+            VStack(spacing: 8) {
+                ZStack {
+                    // Background circle for the icon
+                    Circle()
+                        .fill(Color(bag.color ?? "lushyPink").opacity(0.15))
+                        .frame(width: 60, height: 60)
+                    
+                    Image(systemName: bag.icon ?? "bag.fill")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+            }
             
-            Text(bag.name)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            // Bottom section with name - clean typography
+            VStack(spacing: 4) {
+                Text(bag.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                // Optional: Add a subtle accent line
+                Rectangle()
+                    .fill(Color(bag.color ?? "lushyPink").opacity(0.3))
+                    .frame(width: 20, height: 1)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 16)
         }
-        .frame(maxWidth: .infinity)
-        .padding()
+        .frame(width: 120, height: 140) // Fixed size for consistency
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: Color.white, location: 0),
+                            .init(color: Color(bag.color ?? "lushyPink").opacity(0.03), location: 1)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color(bag.color ?? "lushyPink").opacity(0.1), lineWidth: 1)
+                )
+        )
+        .shadow(
+            color: Color(bag.color ?? "lushyPink").opacity(0.08),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
+        .overlay(
+            // Subtle highlight at the top
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color.lushyPink.opacity(0.1),
-                            Color.lushyPurple.opacity(0.05)
+                            Color.white.opacity(0.6),
+                            Color.clear
                         ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        startPoint: .top,
+                        endPoint: .center
                     )
                 )
+                .blendMode(.overlay)
         )
     }
 }

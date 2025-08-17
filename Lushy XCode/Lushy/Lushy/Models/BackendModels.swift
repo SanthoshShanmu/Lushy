@@ -175,10 +175,21 @@ struct UserProfile: Identifiable, Codable {
 struct BeautyBagSummary: Identifiable, Codable {
     let id: String
     let name: String
+    let color: String?
+    let icon: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case name
+        case color
+        case icon
+    }
+    
+    init(id: String, name: String, color: String? = "lushyPink", icon: String? = "bag.fill") {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.icon = icon
     }
 }
 
