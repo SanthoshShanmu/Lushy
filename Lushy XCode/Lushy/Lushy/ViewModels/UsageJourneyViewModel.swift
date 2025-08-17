@@ -6,8 +6,10 @@ class UsageJourneyViewModel: ObservableObject {
     @Published var events: [UsageJourneyEvent] = []
     @Published var newThoughtText = ""
     @Published var isLoading = false
+    @Published var showingCustomDateSheet = false
+    @Published var customThoughtDate = Date()
     
-    private let product: UserProduct
+    let product: UserProduct  // Changed from private to public
     private var cancellables = Set<AnyCancellable>()
     private let managedObjectContext = CoreDataManager.shared.viewContext
     
@@ -37,17 +39,29 @@ class UsageJourneyViewModel: ObservableObject {
     }
     
     func addThought() {
+        addThought(withDate: Date())
+    }
+    
+    func addThought(withDate date: Date) {
         guard !newThoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        CoreDataManager.shared.addUsageJourneyEventNew(
-            to: product.objectID,
-            type: .thought,
-            text: newThoughtText,
-            title: nil,
-            rating: 0
-        )
-        
+        createEvent(type: "thought", text: newThoughtText, date: date)
         newThoughtText = ""
+    }
+    
+    private func createEvent(type: String, text: String?, date: Date) {
+        let event = UsageJourneyEvent(context: managedObjectContext)
+        event.userProduct = product
+        event.eventType = type
+        event.text = text
+        event.createdAt = date
+        
+        do {
+            try managedObjectContext.save()
+            fetchEvents()
+        } catch {
+            print("Error creating journey event: \(error)")
+        }
     }
     
     // Create automatic events for existing product data
@@ -57,40 +71,19 @@ class UsageJourneyViewModel: ObservableObject {
         // Create purchase event if needed
         if let purchaseDate = product.purchaseDate,
            !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.purchase.rawValue }) {
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .purchase,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: purchaseDate
-            )
+            createEvent(type: "purchase", text: nil, date: purchaseDate)
         }
         
         // Create open event if needed
         if let openDate = product.openDate,
            !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.open.rawValue }) {
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .open,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: openDate
-            )
+            createEvent(type: "open", text: nil, date: openDate)
         }
         
         // Create finished event if needed
         if product.isFinished,
            !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.finished.rawValue }) {
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .finished,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: product.finishDate ?? Date()
-            )
+            createEvent(type: "finished", text: nil, date: product.finishDate ?? Date())
         }
         
         // Convert existing comments to thoughts
@@ -100,14 +93,7 @@ class UsageJourneyViewModel: ObservableObject {
                     $0.eventType == UsageJourneyEvent.EventType.thought.rawValue && 
                     $0.text == comment.text 
                 }) {
-                    CoreDataManager.shared.addUsageJourneyEventNew(
-                        to: product.objectID,
-                        type: .thought,
-                        text: comment.text,
-                        title: nil,
-                        rating: 0,
-                        date: comment.createdAt ?? Date()
-                    )
+                    createEvent(type: "thought", text: comment.text, date: comment.createdAt ?? Date())
                 }
             }
         }

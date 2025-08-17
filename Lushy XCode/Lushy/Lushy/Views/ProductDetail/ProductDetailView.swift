@@ -687,9 +687,9 @@ private struct _PrettyUsageJourneySection: View {
                     )
                     
                     JourneyStatItem(
-                        icon: "star.fill",
-                        label: "Reviews",
-                        value: "\(reviewCount)",
+                        icon: "clock",
+                        label: "Days",
+                        value: "\(daysSincePurchase)",
                         color: .lushyPink
                     )
                 }
@@ -714,22 +714,23 @@ private struct _PrettyUsageJourneySection: View {
     }
     
     private var journeyEventCount: Int {
-        // Count milestone events: purchase, open, finish
-        var count = 0
-        if viewModel.product.purchaseDate != nil { count += 1 }
-        if viewModel.product.openDate != nil { count += 1 }
-        if viewModel.product.isFinished { count += 1 }
-        
-        // Add journey events count using Core Data fetch
+        // Count only meaningful journey events (purchase, open, finish, thoughts)
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@", viewModel.product)
-        let journeyEventCount = (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
-        count += journeyEventCount
-        return count
+        
+        let journeyEvents = (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
+        
+        // Add milestone events
+        var milestoneCount = 0
+        if viewModel.product.purchaseDate != nil { milestoneCount += 1 }
+        if viewModel.product.openDate != nil { milestoneCount += 1 }
+        if viewModel.product.isFinished { milestoneCount += 1 }
+        
+        return milestoneCount + journeyEvents
     }
     
     private var thoughtCount: Int {
-        // Count journey events with type "thought" using Core Data fetch
+        // Count only journey events with type "thought"
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@ AND eventType == %@", viewModel.product, "thought")
         return (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
@@ -737,6 +738,11 @@ private struct _PrettyUsageJourneySection: View {
     
     private var reviewCount: Int {
         return (viewModel.product.reviews as? Set<Review>)?.count ?? 0
+    }
+    
+    private var daysSincePurchase: Int {
+        guard let purchaseDate = viewModel.product.purchaseDate else { return 0 }
+        return Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 0
     }
 }
 

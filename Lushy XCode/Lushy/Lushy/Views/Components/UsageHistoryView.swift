@@ -2,116 +2,168 @@ import SwiftUI
 
 struct UsageHistoryView: View {
     @ObservedObject var viewModel: UsageTrackingViewModel
-    @State private var showingStatsSheet = false
+    
+    // Usage contexts for check-in display
+    private let usageContexts = [
+        ("morning_routine", "Morning Routine", "sun.max"),
+        ("evening_routine", "Evening Routine", "moon"),
+        ("special_occasion", "Special Occasion", "star"),
+        ("work_day", "Work/Professional", "briefcase"),
+        ("weekend", "Casual/Weekend", "house"),
+        ("travel", "Travel", "airplane"),
+        ("gym_sports", "Gym/Sports", "figure.walk"),
+        ("date_night", "Date Night", "heart"),
+        ("general", "General", "circle")
+    ]
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with stats
+            // Header with check-in stats
             headerSection
             
-            // Usage entries list
-            if viewModel.usageEntries.isEmpty {
+            // Usage check-ins list
+            if viewModel.usageCheckIns.isEmpty {
                 emptyStateView
             } else {
-                usageEntriesList
+                checkInsList
             }
         }
         .navigationTitle("Usage History")
-        .navigationBarItems(trailing: 
-            Button(action: { showingStatsSheet = true }) {
-                Image(systemName: "chart.bar")
-                    .font(.title3)
-                    .foregroundColor(.lushyPink)
-            }
-        )
-        .sheet(isPresented: $showingStatsSheet) {
-            UsageStatsSheet(viewModel: viewModel)
-        }
     }
     
     private var headerSection: some View {
         VStack(spacing: 16) {
-            // Progress overview
+            // Usage overview
             VStack(spacing: 8) {
                 HStack {
-                    Text("Current Progress")
+                    Text("Usage Overview")
                         .font(.headline)
                         .fontWeight(.semibold)
                     Spacer()
-                    Text("\(Int(viewModel.currentAmount))% remaining")
+                    Text("\(viewModel.totalCheckIns) check-ins")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.lushyPink)
+                        .fontWeight(.medium)
                 }
-                
-                ProgressView(value: viewModel.progressPercentage)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .lushyPink))
-                    .scaleEffect(x: 1, y: 2, anchor: .center)
             }
             
-            // Quick stats
+            // Simple stats
             HStack(spacing: 20) {
-                StatBubble(
+                UsageStatCard(
+                    icon: "calendar.badge.checkmark",
                     title: "Total Uses",
-                    value: "\(viewModel.usageEntries.count)",
+                    value: "\(viewModel.totalCheckIns)",
+                    subtitle: "check-ins",
                     color: .lushyMint
                 )
                 
-                StatBubble(
+                UsageStatCard(
+                    icon: "calendar.badge.clock",
                     title: "This Week",
-                    value: String(format: "%.1f%%", viewModel.averageUsagePerWeek),
+                    value: "\(viewModel.weeklyCheckIns)",
+                    subtitle: "uses",
                     color: .lushyPeach
                 )
                 
-                if let finishDate = viewModel.predictedFinishDate {
-                    StatBubble(
-                        title: "Est. Finish",
-                        value: formatShortDate(finishDate),
-                        color: .lushyPurple
-                    )
+                UsageStatCard(
+                    icon: "clock",
+                    title: "Last Used",
+                    value: viewModel.daysSinceLastUse == 0 ? "Today" : "\(viewModel.daysSinceLastUse)d ago",
+                    subtitle: "days",
+                    color: .lushyPurple
+                )
+            }
+            
+            // Usage insights
+            if !viewModel.usageFrequencyInsight.isEmpty {
+                HStack {
+                    Image(systemName: "lightbulb")
+                        .foregroundColor(.lushyPink)
+                    Text(viewModel.usageFrequencyInsight)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.lushyPink.opacity(0.1))
+                )
             }
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.lushyPink.opacity(0.2), lineWidth: 1)
-                )
+                .fill(.ultraThinMaterial)
         )
         .padding(.horizontal)
-        .padding(.bottom)
+        .padding(.top, 10)
     }
-    
-    private var usageEntriesList: some View {
-        List {
-            ForEach(groupedEntries, id: \.date) { group in
-                Section(header: Text(group.date).font(.subheadline).fontWeight(.medium)) {
-                    ForEach(group.entries, id: \.objectID) { entry in
-                        UsageHistoryRow(entry: entry)
-                            .listRowBackground(Color.clear)
+
+    private var checkInsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(groupedCheckIns, id: \.date) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Date header
+                        HStack {
+                            Text(group.date)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(group.checkIns.count) use\(group.checkIns.count == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        
+                        // Check-ins for this date
+                        ForEach(group.checkIns.indices, id: \.self) { index in
+                            UsageCheckInRow(checkIn: group.checkIns[index], contexts: usageContexts)
+                                .padding(.horizontal)
+                        }
                     }
                 }
             }
+            .padding(.vertical)
         }
-        .listStyle(PlainListStyle())
     }
     
+    private var groupedCheckIns: [UsageCheckInGroup] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        
+        let grouped = Dictionary(grouping: viewModel.usageCheckIns) { checkIn in
+            dateFormatter.string(from: checkIn.date)
+        }
+        
+        return grouped.map { date, checkIns in
+            UsageCheckInGroup(date: date, checkIns: checkIns.sorted { $0.date > $1.date })
+        }.sorted { group1, group2 in
+            // Sort by date, most recent first
+            guard let date1 = dateFormatter.date(from: group1.date),
+                  let date2 = dateFormatter.date(from: group2.date) else {
+                return false
+            }
+            return date1 > date2
+        }
+    }
+
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
             
-            Image(systemName: "chart.line.uptrend.xyaxis")
+            Image(systemName: "calendar.badge.checkmark")
                 .font(.system(size: 60))
                 .foregroundColor(.gray.opacity(0.5))
             
             VStack(spacing: 8) {
-                Text("No Usage History")
+                Text("No Check-ins Yet")
                     .font(.title2)
                     .fontWeight(.semibold)
                 
-                Text("Start tracking your product usage to see detailed insights and patterns here.")
+                Text("Start checking in when you use this product to see your usage history here.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -121,136 +173,103 @@ struct UsageHistoryView: View {
             Spacer()
         }
     }
-    
-    private var groupedEntries: [UsageGroup] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: viewModel.usageEntries) { entry in
-            calendar.startOfDay(for: entry.createdAt)
-        }
-        
-        return grouped.map { (date, entries) in
-            UsageGroup(
-                date: formatDateHeader(date),
-                entries: entries.sorted { $0.createdAt > $1.createdAt }
-            )
-        }
-        .sorted { first, second in
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMM d"
-            return (formatter.date(from: first.date) ?? Date()) > (formatter.date(from: second.date) ?? Date())
-        }
-    }
-    
-    private func formatDateHeader(_ date: Date) -> String {
-        let calendar = Calendar.current
-        
-        if calendar.isDateInToday(date) {
-            return "Today"
-        } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMM d"
-            return formatter.string(from: date)
-        }
-    }
-    
-    private func formatShortDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: date)
-    }
 }
 
-struct UsageGroup {
-    let date: String
-    let entries: [UsageEntry]
-}
-
-struct StatBubble: View {
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-            
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(color.opacity(0.1))
-        )
-    }
-}
-
-struct UsageHistoryRow: View {
+// Row for individual usage entries
+struct UsageEntryRow: View {
     let entry: UsageEntry
     
     var body: some View {
         HStack(spacing: 12) {
-            // Usage type icon
-            Image(systemName: iconForUsageType(entry.usageType))
-                .font(.title3)
-                .foregroundColor(colorForUsageType(entry.usageType))
-                .frame(width: 30)
+            // Icon based on rating
+            Circle()
+                .fill(ratingColor)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.white)
+                )
             
-            // Usage details
+            // Entry details
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(entry.usageType.capitalized)
+                    Text("Used product")
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
-                    Spacer()
+                    if parsedMetadata.rating > 0 {
+                        HStack(spacing: 2) {
+                            ForEach(1...5, id: \.self) { star in
+                                Image(systemName: star <= parsedMetadata.rating ? "star.fill" : "star")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(.yellow)
+                            }
+                        }
+                    }
                     
-                    Text(formatTime(entry.createdAt))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Spacer()
                 }
                 
-                if let notes = entry.notes, !notes.isEmpty {
-                    Text(notes)
+                // Context and notes
+                if !parsedMetadata.context.isEmpty && parsedMetadata.context != "general" {
+                    Text(parsedMetadata.context.capitalized)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.lushyPeach.opacity(0.2))
+                        .foregroundColor(.lushyPeach)
+                        .cornerRadius(4)
+                }
+                
+                if !parsedMetadata.notes.isEmpty {
+                    Text(parsedMetadata.notes)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
+                
+                Text(formatTime(entry.createdAt))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             
-            // Amount used
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("-\(String(format: "%.1f", entry.usageAmount))%")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(colorForUsageType(entry.usageType))
-            }
+            Spacer()
         }
-        .padding(.vertical, 8)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        )
     }
     
-    private func iconForUsageType(_ type: String) -> String {
-        switch type {
-        case "light": return "drop"
-        case "medium": return "drop.fill"
-        case "heavy": return "drop.triangle.fill"
-        default: return "circle.fill"
+    // Parse metadata from notes
+    private var parsedMetadata: (rating: Int, context: String, notes: String) {
+        guard let notes = entry.notes else { return (5, "general", "") }
+        
+        // Try to parse JSON first
+        if let jsonData = notes.data(using: .utf8),
+           let metadata = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            let rating = metadata["rating"] as? Int ?? 5
+            let context = metadata["context"] as? String ?? "general"
+            let userNotes = metadata["notes"] as? String ?? ""
+            return (rating, context, userNotes)
         }
+        
+        // Fallback parsing
+        return (5, "general", notes)
     }
     
-    private func colorForUsageType(_ type: String) -> Color {
-        switch type {
-        case "light": return .lushyMint
-        case "medium": return .lushyPeach
-        case "heavy": return .lushyPink
-        default: return .lushyPurple
+    private var ratingColor: Color {
+        let rating = parsedMetadata.rating
+        switch rating {
+        case 5: return .green
+        case 4: return .lushyMint
+        case 3: return .orange
+        case 2: return .lushyPeach
+        case 1: return .red
+        default: return .gray
         }
     }
     
@@ -261,158 +280,14 @@ struct UsageHistoryRow: View {
     }
 }
 
-struct UsageStatsSheet: View {
-    @ObservedObject var viewModel: UsageTrackingViewModel
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Usage pattern analysis
-                    usagePatternSection
-                    
-                    // Weekly breakdown
-                    weeklyBreakdownSection
-                    
-                    // Usage type distribution
-                    usageTypeDistributionSection
-                }
-                .padding()
-            }
-            .navigationTitle("Usage Analytics")
-            .navigationBarItems(trailing: 
-                Button("Done") {
-                    presentationMode.wrappedValue.dismiss()
-                }
-            )
-        }
-    }
-    
-    private var usagePatternSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Usage Pattern")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            Text(usagePatternDescription)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.lushyMint.opacity(0.1))
-        )
-    }
-    
-    private var weeklyBreakdownSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Weekly Usage")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            HStack {
-                Text("Average per week:")
-                Spacer()
-                Text(String(format: "%.1f%%", viewModel.averageUsagePerWeek))
-                    .fontWeight(.semibold)
-                    .foregroundColor(.lushyPink)
-            }
-            
-            if viewModel.averageUsagePerWeek > 0 && viewModel.currentAmount > 0 {
-                let weeksRemaining = viewModel.currentAmount / viewModel.averageUsagePerWeek
-                HStack {
-                    Text("Estimated weeks remaining:")
-                    Spacer()
-                    Text(String(format: "%.1f weeks", weeksRemaining))
-                        .fontWeight(.semibold)
-                        .foregroundColor(.lushyPeach)
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.lushyPeach.opacity(0.1))
-        )
-    }
-    
-    private var usageTypeDistributionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Usage Type Distribution")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            ForEach(usageTypeStats, id: \.type) { stat in
-                HStack {
-                    Image(systemName: iconForType(stat.type))
-                        .foregroundColor(colorForType(stat.type))
-                        .frame(width: 20)
-                    
-                    Text(stat.type.capitalized)
-                        .font(.subheadline)
-                    
-                    Spacer()
-                    
-                    Text("\(stat.count)")
-                        .fontWeight(.semibold)
-                    
-                    Text("(\(stat.percentage)%)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.lushyPurple.opacity(0.1))
-        )
-    }
-    
-    private var usagePatternDescription: String {
-        let frequency = viewModel.usageFrequency.lowercased()
-        if frequency.contains("daily") {
-            return "You're using this product daily. This indicates it's likely part of your regular routine."
-        } else if frequency.contains("frequently") {
-            return "You use this product frequently throughout the week. Great consistency!"
-        } else if frequency.contains("once") {
-            return "You used this product once this week. Consider if this usage pattern meets your needs."
-        } else {
-            return "You haven't used this product recently. Consider if it's still relevant to your routine."
-        }
-    }
-    
-    private var usageTypeStats: [(type: String, count: Int, percentage: Int)] {
-        let typeCounts = Dictionary(grouping: viewModel.usageEntries) { $0.usageType }
-            .mapValues { $0.count }
-        
-        let total = viewModel.usageEntries.count
-        
-        return typeCounts.map { (type, count) in
-            let percentage = total > 0 ? Int((Double(count) / Double(total)) * 100) : 0
-            return (type: type, count: count, percentage: percentage)
-        }
-        .sorted { $0.count > $1.count }
-    }
-    
-    private func iconForType(_ type: String) -> String {
-        switch type {
-        case "light": return "drop"
-        case "medium": return "drop.fill"
-        case "heavy": return "drop.triangle.fill"
-        default: return "circle.fill"
-        }
-    }
-    
-    private func colorForType(_ type: String) -> Color {
-        switch type {
-        case "light": return .lushyMint
-        case "medium": return .lushyPeach
-        case "heavy": return .lushyPink
-        default: return .lushyPurple
-        }
-    }
+// Data structure for grouping check-ins by date
+struct UsageCheckInGroup {
+    let date: String
+    let checkIns: [UsageEntryDisplay]
+}
+
+// Data structure for grouping entries by date
+struct UsageGroup {
+    let date: String
+    let entries: [UsageEntry]
 }

@@ -4,37 +4,21 @@ import Combine
 
 class UsageTrackingViewModel: ObservableObject {
     @Published var usageEntries: [UsageEntry] = []
-    @Published var currentAmount: Double = 100.0
-    @Published var isShowingUsageSheet = false
-    @Published var selectedUsageType = "light"
-    @Published var usageNotes = ""
-    @Published var predictedFinishDate: Date?
-    @Published var averageUsagePerWeek: Double = 0
     @Published var isShowingFinishConfirmation = false
     
-    private let product: UserProduct
+    let product: UserProduct  // Changed from private to public
     private var cancellables = Set<AnyCancellable>()
-    private var isFinishingProduct = false // Add flag to prevent multiple finish operations
-    
-    let usageTypes = [
-        "light": (amount: 2.0, description: "Light use"),
-        "medium": (amount: 5.0, description: "Regular use"),
-        "heavy": (amount: 10.0, description: "Heavy use"),
-        "custom": (amount: 0.0, description: "Custom amount")
-    ]
+    private var isFinishingProduct = false
     
     init(product: UserProduct) {
         self.product = product
-        self.currentAmount = product.currentAmount
         loadUsageEntries()
-        calculateUsageInsights()
         
         // Subscribe to Core Data changes
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.loadUsageEntries()
-                self?.calculateUsageInsights()
             }
             .store(in: &cancellables)
     }
@@ -51,121 +35,225 @@ class UsageTrackingViewModel: ObservableObject {
         }
     }
     
-    func addUsageEntry(type: String, customAmount: Double? = nil) {
-        let amount: Double
-        if type == "custom", let customAmount = customAmount {
-            amount = customAmount
-        } else {
-            amount = usageTypes[type]?.amount ?? 5.0
+    // Add a new usage check-in using the existing UsageEntry model
+    func quickCheckIn(context: String, notes: String?, date: Date) {
+        // Validate date is not before purchase date
+        if let purchaseDate = product.purchaseDate, date < purchaseDate {
+            print("Cannot add check-in before purchase date")
+            return
         }
         
-        CoreDataManager.shared.addUsageEntry(
-            to: product.objectID,
-            type: type,
-            amount: amount,
-            notes: usageNotes.isEmpty ? nil : usageNotes
-        )
-        
-        // Update current amount
-        let newAmount = max(0, currentAmount - amount)
-        currentAmount = newAmount
-        product.currentAmount = newAmount
-        
-        // Only mark as finished if empty AND not already finished (prevent infinite loop)
-        if newAmount <= 0 && !product.isFinished {
-            CoreDataManager.shared.markProductAsFinished(id: product.objectID)
-        } else {
-            try? CoreDataManager.shared.viewContext.save()
+        // Check if already checked in today for this date
+        let calendar = Calendar.current
+        let existingEntry = usageEntries.first { entry in
+            calendar.isDate(entry.createdAt, inSameDayAs: date)
         }
         
-        // Clear form
-        usageNotes = ""
-        isShowingUsageSheet = false
+        if existingEntry != nil {
+            print("Already checked in for this date")
+            return // Could show alert to user instead
+        }
+        
+        let coreDataContext = CoreDataManager.shared.viewContext
+        let entry = UsageEntry(context: coreDataContext)
+        entry.userProduct = product
+        entry.createdAt = date
+        entry.usageAmount = 1.0 // Use 1.0 to represent a single usage
+        entry.usageType = "check_in"
+        entry.userId = AuthService.shared.userId ?? ""
+        
+        // Store context and notes in notes as JSON
+        if let notesData = createNotesWithMetadata(notes: notes, context: context) {
+            entry.notes = notesData
+        }
+        
+        // Mark as opened if this is the first usage and not already opened
+        if product.openDate == nil {
+            product.openDate = date
+            
+            // Calculate expiry if we have PAO
+            if let pao = product.periodsAfterOpening, let months = extractMonths(from: pao) {
+                product.expireDate = Calendar.current.date(byAdding: .month, value: months, to: date)
+                NotificationService.shared.scheduleExpiryNotification(for: product)
+            }
+        }
+        
+        do {
+            try coreDataContext.save()
+            loadUsageEntries()
+            
+            // Create journey event for usage
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .thought, // Use thought type since usage type doesn't exist
+                text: "Used product - \(context)" + (notes?.isEmpty == false ? ": \(notes!)" : ""),
+                title: nil,
+                rating: 0,
+                date: date
+            )
+        } catch {
+            print("Error saving usage check-in: \(error)")
+        }
     }
     
-    // Add function to manually finish product early
-    func finishProductEarly() {
-        // Prevent multiple simultaneous finish operations
-        guard !product.isFinished && !isFinishingProduct else { 
-            print("Product already finished or finish operation in progress")
-            return 
+    // Helper to create notes with metadata (no rating)
+    private func createNotesWithMetadata(notes: String?, context: String) -> String? {
+        let metadata: [String: Any] = [
+            "context": context,
+            "notes": notes ?? ""
+        ]
+        
+        if let jsonData = try? JSONSerialization.data(withJSONObject: metadata),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
         }
         
-        // Set flag to prevent re-entry
+        // Fallback to simple format
+        return "Context: \(context)" + (notes?.isEmpty == false ? ", Notes: \(notes!)" : "")
+    }
+    
+    // Helper to parse metadata from notes (no rating)
+    private func parseMetadataFromNotes(_ notes: String?) -> (context: String, notes: String) {
+        guard let notes = notes else { return ("general", "") }
+        
+        // Try to parse JSON first
+        if let jsonData = notes.data(using: .utf8),
+           let metadata = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            let context = metadata["context"] as? String ?? "general"
+            let userNotes = metadata["notes"] as? String ?? ""
+            return (context, userNotes)
+        }
+        
+        // Fallback parsing
+        return ("general", notes)
+    }
+    
+    // Finish product
+    func finishProduct() {
+        guard !isFinishingProduct && !product.isFinished else { return }
+        
         isFinishingProduct = true
         
-        // Set current amount to 0 and mark as finished
-        currentAmount = 0
-        product.currentAmount = 0
+        // Mark as finished
+        product.isFinished = true
+        product.finishDate = Date()
         
-        // Use async dispatch to prevent UI conflicts and add additional guards
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+        // Cancel expiry notifications
+        NotificationService.shared.cancelNotification(for: product)
+        
+        // Save changes
+        do {
+            try CoreDataManager.shared.viewContext.save()
             
-            // Double-check the product isn't already finished
-            guard !self.product.isFinished else {
-                self.isFinishingProduct = false
-                return
-            }
-            
-            CoreDataManager.shared.markProductAsFinished(id: self.product.objectID)
-            self.isShowingFinishConfirmation = false
-            
-            // Reset flag after a delay to ensure operation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.isFinishingProduct = false
-            }
+            // Create journey event for finishing
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .finished,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: Date()
+            )
+        } catch {
+            print("Error finishing product: \(error)")
+        }
+        
+        // Reset flag after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.isFinishingProduct = false
         }
     }
     
-    // Check if product can be finished early (has some usage or is opened)
-    var canFinishEarly: Bool {
-        return !product.isFinished && (!usageEntries.isEmpty || product.openDate != nil)
-    }
+    // MARK: - Computed Properties adapted for UsageEntry
     
-    // Add computed property to check if usage tracking should be disabled
     var isUsageTrackingDisabled: Bool {
         return product.isFinished
     }
     
-    private func calculateUsageInsights() {
-        guard !usageEntries.isEmpty else { return }
+    var totalCheckIns: Int {
+        return usageEntries.filter { $0.usageType == "check_in" }.count
+    }
+    
+    var weeklyCheckIns: Int {
+        let oneWeekAgo = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date()
+        return usageEntries.filter { $0.createdAt >= oneWeekAgo && $0.usageType == "check_in" }.count
+    }
+    
+    var daysSinceLastUse: Int {
+        let checkInEntries = usageEntries.filter { $0.usageType == "check_in" }
+        guard let lastCheckIn = checkInEntries.first else { return 0 }
+        return Calendar.current.dateComponents([.day], from: lastCheckIn.createdAt, to: Date()).day ?? 0
+    }
+    
+    var usageFrequencyInsight: String {
+        let totalDays = daysSinceFirstUse
+        guard totalDays > 0 && totalCheckIns > 0 else { return "" }
         
-        // Calculate average usage per week
-        let calendar = Calendar.current
-        let now = Date()
-        let oneWeekAgo = calendar.date(byAdding: .weekOfYear, value: -1, to: now) ?? now
+        let usagePerWeek = Double(totalCheckIns) / Double(totalDays) * 7.0
         
-        let recentEntries = usageEntries.filter { $0.createdAt >= oneWeekAgo }
-        let totalUsageThisWeek = recentEntries.reduce(0) { $0 + $1.usageAmount }
-        averageUsagePerWeek = totalUsageThisWeek
-        
-        // Predict finish date based on usage pattern
-        if averageUsagePerWeek > 0 && currentAmount > 0 {
-            let weeksRemaining = currentAmount / averageUsagePerWeek
-            predictedFinishDate = calendar.date(byAdding: .weekOfYear, value: Int(ceil(weeksRemaining)), to: now)
+        if usagePerWeek >= 5 {
+            return "You use this daily - consider stocking up!"
+        } else if usagePerWeek >= 3 {
+            return "Regular use - great for your routine"
+        } else if usagePerWeek >= 1 {
+            return "Weekly use - perfect for special occasions"
+        } else if daysSinceLastUse > 30 {
+            return "Haven't used recently - consider decluttering?"
+        } else {
+            return "Occasional use product"
         }
     }
     
-    var progressPercentage: Double {
-        return currentAmount / 100.0
+    private var daysSinceFirstUse: Int {
+        let firstDate = product.openDate ?? product.purchaseDate ?? Date()
+        return Calendar.current.dateComponents([.day], from: firstDate, to: Date()).day ?? 0
     }
     
-    var usageFrequency: String {
-        guard !usageEntries.isEmpty else { return "No usage yet" }
-        
-        let calendar = Calendar.current
-        let now = Date()
-        let oneWeekAgo = calendar.date(byAdding: .weekOfYear, value: -1, to: now) ?? now
-        
-        let entriesThisWeek = usageEntries.filter { $0.createdAt >= oneWeekAgo }.count
-        
-        switch entriesThisWeek {
-        case 0: return "Not used this week"
-        case 1: return "Used once this week"
-        case 2...3: return "Used \(entriesThisWeek) times this week"
-        case 4...6: return "Used frequently (\(entriesThisWeek)x)"
-        default: return "Used daily+"
+    // Get most common usage context
+    var mostCommonContext: String {
+        let checkInEntries = usageEntries.filter { $0.usageType == "check_in" }
+        let contexts = checkInEntries.compactMap { entry -> String? in
+            let metadata = parseMetadataFromNotes(entry.notes)
+            return metadata.context
         }
+        
+        let contextCounts = contexts.reduce(into: [:]) { counts, context in
+            counts[context, default: 0] += 1
+        }
+        return contextCounts.max(by: { $0.value < $1.value })?.key ?? ""
     }
+    
+    // Get usage entries formatted for display
+    var usageCheckIns: [UsageEntryDisplay] {
+        return usageEntries
+            .filter { $0.usageType == "check_in" }
+            .map { entry in
+                let metadata = parseMetadataFromNotes(entry.notes)
+                return UsageEntryDisplay(
+                    objectID: entry.objectID,
+                    date: entry.createdAt,
+                    context: metadata.context,
+                    notes: metadata.notes.isEmpty ? nil : metadata.notes
+                )
+            }
+    }
+}
+
+// Helper struct to display usage entries (removed rating)
+struct UsageEntryDisplay {
+    let objectID: NSManagedObjectID
+    let date: Date
+    let context: String
+    let notes: String?
+}
+
+// Helper function to extract months from PAO string
+private func extractMonths(from periodString: String) -> Int? {
+    let pattern = #"(\d+)\s*[Mm]"#
+    if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+       let match = regex.firstMatch(in: periodString, options: [], range: NSRange(location: 0, length: periodString.count)),
+       let range = Range(match.range(at: 1), in: periodString) {
+        return Int(periodString[range])
+    }
+    return nil
 }
