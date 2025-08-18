@@ -209,36 +209,11 @@ exports.createUserProduct = async (req, res) => {
     // Handle initial tag and bag associations if provided
     if (req.body.tags && Array.isArray(req.body.tags) && req.body.tags.length) {
          await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { tags: { $each: req.body.tags } } });
-         const Activity = require('../models/activity');
-         for (const tagId of req.body.tags) {
-             // Create add_tag activity with tag name
-             const tag = await require('../models/productTag').findById(tagId);
-             await Activity.create({
-                 user: new mongoose.Types.ObjectId(req.params.userId),
-                 type: 'add_tag',
-                 targetId: newProduct._id,
-                 targetType: 'UserProduct',
-                 description: `Added tag ${tag?.name || tagId} to product ${newProduct.productName}`,
-                 createdAt: new Date()
-             });
-         }
+         // Removed activity creation for tag addition - not used in feed
      }
      if (req.body.bags && Array.isArray(req.body.bags) && req.body.bags.length) {
          await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { bags: { $each: req.body.bags } } });
-         const Activity = require('../models/activity');
-         for (const bagId of req.body.bags) {
-            // Create add_to_bag activity with bag name
-            const BeautyBag = require('../models/beautyBag');
-            const bag = await BeautyBag.findById(bagId);
-            await Activity.create({
-                user: new mongoose.Types.ObjectId(req.params.userId),
-                type: 'add_to_bag',
-                targetId: new mongoose.Types.ObjectId(bagId),
-                targetType: 'BeautyBag',
-                description: `Added product ${newProduct.productName} to bag ${bag?.name || bagId}`,
-                createdAt: new Date()
-            });
-         }
+         // Removed activity creation for bag addition - not used in feed
      }
 
     console.log('Product created successfully:', newProduct._id);
@@ -303,77 +278,34 @@ exports.updateUserProduct = async (req, res) => {
       }
     }
 
-    // Toggle favorite status
+    // Toggle favorite status - removed activity creation (not used in feed)
     if (typeof req.body.favorite === 'boolean') {
-      // Find the product
-      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
-      if (product) {
-        // Only create activity if favorite status is actually changing
-        if (product.favorite !== req.body.favorite) {
-          const Activity = require('../models/activity');
-          await Activity.create({
-            user: new mongoose.Types.ObjectId(req.params.userId),
-            type: req.body.favorite ? 'favorite_product' : 'unfavorite_product',
-            targetId: product._id, // already ObjectId
-            targetType: 'UserProduct',
-            description: `${req.body.favorite ? 'Favorited' : 'Unfavorited'} product: ${product.productName}`,
-            createdAt: new Date()
-          });
-        }
-      }
+      // Functionality preserved but activity creation removed
     }
 
-    // Handle openDate activity
+    // Handle openDate - removed activity creation (not used in feed)
     if (req.body.openDate) {
-      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
-      if (product && (!product.openDate || product.openDate.getTime() !== new Date(req.body.openDate).getTime())) {
-        try {
-          const Activity = require('../models/activity');
-          await Activity.create({
-            user: new mongoose.Types.ObjectId(req.params.userId),
-            type: 'opened_product',
-            targetId: product._id,
-            targetType: 'UserProduct',
-            description: `Opened product: ${product.productName}`,
-            createdAt: new Date()
-          });
-        } catch (e) {}
-      }
+      // Functionality preserved but activity creation removed
     }
 
-    // Handle finish date activity
+    // Handle finish date - removed activity creation (not used in feed)
     if (req.body.finishDate || req.body.isFinished) {
       const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
       if (product && !product.isFinished) {
-        try {
-          const Activity = require('../models/activity');
-          await Activity.create({
-            user: new mongoose.Types.ObjectId(req.params.userId),
-            type: 'finished_product',
-            targetId: product._id,
-            targetType: 'UserProduct',
-            description: `Finished using ${product.productName}`,
-            createdAt: new Date()
-          });
-          console.log('Activity created: finished_product for user', req.params.userId, 'product:', product.productName);
-          
-          // Update quantity for similar products when a product is finished
-          if (product.productName && product.brand) {
-            await UserProduct.updateSimilarProductsQuantity(
-              product.user,
-              product.productName,
-              product.brand,
-              product.sizeInMl,
-              false // decrement
-            );
-          }
-        } catch (e) {
-          console.error('Finished product activity creation error:', e);
+        // Update quantity for similar products when a product is finished
+        if (product.productName && product.brand) {
+          await UserProduct.updateSimilarProductsQuantity(
+            product.user,
+            product.productName,
+            product.brand,
+            product.sizeInMl,
+            false // decrement
+          );
         }
       }
     }
 
-    // Handle comment or review addition
+    // Handle comment addition - removed activity creation (not used in feed)
     if (req.body.newComment) {
       const comment = {
         text: req.body.newComment,
@@ -383,21 +315,10 @@ exports.updateUserProduct = async (req, res) => {
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $push: { comments: comment } }
       );
-      // Activity: Comment added
-      try {
-        const Activity = require('../models/activity');
-        await Activity.create({
-          user: new mongoose.Types.ObjectId(req.params.userId),
-          type: 'comment',
-          targetId: new mongoose.Types.ObjectId(req.params.id), // ensure ObjectId
-          targetType: 'UserProduct',
-          description: `Commented on product`,
-          createdAt: new Date()
-        });
-      } catch (e) {}
       delete req.body.newComment;
     }
 
+    // Handle review addition
     if (req.body.newReview) {
       const { rating, title, text } = req.body.newReview;
       if (typeof rating !== 'number' || !title || !text) {
@@ -445,60 +366,27 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.newReview;
     }
 
-    // Handle adding a product to a beauty bag
+    // Handle adding a product to a beauty bag - removed activity creation (not used in feed)
     if (req.body.addToBagId) {
       // Persist bag association
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $addToSet: { bags: req.body.addToBagId } }
       );
-      // Create activity for adding to bag
-      try {
-        const Activity = require('../models/activity');
-        const product = await UserProduct.findById(req.params.id);
-        await Activity.create({
-          user: new mongoose.Types.ObjectId(req.params.userId),
-          type: 'add_to_bag',
-          targetId: new mongoose.Types.ObjectId(req.body.addToBagId),
-          targetType: 'BeautyBag',
-          description: `Added ${product.productName} to their beauty bag`,
-          createdAt: new Date()
-        });
-        console.log('Activity created: add_to_bag for user', req.params.userId);
-      } catch (e) {
-        console.error('Add to bag activity creation error:', e);
-      }
       delete req.body.addToBagId;
     }
 
-    // Handle removing a product from a beauty bag
+    // Handle removing a product from a beauty bag - removed activity creation (not used in feed)
     if (req.body.removeFromBagId) {
       const bagId = req.body.removeFromBagId;
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $pull: { bags: bagId } }
       );
-      try {
-        const Activity = require('../models/activity');
-        const BeautyBag = require('../models/beautyBag');
-        const product = await UserProduct.findById(req.params.id);
-        const bag = await BeautyBag.findById(bagId);
-        await Activity.create({
-          user: new mongoose.Types.ObjectId(req.params.userId),
-          type: 'remove_from_bag',
-          targetId: new mongoose.Types.ObjectId(bagId),
-          targetType: 'BeautyBag',
-          description: `Removed ${product.productName} from bag ${bag?.name || ''}`.trim(),
-          createdAt: new Date()
-        });
-        console.log('Activity created: remove_from_bag for user', req.params.userId);
-      } catch (e) {
-        console.error('Remove from bag activity creation error:', e);
-      }
       delete req.body.removeFromBagId;
     }
 
-    // Handle tag addition
+    // Handle tag addition - removed activity creation (not used in feed)
     if (req.body.addTagId) {
       const tagId = req.body.addTagId;
       console.log(`Received addTagId ${tagId} for product ${req.params.id}`);
@@ -508,37 +396,16 @@ exports.updateUserProduct = async (req, res) => {
         { new: true }
       );
       console.log(`Post-update tags for product ${req.params.id}:`, result.tags);
-       try {
-         const Activity = require('../models/activity');
-         await Activity.create({
-           user: new mongoose.Types.ObjectId(req.params.userId),
-           type: 'add_tag',
-           targetId: req.params.id,
-           targetType: 'UserProduct',
-           description: `Added a tag to product`,
-           createdAt: new Date()
-         });
-       } catch (e) {}
       delete req.body.addTagId;
     }
-    // Handle tag removal
+    
+    // Handle tag removal - removed activity creation (not used in feed)
     if (req.body.removeTagId) {
       const tagId = req.body.removeTagId;
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $pull: { tags: tagId } }
       );
-      try {
-        const Activity = require('../models/activity');
-        await Activity.create({
-          user: new mongoose.Types.ObjectId(req.params.userId),
-          type: 'remove_tag',
-          targetId: req.params.id,
-          targetType: 'UserProduct',
-          description: `Removed a tag from product`,
-          createdAt: new Date()
-        });
-      } catch (e) {}
       delete req.body.removeTagId;
     }
 
