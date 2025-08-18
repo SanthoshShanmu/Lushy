@@ -81,17 +81,16 @@ struct FeedView: View {
     }
 
     @ViewBuilder private var listView: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            LazyVStack(alignment: .leading, spacing: 16) {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 12) {
                 ForEach(viewModel.activities) { activity in
                     activityLink(for: activity)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .feedCard()
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.top)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var content: some View {
@@ -138,60 +137,118 @@ struct ActivityCard: View {
     let currentUserId: String
     
     @State private var likesCount: Int = 0
-    @State private var commentsCount: Int = 0
-    @State private var showCommentSheet = false
-    @State private var newCommentText = ""
     @State private var isLiked = false
-    @State private var commentList: [CommentSummary] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 0) {
+            // Compact header
             HStack(spacing: 12) {
-                // Profile picture placeholder with gradient
+                // Smaller, more elegant profile image
                 Circle()
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.6), Color.lushyPurple.opacity(0.4)]),
+                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.7), Color.lushyPurple.opacity(0.5)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 44, height: 44)
+                    .frame(width: 36, height: 36)
                     .overlay(
                         Text(activity.user.name.prefix(1).uppercased())
-                            .font(.headline)
+                            .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                     )
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(activity.user.name)
                         .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .fontWeight(.medium)
                         .foregroundColor(.primary)
                     
                     Text(timeAgoString(from: activity.createdAt))
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                // Activity type icon
+                // Minimal activity icon
                 Image(systemName: activityIcon(for: activity.type))
-                    .font(.title3)
+                    .font(.caption)
                     .foregroundColor(.lushyPink)
+                    .padding(6)
+                    .background(Color.lushyPink.opacity(0.1))
+                    .clipShape(Circle())
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
             
-            if let description = activity.description {
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .lineLimit(3)
+            // Compact content section
+            HStack(alignment: .center, spacing: 12) {
+                // Smaller circular product image
+                Group {
+                    if let imageUrl = extractImageUrl(), !imageUrl.isEmpty {
+                        AsyncImage(url: URL(string: imageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.1))
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.6)
+                                        .tint(.lushyPink)
+                                )
+                        }
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.lushyPink.opacity(0.2), lineWidth: 1)
+                        )
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.lushyPink.opacity(0.6))
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.lushyPink.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Compact content
+                VStack(alignment: .leading, spacing: 4) {
+                    if let description = activity.description {
+                        Text(description)
+                            .font(.subheadline)
+                            .fontWeight(.regular)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                    }
+                    
+                    if let productName = extractProductName() {
+                        Text(productName)
+                            .font(.caption)
+                            .foregroundColor(.lushyPink)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                Spacer()
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
 
-            // Interaction Bar
-            HStack(spacing: 20) {
+            // Minimal interaction bar
+            HStack(spacing: 16) {
                 Button(action: {
                     APIService.shared.likeActivity(activityId: activity.id) { result in
                         if case .success(let response) = result {
@@ -204,46 +261,47 @@ struct ActivityCard: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
                             .foregroundColor(isLiked ? .red : .secondary)
-                        Text("\(likesCount)")
-                            .font(.caption)
+                        if likesCount > 0 {
+                            Text("\(likesCount)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-                Button(action: {
-                    showCommentSheet = true
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "message")
-                            .foregroundColor(.secondary)
-                        Text("\(commentsCount)")
-                            .font(.caption)
-                    }
-                }
+                .buttonStyle(PlainButtonStyle())
+                
                 Spacer()
             }
-            .padding(.top, 8)
-
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        )
         .onAppear {
             likesCount = activity.likes ?? 0
-            commentsCount = activity.comments?.count ?? 0
             isLiked = activity.liked ?? false
-            commentList = activity.comments ?? []
         }
-        .sheet(isPresented: $showCommentSheet) {
-            CommentBottomSheetView(
-                activityId: activity.id,
-                commentList: commentList,
-                commentsCount: commentsCount
-            ) { updatedComments, updatedCount in
-                commentList = updatedComments
-                commentsCount = updatedCount
-            }
-            .presentationDetents([.fraction(0.75), .large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .presentationBackground(.clear)
+    }
+    
+    private func extractProductName() -> String? {
+        guard let description = activity.description else { return nil }
+        
+        if description.contains("Added ") && description.contains(" to their collection") {
+            let start = description.index(description.startIndex, offsetBy: 6) // "Added ".count
+            let end = description.range(of: " to their collection")?.lowerBound ?? description.endIndex
+            return String(description[start..<end])
         }
+        
+        return nil
+    }
+    
+    private func extractImageUrl() -> String? {
+        return activity.imageUrl
     }
     
     private func activityIcon(for type: String) -> String {
@@ -304,96 +362,124 @@ struct ReviewActivityCard: View {
     @State private var commentsCount: Int = 0
     @State private var showCommentSheet = false
     @State private var newCommentText = ""
-    @State private var isLiked = false  // track if user has liked this activity
+    @State private var isLiked = false
     @State private var commentList: [CommentSummary] = []
 
     var body: some View {
-        // Expand entire card to full width
         VStack(spacing: 0) {
-            // Outer white card background
-            VStack(alignment: .leading, spacing: 0) {
-                // User header
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.lushyPink.opacity(0.6), Color.lushyPurple.opacity(0.4)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+            // Compact header
+            HStack(spacing: 12) {
+                // Smaller, elegant profile image
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.7), Color.lushyPurple.opacity(0.5)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Text(activity.user.name.prefix(1).uppercased())
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                        )
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(activity.user.name)
+                    )
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Text(activity.user.name.prefix(1).uppercased())
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        // Subtitle: Reviewed product
-                        Text("Reviewed \(extractedTitle)")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(LushyPalette.pink)
-                    }
-                    Spacer()
+                            .foregroundColor(.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(activity.user.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
                     Text(timeAgoString(from: activity.createdAt))
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                .padding(.vertical, 12) // Vertical padding only
-
-                // Gradient review block
-                ZStack(alignment: .topLeading) {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.lushyPink.opacity(0.8), Color.lushyPurple.opacity(0.9)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Title
-                        Text(extractedTitle)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-
-                        // Review text
-                        if let reviewText = activity.description {
-                            Text(reviewText)
-                                .font(.body)
-                                .foregroundColor(.white)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        // Star rating
-                        if let rating = activity.rating {
-                            HStack(spacing: 4) {
-                                ForEach(0..<5) { idx in
-                                    Image(systemName: idx < rating ? "star.fill" : "star")
-                                        .foregroundColor(.white)
-                                        .font(.caption)
-                                }
-                            }
+                
+                Spacer()
+                
+                // Compact star rating
+                if let rating = activity.rating {
+                    HStack(spacing: 2) {
+                        ForEach(0..<5) { idx in
+                            Image(systemName: idx < rating ? "star.fill" : "star")
+                                .font(.system(size: 10))
+                                .foregroundColor(idx < rating ? .yellow : .gray.opacity(0.3))
                         }
                     }
-                    .padding(.vertical, 16)
-                    .padding(.horizontal, 16) // Added horizontal padding
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.1))
+                    .clipShape(Capsule())
                 }
-                .frame(maxWidth: .infinity)
-                .cornerRadius(12, corners: [.topLeft, .topRight])
             }
-            .frame(maxWidth: .infinity) // Expand to full available width
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
             
-            // Interaction Bar
-            HStack(spacing: 20) {
+            // Compact review content
+            HStack(alignment: .center, spacing: 12) {
+                // Smaller product image
+                Group {
+                    if let imageUrl = extractImageUrl(), !imageUrl.isEmpty {
+                        AsyncImage(url: URL(string: imageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.yellow.opacity(0.1))
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.6)
+                                        .tint(.yellow)
+                                )
+                        }
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                        )
+                    } else {
+                        Circle()
+                            .fill(Color.yellow.opacity(0.1))
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.yellow.opacity(0.6))
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Compact review content
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Reviewed \(extractedTitle)")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                        .fontWeight(.medium)
+                    
+                    if let reviewText = activity.description {
+                        Text(reviewText)
+                            .font(.subheadline)
+                            .fontWeight(.regular)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            // Minimal interaction bar
+            HStack(spacing: 16) {
                 Button(action: {
                     APIService.shared.likeActivity(activityId: activity.id) { result in
                         if case .success(let response) = result {
@@ -406,30 +492,46 @@ struct ReviewActivityCard: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
                             .foregroundColor(isLiked ? .red : .secondary)
-                        Text("\(likesCount)")
-                            .font(.caption)
+                        if likesCount > 0 {
+                            Text("\(likesCount)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
+                .buttonStyle(PlainButtonStyle())
+                
                 Button(action: {
                     showCommentSheet = true
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "message")
+                            .font(.system(size: 14))
                             .foregroundColor(.secondary)
-                        Text("\(commentsCount)")
-                            .font(.caption)
+                        if commentsCount > 0 {
+                            Text("\(commentsCount)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
+                .buttonStyle(PlainButtonStyle())
+                
                 Spacer()
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        )
         .onAppear {
             likesCount = activity.likes ?? 0
             commentsCount = activity.comments?.count ?? 0
-            // Initialize liked state from backend
             isLiked = activity.liked ?? false
             commentList = activity.comments ?? []
         }
@@ -452,9 +554,15 @@ struct ReviewActivityCard: View {
     // Extract product title from description
     private var extractedTitle: String {
         guard let desc = activity.description,
-              desc.hasPrefix("Reviewed ") else { return "" }
+              desc.hasPrefix("Reviewed ") else { return "Product" }
         let trimmed = desc.dropFirst("Reviewed ".count)
         return String(trimmed).components(separatedBy: " and").first ?? String(trimmed)
+    }
+    
+    // Extract image URL from activity data
+    private func extractImageUrl() -> String? {
+        // Try to get image from activity's product data if available
+        return activity.imageUrl
     }
 
     // Utility function to format createdAt string as time ago
@@ -490,149 +598,191 @@ struct BundledActivityCard: View {
     let activity: Activity
     let currentUserId: String
     @State private var likesCount: Int = 0
-    @State private var commentsCount: Int = 0
     @State private var isLiked: Bool = false
-    @State private var commentList: [CommentSummary] = []
-    @State private var showCommentSheet = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header with user info and time
-            HStack {
+        VStack(spacing: 0) {
+            // Compact header
+            HStack(spacing: 12) {
+                // Smaller, elegant profile image
                 Circle()
-                    .fill(LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Text(String(activity.user.name.prefix(1)).uppercased())
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                    )
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.user.name)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    Text(timeAgoString(from: activity.createdAt))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            // Bundled products content
-            VStack(alignment: .leading, spacing: 12) {
-                Text(activity.description ?? "Added products to their collection")
-                    .font(.body)
-                    .fontWeight(.medium)
-                
-                if let bundledActivities = activity.bundledActivities {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 8) {
-                        ForEach(Array(bundledActivities.prefix(4)), id: \.id) { bundledActivity in
-                            bundledProductCard(bundledActivity)
-                        }
-                    }
-                    
-                    if bundledActivities.count > 4 {
-                        Text("+ \(bundledActivities.count - 4) more products")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 4)
-                    }
-                }
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.lushyMint.opacity(0.1), Color.lushyPeach.opacity(0.1)]),
+                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.7), Color.lushyPurple.opacity(0.5)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-            )
-            
-            // Interaction buttons
-            HStack(spacing: 24) {
-                Button(action: toggleLike) {
-                    HStack(spacing: 4) {
-                        Image(systemName: isLiked ? "heart.fill" : "heart")
-                            .foregroundColor(isLiked ? .red : .secondary)
-                        Text("\(likesCount)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Text(activity.user.name.prefix(1).uppercased())
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    )
                 
-                Button(action: { showCommentSheet = true }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left")
-                            .foregroundColor(.secondary)
-                        Text("\(commentsCount)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(activity.user.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text(timeAgoString(from: activity.createdAt))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
+                
+                // Count badge
+                if let bundledActivities = activity.bundledActivities {
+                    Text("\(bundledActivities.count)")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.lushyMint)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.lushyMint.opacity(0.1))
+                        .clipShape(Capsule())
+                }
             }
-            .padding(.top, 8)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            
+            // Compact description
+            HStack {
+                Text(activity.description ?? "Added products to their collection")
+                    .font(.subheadline)
+                    .fontWeight(.regular)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            
+            // Compact product grid
+            if let bundledActivities = activity.bundledActivities {
+                HStack(spacing: 8) {
+                    ForEach(Array(bundledActivities.prefix(3)), id: \.id) { bundledActivity in
+                        compactProductCard(bundledActivity)
+                    }
+                    
+                    if bundledActivities.count > 3 {
+                        VStack(spacing: 2) {
+                            Circle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    Text("+\(bundledActivities.count - 3)")
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.secondary)
+                                )
+                            Text("more")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+
+            // Minimal interaction bar
+            HStack(spacing: 16) {
+                Button(action: {
+                    APIService.shared.likeActivity(activityId: activity.id) { result in
+                        if case .success(let response) = result {
+                            DispatchQueue.main.async {
+                                likesCount = response.likes
+                                isLiked = response.liked
+                            }
+                        }
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
+                            .foregroundColor(isLiked ? .red : .secondary)
+                        if likesCount > 0 {
+                            Text("\(likesCount)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        )
         .onAppear {
             likesCount = activity.likes ?? 0
-            commentsCount = activity.comments?.count ?? 0
             isLiked = activity.liked ?? false
-            commentList = activity.comments ?? []
-        }
-        .sheet(isPresented: $showCommentSheet) {
-            CommentBottomSheetView(
-                activityId: activity.id,
-                commentList: commentList,
-                commentsCount: commentsCount
-            ) { updatedComments, updatedCount in
-                commentList = updatedComments
-                commentsCount = updatedCount
-            }
-            .presentationDetents([.fraction(0.75), .large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .presentationBackground(.clear)
         }
     }
     
-    private func bundledProductCard(_ bundledActivity: BundledActivityItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.2))
-                .frame(height: 60)
-                .overlay(
-                    Image(systemName: "sparkles")
-                        .font(.title2)
-                        .foregroundColor(.lushyPink)
-                )
+    private func compactProductCard(_ bundledActivity: BundledActivityItem) -> some View {
+        VStack(spacing: 4) {
+            // Small circular product image
+            Group {
+                if let imageUrl = bundledActivity.imageUrl, !imageUrl.isEmpty {
+                    AsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.gray.opacity(0.1))
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .tint(.lushyMint)
+                            )
+                    }
+                    .frame(width: 32, height: 32)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
+                    )
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12))
+                                .foregroundColor(.lushyMint.opacity(0.6))
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
+                        )
+                }
+            }
             
+            // Compact product name
             if let description = bundledActivity.description {
                 let productName = extractProductName(from: description)
                 Text(productName)
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .frame(width: 50)
             }
         }
-        .padding(8)
-        .background(Color.white.opacity(0.8))
-        .cornerRadius(8)
     }
     
     private func extractProductName(from description: String) -> String {
@@ -645,13 +795,9 @@ struct BundledActivityCard: View {
         return "Product"
     }
     
-    private func toggleLike() {
-        // Note: Bundled activities don't support likes yet
-        // This is a placeholder for future implementation
-    }
-    
     private func timeAgoString(from dateString: String) -> String {
         let formatter = ISO8601DateFormatter()
+        // Try full ISO8601 with fractional seconds
         formatter.formatOptions = [
             .withFullDate, .withTime,
             .withFractionalSeconds,
@@ -662,6 +808,7 @@ struct BundledActivityCard: View {
         if let date = formatter.date(from: dateString) {
             return date.timeAgoDisplay
         }
+        // Fallback without fractional seconds
         formatter.formatOptions = [
             .withFullDate, .withTime,
             .withDashSeparatorInDate,

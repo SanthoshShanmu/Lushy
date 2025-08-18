@@ -77,7 +77,8 @@ exports.getFeed = async (req, res) => {
               description: a.description,
               targetId: a.targetId,
               targetType: a.targetType,
-              createdAt: a.createdAt
+              createdAt: a.createdAt,
+              imageUrl: a.imageUrl // Include image URL for bundled items
             })),
             liked: false, // Will be computed below
             likes: 0,

@@ -9,6 +9,7 @@ const ActivitySchema = new mongoose.Schema({
   rating: { type: Number }, // star rating for review activities
   likes: { type: Number, default: 0 }, // number of likes on this activity
   likedBy: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] }, // users who liked this activity
+  imageUrl: { type: String }, // product image URL for feed display
   comments: [ // comments on activity
     {
       user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

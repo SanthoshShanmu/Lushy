@@ -226,10 +226,11 @@ struct Activity: Codable, Identifiable {
     let liked: Bool?  // whether the current user has liked this activity
     let createdAt: String
     let bundledActivities: [BundledActivityItem]?  // for bundled product additions
+    let imageUrl: String?  // product image URL for display in feed
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt, bundledActivities
+        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt, bundledActivities, imageUrl
     }
 }
 
@@ -240,10 +241,11 @@ struct BundledActivityItem: Codable, Identifiable {
     let targetId: String?
     let targetType: String?
     let createdAt: String
+    let imageUrl: String?  // product image URL for bundled items
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case description, targetId, targetType, createdAt
+        case description, targetId, targetType, createdAt, imageUrl
     }
 }
 

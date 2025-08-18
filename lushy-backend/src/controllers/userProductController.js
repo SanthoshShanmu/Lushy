@@ -195,6 +195,35 @@ exports.createUserProduct = async (req, res) => {
       }
     }
 
+    // Add fallback image if no image is provided
+    if (!productData.imageUrl) {
+      // Generate a placeholder image URL based on product type or use a default
+      const fallbackImages = {
+        'skincare': `${req.protocol}://${req.get('host')}/uploads/defaults/skincare-placeholder.jpg`,
+        'makeup': `${req.protocol}://${req.get('host')}/uploads/defaults/makeup-placeholder.jpg`,
+        'haircare': `${req.protocol}://${req.get('host')}/uploads/defaults/haircare-placeholder.jpg`,
+        'fragrance': `${req.protocol}://${req.get('host')}/uploads/defaults/fragrance-placeholder.jpg`,
+        'default': `${req.protocol}://${req.get('host')}/uploads/defaults/product-placeholder.jpg`
+      };
+      
+      // Try to determine product category from name or brand
+      const productName = (productData.productName || '').toLowerCase();
+      const brand = (productData.brand || '').toLowerCase();
+      
+      let category = 'default';
+      if (productName.includes('cream') || productName.includes('serum') || productName.includes('moistur')) {
+        category = 'skincare';
+      } else if (productName.includes('lipstick') || productName.includes('foundation') || productName.includes('mascara')) {
+        category = 'makeup';
+      } else if (productName.includes('shampoo') || productName.includes('conditioner') || productName.includes('hair')) {
+        category = 'haircare';
+      } else if (productName.includes('perfume') || productName.includes('fragrance') || productName.includes('cologne')) {
+        category = 'fragrance';
+      }
+      
+      productData.imageUrl = fallbackImages[category];
+    }
+
     // Calculate expiry date if open date and periods_after_opening are set
     if (productData.openDate && productData.periodsAfterOpening) {
       const months = extractMonths(productData.periodsAfterOpening);
@@ -234,6 +263,7 @@ exports.createUserProduct = async (req, res) => {
           targetId: newProduct._id,
           targetType: 'UserProduct',
           description: `Added ${newProduct.productName} to their collection`,
+          imageUrl: newProduct.imageUrl, // Include product image for feed display
           createdAt: new Date()
         });
       }
@@ -456,6 +486,7 @@ exports.updateUserProduct = async (req, res) => {
           targetType: 'UserProduct',
           description: `Reviewed ${product.productName} and gave it ${rating} stars`,
           rating: rating,
+          imageUrl: product.imageUrl, // Include product image for feed display
           createdAt: new Date()
         });
         console.log('Activity created: review_added for user', req.params.userId);

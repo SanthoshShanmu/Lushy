@@ -90,7 +90,7 @@ struct UserSettingsResponse: Codable {
 class APIService {
     static let shared = APIService()
 
-    // Base URL for our backend server
+    // Base URL for our backend server - Updated to match actual server port
     let baseURL = URL(string: "http://localhost:5001/api")!
     
     // Helper to convert Date to milliseconds since epoch (backend expects ms)
@@ -871,9 +871,7 @@ class APIService {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = AuthService.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
@@ -1208,7 +1206,7 @@ class APIService {
                     guard let id = t.id, let name = t.name else { continue }
                     // Extract digits from id to form month key
                     let num = id.components(separatedBy: CharacterSet.decimalDigits.inverted).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !num.isEmpty {
+                    if (!num.isEmpty) {
                         let key = num + "M"
                         if dict[key] == nil { dict[key] = name }
                     }
