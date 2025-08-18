@@ -15,9 +15,6 @@ struct AccountView: View {
     // Add state for region picker
     @State private var selectedRegion = UserDefaults.standard.string(forKey: "userRegion") ?? "GLOBAL"
     
-    // Add these state properties at the top of AccountView:
-    @State private var contributionCount = 0 // Only display
-    
     // Add state to track if profile has been fetched
     @State private var hasFetchedProfile = false
     
@@ -199,34 +196,6 @@ struct AccountView: View {
                         .foregroundColor(.secondary)
                 }
                 .glassCard(cornerRadius: 20)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Open Beauty Facts").font(.headline)
-                    
-                    Text("Products you add that are not already in Open Beauty Facts are automatically contributed using the app's system account.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    
-                    Text("You've contributed \(contributionCount) products")
-                        .font(.body)
-                    
-                    let contributions = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
-                    if !contributions.isEmpty {
-                        NavigationLink("View Contributed Products (\(contributions.count))") {
-                            List {
-                                ForEach(contributions, id: \.self) { productId in
-                                    Link(productId, destination: URL(string: "https://world.openbeautyfacts.org/product/\(productId)")!)
-                                }
-                            }
-                            .navigationTitle("Contributions")
-                        }
-                    }
-                    
-                    Link("Browse Open Beauty Facts", destination: URL(string: "https://world.openbeautyfacts.org/")!)
-                        .foregroundColor(.blue)
-                }
-                .glassCard(cornerRadius: 20)
             }
             .padding()
         }
@@ -236,26 +205,6 @@ struct AccountView: View {
             if !hasFetchedProfile {
                 hasFetchedProfile = true
                 fetchUserProfile()
-            }
-            // Update contribution counter when view appears (local fallback)
-            contributionCount = UserDefaults.standard.integer(forKey: "obf_contribution_count")
-            if let userId = AuthService.shared.userId {
-                APIService.shared.fetchUserSettings(userId: userId) { result in
-                    DispatchQueue.main.async {
-                        switch result {
-                        case .success(let resp):
-                            selectedRegion = resp.settings.region
-                            UserDefaults.standard.set(resp.settings.region, forKey: "userRegion")
-                            if let obf = resp.obf {
-                                contributionCount = obf.contributionCount
-                                UserDefaults.standard.set(obf.contributionCount, forKey: "obf_contribution_count")
-                                UserDefaults.standard.set(obf.contributedProducts, forKey: "obf_contributed_products")
-                            }
-                        case .failure(let err):
-                            print("Failed to fetch user settings: \(err.localizedDescription)")
-                        }
-                    }
-                }
             }
         }
         .alert(isPresented: $showingLogoutConfirm) {

@@ -37,7 +37,6 @@ class ScannerViewModel: ObservableObject {
     // New properties for improved workflow
     @Published var productNotFound = false
     @Published var showProductAddedSuccess = false
-    @Published var isContributingToOBF = false
     @Published var periodsAfterOpening: String = ""
     @Published var paoOptions: [String] = []
     @Published var paoLabels: [String: String] = [:]
@@ -119,23 +118,29 @@ class ScannerViewModel: ObservableObject {
         return result.mapError { $0 as Error }
     }
     
-    // Fetch product information from barcode
+    // Fetch product information from barcode (MongoDB backend only)
     func fetchProduct(barcode: String, autoAddIfFound: Bool = false) {
         isLoading = true
         errorMessage = nil
         productNotFound = false
         
-        APIService.shared.fetchProductHybrid(barcode: barcode)
+        // Only use MongoDB database lookup - no external APIs
+        APIService.shared.fetchProduct(barcode: barcode)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
                 self?.isLoading = false
                 
                 if case .failure(let error) = completion {
-                    // Set productNotFound to true for ANY failure - this means we should contribute to OBF
                     self?.productNotFound = true
                     self?.manualBarcode = barcode
                     
                     switch error {
+                    case .productNotFound:
+                        print("🔍 Product not found in database - barcode: \(barcode)")
+                        // Product not in our database, will need manual entry
+                        if autoAddIfFound {
+                            self?.showManualEntry = true
+                        }
                     case .invalidURL:
                         self?.errorMessage = "Cannot access product database."
                     case .invalidResponse:
@@ -144,21 +149,22 @@ class ScannerViewModel: ObservableObject {
                         self?.errorMessage = "Could not process product information."
                     case .networkError:
                         self?.errorMessage = "Network error. Please check your connection."
-                    case .productNotFound:
-                        // Product not found in either backend or OpenBeautyFacts
-                        print("🔍 Product not found in backend or OBF database - barcode: \(barcode)")
-                    default:
-                        self?.errorMessage = "An unknown error occurred."
-                    }
-                    
-                    if autoAddIfFound {
-                        self?.showManualEntry = true
+                    case .authenticationRequired:
+                        self?.errorMessage = "Authentication required. Please log in."
+                    case .noData:
+                        self?.errorMessage = "No data received from server."
+                    case .unexpectedResponse:
+                        self?.errorMessage = "Unexpected response from server."
+                    case .customError(let message):
+                        self?.errorMessage = message
+                    case .encodingError:
+                        self?.errorMessage = "Failed to encode request data."
                     }
                 }
             }, receiveValue: { [weak self] product in
                 guard let self = self else { return }
                 
-                // Product WAS found - don't contribute to OBF
+                // Product found in database
                 self.productNotFound = false
                 self.scannedProduct = product
                 
@@ -186,28 +192,8 @@ class ScannerViewModel: ObservableObject {
                     }
                 }
                 
-                self.fetchEthicsInfo(for: product)
-            })
-            .store(in: &cancellables)
-    }
-    
-    // Fetch ethics information for the brand
-    private func fetchEthicsInfo(for product: Product) {
-        guard let brand = product.brands else {
-            // If no brand is available, set default values
-            self.ethicsInfo = EthicsInfo(vegan: false, crueltyFree: false)
-            return
-        }
-        
-        APIService.shared.fetchEthicsInfo(brand: brand)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(_) = completion {
-                    // Default to false if can't fetch
-                    self?.ethicsInfo = EthicsInfo(vegan: false, crueltyFree: false)
-                }
-            }, receiveValue: { [weak self] ethicsInfo in
-                self?.ethicsInfo = ethicsInfo
+                // Set default ethics info since we only use database
+                self.ethicsInfo = EthicsInfo(vegan: product.vegan ?? false, crueltyFree: product.crueltyFree ?? false)
             })
             .store(in: &cancellables)
     }
@@ -352,52 +338,6 @@ class ScannerViewModel: ObservableObject {
         return objectID
     }
     
-    // Check if we should contribute to Open Beauty Facts
-    private func shouldContributeToOBF() -> Bool {
-        // Only contribute if:
-        // 1. Product was not found in the database (productNotFound = true)
-        // 2. We have all necessary data (product name and barcode)
-        // 3. User has enabled OBF contributions (check user preferences)
-        
-        print("🌍 Checking if should contribute to OBF:")
-        print("🌍 - productNotFound: \(productNotFound)")
-        print("🌍 - manualProductName: '\(manualProductName)'")
-        print("🌍 - manualBarcode: '\(manualBarcode)'")
-        
-        guard productNotFound else {
-            print("🌍 Product was found in database - not contributing to OBF")
-            return false
-        }
-        
-        guard !manualProductName.isEmpty else {
-            print("🌍 Product name is empty - not contributing to OBF")
-            return false
-        }
-        
-        // Check if user has enabled OBF contributions in settings
-        // Default to true if never set (first time users)
-        let hasSetPreference = UserDefaults.standard.object(forKey: "auto_contribute_to_obf") != nil
-        let autoContributeEnabled = hasSetPreference ?
-            UserDefaults.standard.bool(forKey: "auto_contribute_to_obf") :
-            true // Default to enabled for new users
-        
-        print("🌍 - hasSetPreference: \(hasSetPreference)")
-        print("🌍 - autoContributeEnabled: \(autoContributeEnabled)")
-        
-        guard autoContributeEnabled else {
-            print("🌍 Auto-contribute to OBF is disabled in settings")
-            return false
-        }
-        
-        // Barcode is optional for OBF - we can still contribute without it
-        if manualBarcode.isEmpty {
-            print("🌍 No barcode provided, but will still contribute to OBF")
-        }
-        
-        print("🌍 ✅ All conditions met - will contribute to OBF")
-        return true
-    }
-    
     // Format PAO from "12 M" to "12 months" for storage
     private func formatPAOForStorage(_ pao: String?) -> String? {
         guard let pao = pao else { return nil }
@@ -408,85 +348,6 @@ class ScannerViewModel: ObservableObject {
             }
         }
         return pao
-    }
-    
-    // Contribute to OpenBeautyFacts silently
-    func silentlyContributeToOBF(productImage: UIImage? = nil, wasNotFound: Bool? = nil) {
-        // Use the provided wasNotFound parameter if available, otherwise use the stored state
-        let shouldContribute = wasNotFound ?? shouldContributeToOBF()
-        
-        // Only proceed if all conditions are met
-        guard shouldContribute else { return }
-        
-        isContributingToOBF = true
-        print("Starting OBF contribution for \(manualProductName)")
-        
-        // Use default PAO if not specified
-        let pao = periodsAfterOpening.isEmpty ? "12 M" : periodsAfterOpening
-        
-        // Determine a reasonable category based on product name
-        let category = determineCategory(from: manualProductName)
-        
-        // Use secure backend proxy instead of direct OBF contribution
-        APIService.shared.contributeToOBFViaBackend(
-            barcode: manualBarcode.isEmpty ? nil : manualBarcode,
-            name: manualProductName,
-            brand: manualBrand.isEmpty ? "Unknown" : manualBrand,
-            category: category,
-            periodsAfterOpening: pao
-        ) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.isContributingToOBF = false
-                
-                switch result {
-                case .success(let productId):
-                    print("Successfully contributed to OBF via backend with ID: \(productId)")
-                    
-                    // Increment contribution count locally
-                    let count = UserDefaults.standard.integer(forKey: "obf_contribution_count")
-                    UserDefaults.standard.set(count + 1, forKey: "obf_contribution_count")
-                    
-                    // Store the product ID for reference
-                    var contributedProducts = UserDefaults.standard.stringArray(forKey: "obf_contributed_products") ?? []
-                    contributedProducts.append(productId)
-                    UserDefaults.standard.set(contributedProducts, forKey: "obf_contributed_products")
-                    
-                    // Post notification for success toast
-                    NotificationCenter.default.post(name: NSNotification.Name("OBFContributionSuccess"), object: nil)
-                    
-                case .failure(let error):
-                    print("OBF contribution via backend failed: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-    
-    // Simple category determination based on product name
-    private func determineCategory(from productName: String) -> String {
-        let lowercaseName = productName.lowercased()
-        
-        if lowercaseName.contains("lipstick") || lowercaseName.contains("lip") {
-            return "Lip Makeup"
-        } else if lowercaseName.contains("mascara") || lowercaseName.contains("eyeshadow") ||
-                  lowercaseName.contains("eyeliner") || lowercaseName.contains("eye") {
-            return "Eye Makeup"
-        } else if lowercaseName.contains("foundation") || lowercaseName.contains("powder") ||
-                  lowercaseName.contains("blush") || lowercaseName.contains("concealer") {
-            return "Face Makeup"
-        } else if lowercaseName.contains("moisturizer") || lowercaseName.contains("cream") ||
-                  lowercaseName.contains("serum") {
-            return "Skincare"
-        } else if lowercaseName.contains("shampoo") || lowercaseName.contains("conditioner") ||
-                  lowercaseName.contains("hair") {
-            return "Haircare"
-        } else if lowercaseName.contains("perfume") || lowercaseName.contains("fragrance") ||
-                  lowercaseName.contains("cologne") {
-            return "Fragrance"
-        } else if lowercaseName.contains("nail") || lowercaseName.contains("polish") {
-            return "Nail Care"
-        } else {
-            return "Makeup" // Default category
-        }
     }
     
     // Reset after adding product

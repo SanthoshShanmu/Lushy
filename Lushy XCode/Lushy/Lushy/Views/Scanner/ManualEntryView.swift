@@ -28,7 +28,6 @@ struct ManualEntryView: View {
     @State private var newTagColor: String = "lushyPink"
     @State private var tagCancellables = Set<AnyCancellable>()
 
-    @State private var showingOBFSuccessToast = false
     @State private var showingProcessingToast = false
     @State private var isSaving = false  // Block UI during save
 
@@ -211,13 +210,10 @@ struct ManualEntryView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if viewModel.isContributingToOBF {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    }
+                    // Removed OBF contribution progress indicator
                 }
             }
-            // Unified toast overlay (processing + OBF success)
+            // Unified toast overlay (processing)
             .overlay(alignment: .bottom) {
                 VStack(spacing: 10) {
                     if showingProcessingToast {
@@ -233,41 +229,9 @@ struct ManualEntryView: View {
                         .cornerRadius(20)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-
-                    if showingOBFSuccessToast {
-                        HStack {
-                            if viewModel.isContributingToOBF {
-                                ProgressView()
-                                    .frame(width: 20, height: 20)
-                                Text("Contributing to Open Beauty Facts...")
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("Contributed to Open Beauty Facts")
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
-                            }
-                        }
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(20)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .onAppear {
-                            // Auto-hide after a short delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                withAnimation { showingOBFSuccessToast = false }
-                            }
-                        }
-                    }
                 }
                 .padding(.bottom, 20)
                 .padding(.horizontal)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OBFContributionSuccess"))) { _ in
-                print("Received OBF contribution success notification")
-                withAnimation { showingOBFSuccessToast = true }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowProcessingToast"))) { notification in
                 if let userInfo = notification.userInfo, userInfo["key"] as? String == "processing-toast" {
@@ -336,14 +300,14 @@ struct ManualEntryView: View {
                         showManualLookupError = false
                         
                         // Perform manual lookup without affecting scanner state
-                        lookupCancellable = APIService.shared.fetchProductHybrid(barcode: viewModel.manualBarcode)
+                        lookupCancellable = APIService.shared.fetchProduct(barcode: viewModel.manualBarcode)
                             .receive(on: DispatchQueue.main)
                             .sink(receiveCompletion: { completion in
                                 if case .failure(let error) = completion {
                                     if error == .productNotFound {
                                         // Use local state - don't affect shared viewModel
                                         manualProductNotFound = true
-                                        manualLookupError = "Product not found. Please enter details below to add it."
+                                        manualLookupError = "Product not found in database. Please enter details below to add it."
                                         showManualLookupError = false
                                         // Clear any previously fetched product
                                         manualFetchedProduct = nil
@@ -732,12 +696,7 @@ struct ManualEntryView: View {
                 // Associations are already attached and will remain since sync succeeded
                 try? context.save()
                 
-                // 3) ONLY after backend sync, contribute to OBF if needed
-                if self.manualProductNotFound {
-                    self.viewModel.silentlyContributeToOBF(productImage: self.productImage, wasNotFound: true)
-                }
-                
-                // 4) Navigate without excessive notifications
+                // 3) Navigate without excessive notifications
                 self.isSaving = false
                 self.viewModel.selectedUserProduct = userProduct
                 self.viewModel.showProductDetail = true

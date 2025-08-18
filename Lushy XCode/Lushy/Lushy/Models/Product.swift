@@ -7,6 +7,8 @@ struct Product: Codable, Identifiable {
     let productName: String?
     let brands: String?
     let imageUrl: String?
+    let imageData: String? // Base64 image data from MongoDB
+    let imageMimeType: String? // MIME type for base64 images
     let ingredients: [String]?
     let periodsAfterOpening: String?  // "12 months", etc
     let imageSmallUrl: String?
@@ -16,12 +18,17 @@ struct Product: Codable, Identifiable {
     let manufactureDate: Date?
     let complianceAdvisory: String?
     let regionSpecificGuidelines: [String: String]?
+    // Ethics info from database
+    let vegan: Bool?
+    let crueltyFree: Bool?
     
     enum CodingKeys: String, CodingKey {
         case id, code
         case productName = "product_name"
         case brands
         case imageUrl = "image_url"
+        case imageData
+        case imageMimeType
         case ingredients = "ingredients_text_with_allergens"
         case periodsAfterOpening = "periods_after_opening"
         case imageSmallUrl = "image_small_url"
@@ -30,6 +37,8 @@ struct Product: Codable, Identifiable {
         case manufactureDate = "manufacturing_date"
         case complianceAdvisory = "compliance_advisory"
         case regionSpecificGuidelines = "region_specific_guidelines"
+        case vegan
+        case crueltyFree = "cruelty_free"
     }
     
     // Parse from OpenBeautyFacts API response
@@ -65,6 +74,8 @@ struct Product: Codable, Identifiable {
             productName: productName,
             brands: brands,
             imageUrl: imageUrl,
+            imageData: nil, // Base64 image data not available in API response
+            imageMimeType: nil, // MIME type not available in API response
             ingredients: ingredients?.components(separatedBy: ", "),
             periodsAfterOpening: periodsAfterOpening,
             imageSmallUrl: imageSmallUrl,
@@ -72,7 +83,9 @@ struct Product: Codable, Identifiable {
             batchCode: batchCode,
             manufactureDate: manufactureDate,
             complianceAdvisory: complianceAdvisory,
-            regionSpecificGuidelines: regionSpecificGuidelines
+            regionSpecificGuidelines: regionSpecificGuidelines,
+            vegan: nil, // Vegan info not available in API response
+            crueltyFree: nil // Cruelty-free info not available in API response
         )
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 import CoreData
 import Combine
+import UIKit
 
 extension Date { var msSinceEpoch: Int64 { Int64(self.timeIntervalSince1970 * 1000) } }
 
@@ -102,7 +103,28 @@ class CoreDataManager {
             product.barcode = (barcode?.isEmpty == true) ? nil : barcode
             product.productName = productName
             product.brand = brand
-            product.imageUrl = imageUrl
+            
+            // Handle image URL - could be file path, URL, or data URL
+            if let imageUrl = imageUrl {
+                if imageUrl.hasPrefix("data:") {
+                    // This is already a data URL (base64), store it directly
+                    product.imageUrl = imageUrl
+                } else if imageUrl.hasPrefix("http") {
+                    // This is a regular URL, keep it as is
+                    product.imageUrl = imageUrl
+                } else {
+                    // This is a local file path, convert to data URL if possible
+                    if let imageData = FileManager.default.contents(atPath: imageUrl),
+                       let image = UIImage(data: imageData),
+                       let jpegData = image.jpegData(compressionQuality: 0.8) {
+                        let base64String = jpegData.base64EncodedString()
+                        product.imageUrl = "data:image/jpeg;base64,\(base64String)"
+                    } else {
+                        product.imageUrl = imageUrl
+                    }
+                }
+            }
+            
             product.purchaseDate = purchaseDate
             product.openDate = openDate
             product.periodsAfterOpening = periodsAfterOpening

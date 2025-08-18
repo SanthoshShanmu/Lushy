@@ -27,12 +27,8 @@ router.get('/:userId/tags', userController.getUserTags);
 // Create a new product tag
 router.post('/:userId/tags', userController.createTag);
 
-// New: user settings endpoints
+// User settings endpoints (region only, removed OBF settings)
 router.get('/:userId/settings', authMiddleware.authenticate, userController.getUserSettings);
 router.patch('/:userId/settings', authMiddleware.authenticate, userController.updateUserSettings);
-
-// New: OBF contributions endpoints
-router.post('/:userId/obf/contributions', authMiddleware.authenticate, userController.addObfContribution);
-router.get('/:userId/obf/contributions', authMiddleware.authenticate, userController.getObfContributions);
 
 module.exports = router;

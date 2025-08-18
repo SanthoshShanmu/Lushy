@@ -1,72 +1,16 @@
 const UserProduct = require('../models/userProduct');
-const axios = require('axios');
 const mongoose = require('mongoose');
 
-// Helper function to proxy external API calls
-async function fetchProductDetails(barcode) {
-  try {
-    const response = await axios.get(
-      `https://world.openbeautyfacts.org/api/v2/product/${barcode}?fields=code,product_name,brands,image_url,image_small_url,periods_after_opening,periods_after_opening_tags,batch_code,manufacturing_date`
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching product from Open Beauty Facts:', error);
-    return null;
-  }
-}
-
-// Helper function to proxy ethics information
-async function fetchEthicsInfo(brand) {
-  try {
-    // Replace with your actual ethics API endpoint
-    const response = await axios.get(`https://api.example.com/ethics/${encodeURIComponent(brand)}`);
-    return {
-      vegan: response.data.vegan || false,
-      crueltyFree: response.data.cruelty_free || false
-    };
-  } catch (error) {
-    console.error('Error fetching ethics information:', error);
-    return { vegan: false, crueltyFree: false };
-  }
-}
-
-// Add this new function
-async function fetchPAOTaxonomy() {
-  try {
-    const response = await axios.get(`https://world.openbeautyfacts.org/periods-after-opening.json`);
-    return response.data.tags;
-  } catch (error) {
-    console.error('Error fetching PAO taxonomy:', error);
-    return [];
-  }
-}
-
-// Add this function for batch code decoding
-function decodeBatchCode(code) {
-  if (!code) return null;
-  
-  // Common pattern: Year+Julian date (e.g., 2024-180)
-  let match = code.match(/(\d{4})[-/]?(\d{3})/);
-  if (match) {
-    const year = parseInt(match[1]);
-    const day = parseInt(match[2]);
-    
-    // Create date from Julian day
-    const date = new Date(year, 0);
-    date.setDate(day);
-    return { manufactureDate: date };
-  }
-  
-  // Month/year formats (e.g., 0324 for March 2024)
-  match = code.match(/^(\d{2})(\d{2})$/);
-  if (match) {
-    const month = parseInt(match[1]) - 1; // 0-based month
-    const year = 2000 + parseInt(match[2]);
-    return { manufactureDate: new Date(year, month, 1) };
-  }
-  
-  return null;
-}
+// Add PAO taxonomy data directly in the backend
+const PAO_TAXONOMY = {
+  "3M": "3 months",
+  "6M": "6 months", 
+  "9M": "9 months",
+  "12M": "12 months",
+  "18M": "18 months",
+  "24M": "24 months",
+  "36M": "36 months"
+};
 
 // Add function to get region-specific compliance advisories
 function getExpiryGuideline(region) {
@@ -76,6 +20,48 @@ function getExpiryGuideline(region) {
     'JP': 'Both expiry and PAO required'
   };
   return rules[region] || 'Use within 36 months of manufacture';
+}
+
+// Helper function to extract months from period string like "12 months"
+function extractMonths(periodString) {
+  const pattern = /(\d+)\s*[Mm]/;
+  const match = periodString.match(pattern);
+  
+  if (match && match[1]) {
+    return parseInt(match[1], 10);
+  }
+  return null;
+}
+
+// Helper function to determine product category from name
+function getFallbackCategory(productName) {
+  if (!productName) return 'default';
+  
+  const name = productName.toLowerCase();
+  if (name.includes('cream') || name.includes('serum') || name.includes('moistur')) {
+    return 'skincare';
+  } else if (name.includes('lipstick') || name.includes('foundation') || name.includes('mascara')) {
+    return 'makeup';
+  } else if (name.includes('shampoo') || name.includes('conditioner') || name.includes('hair')) {
+    return 'haircare';
+  } else if (name.includes('perfume') || name.includes('fragrance') || name.includes('cologne')) {
+    return 'fragrance';
+  }
+  return 'default';
+}
+
+// Helper function to generate a simple placeholder image as base64
+function generatePlaceholderImage(category) {
+  // Simple 1x1 pixel colored images as base64 for different categories
+  const placeholders = {
+    'skincare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'makeup': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'haircare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'fragrance': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'default': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p'
+  };
+  
+  return placeholders[category] || placeholders['default'];
 }
 
 // Get all products for a user
@@ -154,74 +140,25 @@ exports.createUserProduct = async (req, res) => {
       ...rawBody,
       user: new mongoose.Types.ObjectId(req.params.userId)
     };
-    // If image uploaded via multer
-    if (req.file) {
-      productData.imageUrl = `${req.protocol}://${req.get('host')}/uploads/products/${req.file.filename}`;
-    }
     
-    // REMOVED: Duplicate detection logic - each instance is tracked separately
+    // Handle image upload - convert to base64 and store in MongoDB
+    if (req.file) {
+      productData.imageData = req.file.buffer.toString('base64');
+      productData.imageMimeType = req.file.mimetype;
+      // Keep imageUrl for backward compatibility but make it a data URL
+      productData.imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
     
     console.log('🆕 Creating new product instance');
-    
-    // If barcode is provided but no product details, fetch from Open Beauty Facts
-    if (productData.barcode && (!productData.productName || !productData.imageUrl)) {
-      const externalData = await fetchProductDetails(productData.barcode);
-      
-      if (externalData && externalData.product) {
-        const product = externalData.product;
-        
-        if (!productData.productName && product.product_name) {
-          productData.productName = product.product_name;
-        }
-        
-        if (!productData.imageUrl && product.image_url) {
-          productData.imageUrl = product.image_url;
-        }
-        
-        if (!productData.brand && product.brands) {
-          productData.brand = product.brands;
-        }
-        
-        if (!productData.periodsAfterOpening && product.periods_after_opening) {
-          productData.periodsAfterOpening = product.periods_after_opening;
-        }
 
-        // If we have a brand, fetch ethics info
-        if (productData.brand && (!productData.hasOwnProperty('vegan') || !productData.hasOwnProperty('crueltyFree'))) {
-          const ethicsInfo = await fetchEthicsInfo(productData.brand);
-          productData.vegan = ethicsInfo.vegan;
-          productData.crueltyFree = ethicsInfo.crueltyFree;
-        }
-      }
-    }
-
-    // Add fallback image if no image is provided
-    if (!productData.imageUrl) {
-      // Generate a placeholder image URL based on product type or use a default
-      const fallbackImages = {
-        'skincare': `${req.protocol}://${req.get('host')}/uploads/defaults/skincare-placeholder.jpg`,
-        'makeup': `${req.protocol}://${req.get('host')}/uploads/defaults/makeup-placeholder.jpg`,
-        'haircare': `${req.protocol}://${req.get('host')}/uploads/defaults/haircare-placeholder.jpg`,
-        'fragrance': `${req.protocol}://${req.get('host')}/uploads/defaults/fragrance-placeholder.jpg`,
-        'default': `${req.protocol}://${req.get('host')}/uploads/defaults/product-placeholder.jpg`
-      };
-      
-      // Try to determine product category from name or brand
-      const productName = (productData.productName || '').toLowerCase();
-      const brand = (productData.brand || '').toLowerCase();
-      
-      let category = 'default';
-      if (productName.includes('cream') || productName.includes('serum') || productName.includes('moistur')) {
-        category = 'skincare';
-      } else if (productName.includes('lipstick') || productName.includes('foundation') || productName.includes('mascara')) {
-        category = 'makeup';
-      } else if (productName.includes('shampoo') || productName.includes('conditioner') || productName.includes('hair')) {
-        category = 'haircare';
-      } else if (productName.includes('perfume') || productName.includes('fragrance') || productName.includes('cologne')) {
-        category = 'fragrance';
-      }
-      
-      productData.imageUrl = fallbackImages[category];
+    // Add fallback image if no image is provided - store as base64
+    if (!productData.imageData) {
+      // Generate a simple placeholder as base64
+      const fallbackCategory = getFallbackCategory(productData.productName);
+      const placeholderBase64 = generatePlaceholderImage(fallbackCategory);
+      productData.imageData = placeholderBase64;
+      productData.imageMimeType = 'image/jpeg';
+      productData.imageUrl = `data:image/jpeg;base64,${placeholderBase64}`;
     }
 
     // Calculate expiry date if open date and periods_after_opening are set
@@ -335,8 +272,12 @@ exports.updateUserProduct = async (req, res) => {
     if (req.body.openDate && /^(\d+)$/.test(req.body.openDate)) req.body.openDate = new Date(Number(req.body.openDate));
     if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) req.body.sizeInMl = Number(req.body.sizeInMl);
     if (req.body.spf && /^(\d+)$/.test(req.body.spf)) req.body.spf = Number(req.body.spf);
+    
+    // Handle image upload - convert to base64 and store in MongoDB
     if (req.file) {
-      req.body.imageUrl = `${req.protocol}://${req.get('host')}/uploads/products/${req.file.filename}`;
+      req.body.imageData = req.file.buffer.toString('base64');
+      req.body.imageMimeType = req.file.mimetype;
+      req.body.imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     }
 
     // Calculate expiry date if openDate is being updated
@@ -688,7 +629,7 @@ exports.deleteUserProduct = async (req, res) => {
 // Add a new endpoint to access the taxonomy
 exports.getPAOTaxonomy = async (req, res) => {
   try {
-    const taxonomy = await fetchPAOTaxonomy();
+    const taxonomy = PAO_TAXONOMY;
     
     res.status(200).json({
       status: 'success',
@@ -701,14 +642,3 @@ exports.getPAOTaxonomy = async (req, res) => {
     });
   }
 };
-
-// Helper function to extract months from period string like "12 months"
-function extractMonths(periodString) {
-  const pattern = /(\d+)\s*[Mm]/;
-  const match = periodString.match(pattern);
-  
-  if (match && match[1]) {
-    return parseInt(match[1], 10);
-  }
-  return null;
-}

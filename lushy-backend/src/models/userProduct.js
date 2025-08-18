@@ -74,7 +74,9 @@ const UserProductSchema = new Schema({
     required: true
   },
   brand: String,
-  imageUrl: String,
+  imageUrl: String, // Keep for backward compatibility
+  imageData: String, // New field for base64 image data
+  imageMimeType: String, // Store MIME type for proper display (e.g., 'image/jpeg')
   purchaseDate: {
     type: Date,
     required: true
