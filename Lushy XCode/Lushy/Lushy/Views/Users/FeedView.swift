@@ -185,7 +185,7 @@ struct ActivityCard: View {
             .padding(.top, 12)
             
             // Compact content section
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 // Smaller circular product image
                 Group {
                     if let imageUrl = extractImageUrl(), !imageUrl.isEmpty {
@@ -225,27 +225,31 @@ struct ActivityCard: View {
                 }
                 
                 // Compact content
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     if let description = activity.description {
                         Text(description)
                             .font(.subheadline)
                             .fontWeight(.regular)
                             .foregroundColor(.primary)
                             .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     
                     if let productName = extractProductName() {
                         Text(productName)
                             .font(.caption)
                             .foregroundColor(.lushyPink)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 12)
 
             // Minimal interaction bar
             HStack(spacing: 16) {
@@ -361,7 +365,6 @@ struct ReviewActivityCard: View {
     @State private var likesCount: Int = 0
     @State private var commentsCount: Int = 0
     @State private var showCommentSheet = false
-    @State private var newCommentText = ""
     @State private var isLiked = false
     @State private var commentList: [CommentSummary] = []
 
@@ -369,7 +372,7 @@ struct ReviewActivityCard: View {
         VStack(spacing: 0) {
             // Compact header
             HStack(spacing: 12) {
-                // Smaller, elegant profile image
+                // User profile image
                 Circle()
                     .fill(
                         LinearGradient(
@@ -392,93 +395,157 @@ struct ReviewActivityCard: View {
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                     
-                    Text(timeAgoString(from: activity.createdAt))
-                        .font(.caption2)
+                    // Just show "Added a review" - the specific details are in the purple section
+                    Text("Added a review")
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                // Compact star rating
-                if let rating = activity.rating {
-                    HStack(spacing: 2) {
-                        ForEach(0..<5) { idx in
-                            Image(systemName: idx < rating ? "star.fill" : "star")
-                                .font(.system(size: 10))
-                                .foregroundColor(idx < rating ? .yellow : .gray.opacity(0.3))
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.yellow.opacity(0.1))
-                    .clipShape(Capsule())
-                }
+                Text(timeAgoString(from: activity.createdAt))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
             
-            // Compact review content
-            HStack(alignment: .center, spacing: 12) {
-                // Smaller product image
-                Group {
-                    if let imageUrl = extractImageUrl(), !imageUrl.isEmpty {
-                        AsyncImage(url: URL(string: imageUrl)) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Circle()
-                                .fill(Color.yellow.opacity(0.1))
-                                .overlay(
-                                    ProgressView()
-                                        .scaleEffect(0.6)
-                                        .tint(.yellow)
-                                )
+            // Main review card content with gradient background
+            VStack(spacing: 0) {
+                // Product header with gradient background
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 100)
+                .overlay(
+                    HStack(spacing: 16) {
+                        // Product image
+                        Group {
+                            if let imageUrl = activity.imageUrl, !imageUrl.isEmpty {
+                                AsyncImage(url: URL(string: imageUrl)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.3))
+                                        .overlay(
+                                            Image(systemName: "sparkles")
+                                                .font(.title2)
+                                                .foregroundColor(.white.opacity(0.7))
+                                        )
+                                }
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            } else {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.3))
+                                    .frame(width: 60, height: 60)
+                                    .overlay(
+                                        Image(systemName: "sparkles")
+                                            .font(.title2)
+                                            .foregroundColor(.white.opacity(0.7))
+                                    )
+                            }
                         }
-                        .frame(width: 44, height: 44)
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
-                        )
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            // Product name and rating in the purple section
+                            if let reviewData = activity.reviewData {
+                                Text("\(reviewData.productName) and gave it \(reviewData.rating) star\(reviewData.rating == 1 ? "" : "s")")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+                                
+                                // Brand
+                                if let brand = reviewData.brand, !brand.isEmpty {
+                                    Text("By \(brand)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .lineLimit(1)
+                                }
+                            } else {
+                                // Fallback: try to extract from description or show placeholder
+                                Text(extractProductNameFromDescription() ?? "Product")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+                            }
+                            
+                            Spacer()
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(16)
+                )
+                .cornerRadius(16, corners: [.topLeft, .topRight])
+                
+                // Review content section - only show the actual review content, no duplicates
+                VStack(alignment: .leading, spacing: 12) {
+                    if let reviewData = activity.reviewData {
+                        // Star rating
+                        HStack(spacing: 4) {
+                            ForEach(1...5, id: \.self) { star in
+                                Image(systemName: star <= reviewData.rating ? "star.fill" : "star")
+                                    .font(.title3)
+                                    .foregroundColor(.yellow)
+                            }
+                            Spacer()
+                        }
+                        
+                        // Review title
+                        if !reviewData.title.isEmpty {
+                            Text(reviewData.title)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                                .lineLimit(2)
+                        }
+                        
+                        // Review text
+                        if !reviewData.text.isEmpty {
+                            Text(reviewData.text)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .lineLimit(4)
+                                .multilineTextAlignment(.leading)
+                        }
                     } else {
-                        Circle()
-                            .fill(Color.yellow.opacity(0.1))
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.yellow.opacity(0.6))
-                            )
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
-                            )
+                        // Fallback: Show basic rating if available, but no duplicate description
+                        if let rating = activity.rating {
+                            HStack(spacing: 4) {
+                                ForEach(1...5, id: \.self) { star in
+                                    Image(systemName: star <= rating ? "star.fill" : "star")
+                                        .font(.title3)
+                                        .foregroundColor(.yellow)
+                                }
+                                Spacer()
+                            }
+                        }
+                        
+                        // Only show description if no reviewData exists
+                        if activity.reviewData == nil, let description = activity.description {
+                            Text(description)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .lineLimit(4)
+                        }
                     }
                 }
-                
-                // Compact review content
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Reviewed \(extractedTitle)")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
-                        .fontWeight(.medium)
-                    
-                    if let reviewText = activity.description {
-                        Text(reviewText)
-                            .font(.subheadline)
-                            .fontWeight(.regular)
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                    }
-                }
-                
-                Spacer()
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.systemBackground))
+                .cornerRadius(16, corners: [.bottomLeft, .bottomRight])
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.top, 8)
 
-            // Minimal interaction bar
+            // Interaction bar
             HStack(spacing: 16) {
                 Button(action: {
                     APIService.shared.likeActivity(activityId: activity.id) { result in
@@ -507,7 +574,7 @@ struct ReviewActivityCard: View {
                     showCommentSheet = true
                 }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "message")
+                        Image(systemName: "bubble.left")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                         if commentsCount > 0 {
@@ -522,7 +589,7 @@ struct ReviewActivityCard: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.vertical, 8)
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -530,9 +597,23 @@ struct ReviewActivityCard: View {
                 .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
         )
         .onAppear {
+            print("🐛 ReviewActivityCard Debug:")
+            print("Activity ID: \(activity.id)")
+            print("Activity Type: \(activity.type)")
+            print("Review Data: \(String(describing: activity.reviewData))")
+            if let reviewData = activity.reviewData {
+                print("Product Name: \(reviewData.productName)")
+                print("Brand: \(String(describing: reviewData.brand))")
+                print("Title: \(reviewData.title)")
+                print("Text: \(reviewData.text)")
+                print("Rating: \(reviewData.rating)")
+            }
+            print("Image URL: \(String(describing: activity.imageUrl))")
+            print("Description: \(String(describing: activity.description))")
+            
             likesCount = activity.likes ?? 0
-            commentsCount = activity.comments?.count ?? 0
             isLiked = activity.liked ?? false
+            commentsCount = activity.comments?.count ?? 0
             commentList = activity.comments ?? []
         }
         .sheet(isPresented: $showCommentSheet) {
@@ -540,42 +621,29 @@ struct ReviewActivityCard: View {
                 activityId: activity.id,
                 commentList: commentList,
                 commentsCount: commentsCount
-            ) { updatedComments, updatedCount in
-                commentList = updatedComments
-                commentsCount = updatedCount
+            ) { newComments, newCount in
+                commentList = newComments
+                commentsCount = newCount
             }
-            .presentationDetents([.fraction(0.75), .large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .presentationBackground(.clear)
         }
     }
-
-    // Extract product title from description
-    private var extractedTitle: String {
-        guard let desc = activity.description,
-              desc.hasPrefix("Reviewed ") else { return "Product" }
-        let trimmed = desc.dropFirst("Reviewed ".count)
-        return String(trimmed).components(separatedBy: " and").first ?? String(trimmed)
-    }
     
-    // Extract image URL from activity data
-    private func extractImageUrl() -> String? {
-        // Try to get image from activity's product data if available
-        return activity.imageUrl
+    // Helper function to extract product name from description as fallback
+    private func extractProductNameFromDescription() -> String? {
+        guard let description = activity.description else { return nil }
+        
+        // Try to extract product name from various description patterns
+        if description.contains("Reviewed ") {
+            let components = description.components(separatedBy: "Reviewed ")
+            return components.last
+        }
+        
+        return nil
     }
 
-    // Utility function to format createdAt string as time ago
     private func timeAgoString(from dateString: String) -> String {
         let formatter = ISO8601DateFormatter()
-        // Try full ISO8601 with fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withFractionalSeconds,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: dateString) {
             return date.timeAgoDisplay
         }

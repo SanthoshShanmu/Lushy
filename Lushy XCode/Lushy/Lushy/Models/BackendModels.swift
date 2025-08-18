@@ -227,11 +227,21 @@ struct Activity: Codable, Identifiable {
     let createdAt: String
     let bundledActivities: [BundledActivityItem]?  // for bundled product additions
     let imageUrl: String?  // product image URL for display in feed
+    let reviewData: ReviewData?  // detailed review data for review_added activities
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt, bundledActivities, imageUrl
+        case user, type, targetId, targetType, description, rating, likes, comments, liked, createdAt, bundledActivities, imageUrl, reviewData
     }
+}
+
+// Review data structure for activities
+struct ReviewData: Codable {
+    let title: String
+    let text: String
+    let rating: Int
+    let productName: String
+    let brand: String?
 }
 
 // Model for individual activities within a bundle

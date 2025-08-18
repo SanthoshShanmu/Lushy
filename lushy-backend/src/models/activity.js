@@ -10,6 +10,13 @@ const ActivitySchema = new mongoose.Schema({
   likes: { type: Number, default: 0 }, // number of likes on this activity
   likedBy: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] }, // users who liked this activity
   imageUrl: { type: String }, // product image URL for feed display
+  reviewData: { // Additional review data for display in feed
+    title: { type: String },
+    text: { type: String },
+    rating: { type: Number },
+    productName: { type: String },
+    brand: { type: String }
+  },
   comments: [ // comments on activity
     {
       user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
