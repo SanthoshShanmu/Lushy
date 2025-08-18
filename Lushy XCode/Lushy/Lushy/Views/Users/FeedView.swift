@@ -161,10 +161,14 @@ struct ActivityCard: View {
                     )
                 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(activity.user.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                    NavigationLink(value: activity.user) {
+                        Text(activity.user.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                     
                     Text(timeAgoString(from: activity.createdAt))
                         .font(.caption2)
@@ -390,10 +394,14 @@ struct ReviewActivityCard: View {
                     )
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(activity.user.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                    NavigationLink(value: activity.user) {
+                        Text(activity.user.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                     
                     // Just show "Added a review" - the specific details are in the purple section
                     Text("Added a review")
@@ -690,10 +698,14 @@ struct BundledActivityCard: View {
                     )
                 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(activity.user.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                    NavigationLink(value: activity.user) {
+                        Text(activity.user.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                     
                     Text(timeAgoString(from: activity.createdAt))
                         .font(.caption2)
@@ -801,56 +813,59 @@ struct BundledActivityCard: View {
     }
     
     private func compactProductCard(_ bundledActivity: BundledActivityItem) -> some View {
-        VStack(spacing: 4) {
-            // Small circular product image
-            Group {
-                if let imageUrl = bundledActivity.imageUrl, !imageUrl.isEmpty {
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(Color.gray.opacity(0.1))
-                            .overlay(
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .tint(.lushyMint)
-                            )
-                    }
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
-                    )
-                } else {
-                    Circle()
-                        .fill(Color.gray.opacity(0.1))
+        NavigationLink(destination: GeneralProductDetailView(userId: currentUserId, productId: bundledActivity.targetId ?? "")) {
+            VStack(spacing: 4) {
+                // Small circular product image
+                Group {
+                    if let imageUrl = bundledActivity.imageUrl, !imageUrl.isEmpty {
+                        AsyncImage(url: URL(string: imageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.1))
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.5)
+                                        .tint(.lushyMint)
+                                )
+                        }
                         .frame(width: 32, height: 32)
-                        .overlay(
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 12))
-                                .foregroundColor(.lushyMint.opacity(0.6))
-                        )
+                        .clipShape(Circle())
                         .overlay(
                             Circle()
                                 .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
                         )
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.lushyMint.opacity(0.6))
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Compact product name
+                if let description = bundledActivity.description {
+                    let productName = extractProductName(from: description)
+                    Text(productName)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .frame(width: 50)
                 }
             }
-            
-            // Compact product name
-            if let description = bundledActivity.description {
-                let productName = extractProductName(from: description)
-                Text(productName)
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .frame(width: 50)
-            }
         }
+        .buttonStyle(PlainButtonStyle())
     }
     
     private func extractProductName(from description: String) -> String {
