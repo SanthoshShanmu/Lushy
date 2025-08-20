@@ -341,7 +341,7 @@ struct ManualEntryView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "questionmark.circle")
                         .foregroundColor(.orange)
-                    Text(manualLookupError.isEmpty ? "Product not found. Please enter details below to add it. It will be contributed to Open Beauty Facts." : manualLookupError)
+                    Text(manualLookupError.isEmpty ? "Product not found. Please enter details below to add it to your collection." : manualLookupError)
                         .font(.caption)
                         .foregroundColor(.primary)
                 }

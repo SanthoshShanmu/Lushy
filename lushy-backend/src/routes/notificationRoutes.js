@@ -11,7 +11,6 @@ router.get('/user/:userId', notificationController.getUserNotifications);
 router.delete('/:notificationId', notificationController.cancelNotification);
 
 // API proxies - no authentication required for these routes
-router.get('/proxy/product/:barcode', notificationController.proxyProductInfo);
 router.get('/proxy/ethics/:brand', notificationController.proxyEthicsInfo);
 
 module.exports = router;

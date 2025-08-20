@@ -114,22 +114,6 @@ exports.cancelNotification = async (req, res) => {
   }
 };
 
-// External API proxy for fetching product info by barcode
-exports.proxyProductInfo = async (req, res) => {
-  try {
-    const { barcode } = req.params;
-    
-    const response = await axios.get(`https://world.openbeautyfacts.org/api/v2/product/${barcode}.json`);
-    
-    res.status(200).json(response.data);
-  } catch (error) {
-    res.status(error.response?.status || 500).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-};
-
 // External API proxy for ethics info
 exports.proxyEthicsInfo = async (req, res) => {
   try {

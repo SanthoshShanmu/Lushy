@@ -135,7 +135,7 @@ class UserProfileViewModel: ObservableObject {
         }
         let wishlistItem = NewWishlistItem(
             productName: product.name,
-            productURL: "https://world.openbeautyfacts.org/product/\(productId)",
+            productURL: "https://lushy.app/product/\(productId)", // Use internal product URL
             notes: "Added from \(profile?.name ?? "another user")'s collection",
             imageURL: nil
         )

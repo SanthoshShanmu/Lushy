@@ -430,31 +430,75 @@ class APIService {
     
     /// Product lookup using MongoDB backend only
     func fetchProduct(barcode: String) -> AnyPublisher<Product, APIError> {
-        return searchProductsPublisher(query: barcode)
-            .tryMap { searchResults -> Product in
-                // Look for exact barcode match in database
-                guard let match = searchResults.first(where: { $0.barcode == barcode }) else {
-                    throw APIError.productNotFound
+        let url = baseURL
+            .appendingPathComponent("products")
+            .appendingPathComponent("barcode")
+            .appendingPathComponent(barcode)
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Product in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
                 }
-                // Convert ProductSearchSummary to Product with database info
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode == 404 {
+                        throw APIError.productNotFound
+                    } else if httpResponse.statusCode == 401 {
+                        throw APIError.authenticationRequired
+                    }
+                    throw APIError.invalidResponse
+                }
+                
+                struct ProductResponse: Codable {
+                    let status: String
+                    let data: ProductData
+                    
+                    struct ProductData: Codable {
+                        let product: ProductInfo
+                        
+                        struct ProductInfo: Codable {
+                            let _id: String
+                            let productName: String
+                            let brand: String?
+                            let barcode: String
+                            let vegan: Bool
+                            let crueltyFree: Bool
+                            let periodsAfterOpening: String?
+                            let ingredients: [String]?
+                            let imageUrl: String?
+                        }
+                    }
+                }
+                
+                let response = try JSONDecoder().decode(ProductResponse.self, from: data)
+                let productInfo = response.data.product
+                
                 return Product(
-                    id: match.barcode,
-                    code: match.barcode,
-                    productName: match.productName,
-                    brands: match.brand,
-                    imageUrl: match.imageUrl,
-                    imageData: nil, // Will be fetched separately if needed
+                    id: productInfo.barcode,
+                    code: productInfo.barcode,
+                    productName: productInfo.productName,
+                    brands: productInfo.brand,
+                    imageUrl: productInfo.imageUrl,
+                    imageData: nil,
                     imageMimeType: nil,
-                    ingredients: nil,
-                    periodsAfterOpening: nil,
-                    imageSmallUrl: match.imageUrl,
+                    ingredients: productInfo.ingredients,
+                    periodsAfterOpening: productInfo.periodsAfterOpening,
+                    imageSmallUrl: productInfo.imageUrl,
                     periodsAfterOpeningTags: nil,
                     batchCode: nil,
                     manufactureDate: nil,
                     complianceAdvisory: nil,
                     regionSpecificGuidelines: nil,
-                    vegan: false, // Default values - actual values from database
-                    crueltyFree: false
+                    vegan: productInfo.vegan,
+                    crueltyFree: productInfo.crueltyFree
                 )
             }
             .mapError { error -> APIError in

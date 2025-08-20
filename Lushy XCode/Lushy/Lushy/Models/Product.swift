@@ -1,6 +1,6 @@
 import Foundation
 
-// Model based on OpenBeautyFacts API response
+// Model for beauty products stored in MongoDB database
 struct Product: Codable, Identifiable {
     let id: String  // Using barcode as id
     let code: String  // Barcode
@@ -41,52 +41,25 @@ struct Product: Codable, Identifiable {
         case crueltyFree = "cruelty_free"
     }
     
-    // Parse from OpenBeautyFacts API response
-    static func fromOpenBeautyFactsResponse(_ json: [String: Any]) -> Product? {
-        guard let code = json["code"] as? String else { return nil }
-        
-        let product = json["product"] as? [String: Any] ?? [:]
-        let productName = product["product_name"] as? String
-        let brands = product["brands"] as? String
-        let imageUrl = product["image_url"] as? String
-        let imageSmallUrl = product["image_small_url"] as? String
-        let ingredients = product["ingredients_text_with_allergens"] as? String
-        let periodsAfterOpening = product["periods_after_opening"] as? String
-        let periodsAfterOpeningTags = product["periods_after_opening_tags"] as? [String]
-        let batchCode = product["batch_code"] as? String
-        
-        // Parse manufacturing date if available
-        var manufactureDate: Date? = nil
-        if let dateString = product["manufacturing_date"] as? String {
-            let formatter = ISO8601DateFormatter()
-            manufactureDate = formatter.date(from: dateString)
-        }
-        
-        // Get compliance advisory if available
-        let complianceAdvisory = product["compliance_advisory"] as? String
-        
-        // Parse region-specific guidelines if available
-        let regionSpecificGuidelines = product["region_specific_guidelines"] as? [String: String]
-        
-        return Product(
-            id: code,
-            code: code,
-            productName: productName,
-            brands: brands,
-            imageUrl: imageUrl,
-            imageData: nil, // Base64 image data not available in API response
-            imageMimeType: nil, // MIME type not available in API response
-            ingredients: ingredients?.components(separatedBy: ", "),
-            periodsAfterOpening: periodsAfterOpening,
-            imageSmallUrl: imageSmallUrl,
-            periodsAfterOpeningTags: periodsAfterOpeningTags,
-            batchCode: batchCode,
-            manufactureDate: manufactureDate,
-            complianceAdvisory: complianceAdvisory,
-            regionSpecificGuidelines: regionSpecificGuidelines,
-            vegan: nil, // Vegan info not available in API response
-            crueltyFree: nil // Cruelty-free info not available in API response
-        )
+    // Initialize from database response
+    init(id: String, code: String, productName: String?, brands: String?, imageUrl: String?, imageData: String?, imageMimeType: String?, ingredients: [String]?, periodsAfterOpening: String?, imageSmallUrl: String?, periodsAfterOpeningTags: [String]?, batchCode: String?, manufactureDate: Date?, complianceAdvisory: String?, regionSpecificGuidelines: [String: String]?, vegan: Bool?, crueltyFree: Bool?) {
+        self.id = id
+        self.code = code
+        self.productName = productName
+        self.brands = brands
+        self.imageUrl = imageUrl
+        self.imageData = imageData
+        self.imageMimeType = imageMimeType
+        self.ingredients = ingredients
+        self.periodsAfterOpening = periodsAfterOpening
+        self.imageSmallUrl = imageSmallUrl
+        self.periodsAfterOpeningTags = periodsAfterOpeningTags
+        self.batchCode = batchCode
+        self.manufactureDate = manufactureDate
+        self.complianceAdvisory = complianceAdvisory
+        self.regionSpecificGuidelines = regionSpecificGuidelines
+        self.vegan = vegan
+        self.crueltyFree = crueltyFree
     }
 }
 

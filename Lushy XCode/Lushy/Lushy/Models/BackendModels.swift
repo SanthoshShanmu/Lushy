@@ -290,51 +290,18 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case code // fallback from OpenBeautyFacts
         case barcode
         case productName
         case brand
         case imageUrl
-        case product_name
-        case brands
-        case image_small_url
-        case image_url
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let idValue = try? container.decode(String.self, forKey: .id) {
-            id = idValue
-        } else {
-            id = try container.decode(String.self, forKey: .code)
-        }
-        // barcode may be missing (OB fallback), fallback to code
-        if let bc = try? container.decode(String.self, forKey: .barcode) {
-            barcode = bc
-        } else {
-            barcode = try container.decode(String.self, forKey: .code)
-        }
-        // productName may come as 'productName' or 'product_name'
-        if let name = try? container.decode(String.self, forKey: .productName) {
-            productName = name
-        } else if let name2 = try? container.decode(String.self, forKey: .product_name) {
-            productName = name2
-        } else {
-            productName = ""
-        }
-        // brand may come as 'brand' or 'brands'
-        if let br = try? container.decode(String.self, forKey: .brand) {
-            brand = br
-        } else {
-            brand = try? container.decode(String.self, forKey: .brands)
-        }
-        // imageUrl may come as 'imageUrl', 'image_small_url', or 'image_url'
-        if let img = try? container.decode(String.self, forKey: .imageUrl) {
-            imageUrl = img
-        } else if let img2 = try? container.decode(String.self, forKey: .image_small_url) {
-            imageUrl = img2
-        } else {
-            imageUrl = try? container.decode(String.self, forKey: .image_url)
-        }
+        id = try container.decode(String.self, forKey: .id)
+        barcode = try container.decode(String.self, forKey: .barcode)
+        productName = try container.decode(String.self, forKey: .productName)
+        brand = try? container.decode(String.self, forKey: .brand)
+        imageUrl = try? container.decode(String.self, forKey: .imageUrl)
     }
 }
