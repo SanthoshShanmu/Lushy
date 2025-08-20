@@ -24,27 +24,19 @@ struct TagSummary: Codable, Identifiable {
     }
 }
 
-// Backend user product model
-struct BackendUserProduct: Codable, Identifiable {
+// Product catalog model for the referential architecture
+struct BackendProductCatalog: Codable {
     let id: String
-    let barcode: String // safe default "" when missing
+    let barcode: String
     let productName: String
     let brand: String?
     let imageUrl: String?
-    let purchaseDate: Date
-    let openDate: Date?
+    let imageData: String?
+    let imageMimeType: String?
     let periodsAfterOpening: String?
     let vegan: Bool
     let crueltyFree: Bool
-    let favorite: Bool
-    let tags: [TagSummary]?  // Tag associations
-    let bags: [BeautyBagSummary]?  // Bag associations
-    // New metadata fields
-    let shade: String?
-    let sizeInMl: Double?
-    let spf: Int?
-    // NEW: Product instance support
-    let quantity: Int
+    let category: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -52,12 +44,46 @@ struct BackendUserProduct: Codable, Identifiable {
         case productName
         case brand
         case imageUrl
-        case purchaseDate
-        case openDate
+        case imageData
+        case imageMimeType
         case periodsAfterOpening
         case vegan
         case crueltyFree
+        case category
+    }
+}
+
+// Backend user product model - updated for referential architecture
+struct BackendUserProduct: Codable, Identifiable {
+    let id: String
+    let product: BackendProductCatalog // Reference to product catalog
+    let purchaseDate: Date
+    let openDate: Date?
+    let expireDate: Date?
+    let favorite: Bool
+    let isFinished: Bool
+    let finishDate: Date?
+    let currentAmount: Double
+    let timesUsed: Int32
+    let tags: [TagSummary]?  // Tag associations
+    let bags: [BeautyBagSummary]?  // Bag associations
+    // User-specific metadata fields
+    let shade: String?
+    let sizeInMl: Double?
+    let spf: Int?
+    let quantity: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case product
+        case purchaseDate
+        case openDate
+        case expireDate
         case favorite
+        case isFinished
+        case finishDate
+        case currentAmount
+        case timesUsed
         case tags
         case bags
         case shade
@@ -66,18 +92,39 @@ struct BackendUserProduct: Codable, Identifiable {
         case quantity
     }
 
+    // Convenience accessors for product catalog fields
+    var barcode: String { product.barcode }
+    var productName: String { product.productName }
+    var brand: String? { product.brand }
+    var imageUrl: String? { product.imageUrl }
+    var periodsAfterOpening: String? { product.periodsAfterOpening }
+    var vegan: Bool { product.vegan }
+    var crueltyFree: Bool { product.crueltyFree }
+
+    // Custom initializer for backward compatibility
     init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, favorite: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?, quantity: Int = 1) {
         self.id = id
-        self.barcode = barcode
-        self.productName = productName
-        self.brand = brand
-        self.imageUrl = imageUrl
+        self.product = BackendProductCatalog(
+            id: "",
+            barcode: barcode,
+            productName: productName,
+            brand: brand,
+            imageUrl: imageUrl,
+            imageData: nil,
+            imageMimeType: nil,
+            periodsAfterOpening: periodsAfterOpening,
+            vegan: vegan,
+            crueltyFree: crueltyFree,
+            category: nil
+        )
         self.purchaseDate = purchaseDate
         self.openDate = openDate
-        self.periodsAfterOpening = periodsAfterOpening
-        self.vegan = vegan
-        self.crueltyFree = crueltyFree
+        self.expireDate = nil
         self.favorite = favorite
+        self.isFinished = false
+        self.finishDate = nil
+        self.currentAmount = 100.0
+        self.timesUsed = 0
         self.tags = tags
         self.bags = bags
         self.shade = shade
@@ -89,22 +136,21 @@ struct BackendUserProduct: Codable, Identifiable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        barcode = (try? c.decode(String.self, forKey: .barcode)) ?? "" // default
-        productName = try c.decode(String.self, forKey: .productName)
-        brand = try? c.decode(String.self, forKey: .brand)
-        imageUrl = try? c.decode(String.self, forKey: .imageUrl)
+        product = try c.decode(BackendProductCatalog.self, forKey: .product)
         purchaseDate = try c.decode(Date.self, forKey: .purchaseDate)
         openDate = try? c.decode(Date.self, forKey: .openDate)
-        periodsAfterOpening = try? c.decode(String.self, forKey: .periodsAfterOpening)
-        vegan = (try? c.decode(Bool.self, forKey: .vegan)) ?? false
-        crueltyFree = (try? c.decode(Bool.self, forKey: .crueltyFree)) ?? false
+        expireDate = try? c.decode(Date.self, forKey: .expireDate)
         favorite = (try? c.decode(Bool.self, forKey: .favorite)) ?? false
+        isFinished = (try? c.decode(Bool.self, forKey: .isFinished)) ?? false
+        finishDate = try? c.decode(Date.self, forKey: .finishDate)
+        currentAmount = (try? c.decode(Double.self, forKey: .currentAmount)) ?? 100.0
+        timesUsed = (try? c.decode(Int32.self, forKey: .timesUsed)) ?? 0
         tags = try? c.decode([TagSummary].self, forKey: .tags)
         bags = try? c.decode([BeautyBagSummary].self, forKey: .bags)
         shade = try? c.decode(String.self, forKey: .shade)
         sizeInMl = try? c.decode(Double.self, forKey: .sizeInMl)
         spf = try? c.decode(Int.self, forKey: .spf)
-        quantity = (try? c.decode(Int.self, forKey: .quantity)) ?? 1 // default to 1
+        quantity = (try? c.decode(Int.self, forKey: .quantity)) ?? 1
     }
 }
 

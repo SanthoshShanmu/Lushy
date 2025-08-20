@@ -251,7 +251,7 @@ class SyncService {
                 print("Debug: backendProduct.id=\(backendProduct.id), barcode=\(backendProduct.barcode), purchaseDate=\(backendProduct.purchaseDate)")
                 // Check if product already exists locally by backendId first (to match stubs), else by barcode
                 if let local = CoreDataManager.shared.fetchUserProduct(backendId: backendProduct.id) {
-                    self.updateLocalProduct(local, from: backendProduct)
+                    self.updateLocalProduct(local, with: backendProduct)
                 } else {
                     let productToSync = self.createLocalProduct(from: backendProduct, in: context)
                     // Sync tag relationships
@@ -283,55 +283,82 @@ class SyncService {
         }
     }
     
-    // Update local product with backend data
-    private func updateLocalProduct(_ localProduct: UserProduct, from backendProduct: BackendUserProduct) {
-        localProduct.productName = backendProduct.productName
-        localProduct.brand = backendProduct.brand
-        localProduct.imageUrl = backendProduct.imageUrl
-        // Core Data model stores purchaseDate as Date
+    // Update local product with backend data - handle new referential structure
+    private func updateLocalProduct(_ localProduct: UserProduct, with backendProduct: BackendUserProduct) {
+        // Update user-specific fields
         localProduct.purchaseDate = backendProduct.purchaseDate
-        if let openDate = backendProduct.openDate {
-            localProduct.openDate = openDate
-        }
-        localProduct.periodsAfterOpening = backendProduct.periodsAfterOpening
-        localProduct.vegan = backendProduct.vegan
-        localProduct.crueltyFree = backendProduct.crueltyFree
+        localProduct.openDate = backendProduct.openDate
+        localProduct.expireDate = backendProduct.expireDate
         localProduct.favorite = backendProduct.favorite
-        // Sync new metadata fields
+        localProduct.isFinished = backendProduct.isFinished
+        localProduct.finishDate = backendProduct.finishDate
+        localProduct.currentAmount = backendProduct.currentAmount
+        localProduct.timesUsed = backendProduct.timesUsed
         localProduct.shade = backendProduct.shade
-        localProduct.sizeInMl = backendProduct.sizeInMl ?? 0.0
+        localProduct.sizeInMl = backendProduct.sizeInMl ?? 0
         localProduct.spf = Int16(backendProduct.spf ?? 0)
         localProduct.quantity = Int32(backendProduct.quantity)
+        
+        // Update product catalog fields from nested product object
+        localProduct.barcode = backendProduct.product.barcode
+        localProduct.productName = backendProduct.product.productName
+        localProduct.brand = backendProduct.product.brand
+        localProduct.periodsAfterOpening = backendProduct.product.periodsAfterOpening
+        localProduct.vegan = backendProduct.product.vegan
+        localProduct.crueltyFree = backendProduct.product.crueltyFree
+        
+        // Handle image URL from product catalog
+        if let imageData = backendProduct.product.imageData,
+           let mimeType = backendProduct.product.imageMimeType {
+            localProduct.imageUrl = "data:\(mimeType);base64,\(imageData)"
+        } else {
+            localProduct.imageUrl = backendProduct.product.imageUrl
+        }
+        
         // Ensure required Core Data fields are populated
-        localProduct.barcode = backendProduct.barcode
         localProduct.userId = AuthService.shared.userId ?? localProduct.userId
         localProduct.backendId = backendProduct.id // <-- set backendId
     }
     
-    // Create new local product from backend data
+    // Create new local product from backend data - handle new referential structure
     // Returns the created UserProduct so we can set up relationships
     private func createLocalProduct(from backendProduct: BackendUserProduct, in context: NSManagedObjectContext) -> UserProduct {
         let product = UserProduct(context: context)
-        product.barcode = backendProduct.barcode
-        product.productName = backendProduct.productName
-        product.brand = backendProduct.brand
-        product.imageUrl = backendProduct.imageUrl
-        // Core Data model stores purchaseDate as Date
-        product.purchaseDate = backendProduct.purchaseDate
-        if let openDate = backendProduct.openDate {
-            product.openDate = openDate
+        
+        // Set product catalog fields from nested product object
+        product.barcode = backendProduct.product.barcode
+        product.productName = backendProduct.product.productName
+        product.brand = backendProduct.product.brand
+        product.periodsAfterOpening = backendProduct.product.periodsAfterOpening
+        product.vegan = backendProduct.product.vegan
+        product.crueltyFree = backendProduct.product.crueltyFree
+        
+        // Handle image URL from product catalog
+        if let imageData = backendProduct.product.imageData,
+           let mimeType = backendProduct.product.imageMimeType {
+            product.imageUrl = "data:\(mimeType);base64,\(imageData)"
+        } else {
+            product.imageUrl = backendProduct.product.imageUrl
         }
-        product.periodsAfterOpening = backendProduct.periodsAfterOpening
-        product.vegan = backendProduct.vegan
-        product.crueltyFree = backendProduct.crueltyFree
+        
+        // Set user-specific fields
+        product.purchaseDate = backendProduct.purchaseDate
+        product.openDate = backendProduct.openDate
+        product.expireDate = backendProduct.expireDate
         product.favorite = backendProduct.favorite
-        // New metadata fields
+        product.isFinished = backendProduct.isFinished
+        product.finishDate = backendProduct.finishDate
+        product.currentAmount = backendProduct.currentAmount
+        product.timesUsed = backendProduct.timesUsed
         product.shade = backendProduct.shade
-        product.sizeInMl = backendProduct.sizeInMl ?? 0.0
+        product.sizeInMl = backendProduct.sizeInMl ?? 0
         product.spf = Int16(backendProduct.spf ?? 0)
         product.quantity = Int32(backendProduct.quantity)
-        product.userId = AuthService.shared.userId ?? "guest"
-        product.backendId = backendProduct.id // <-- set backendId
+        
+        // Set Core Data metadata
+        product.userId = AuthService.shared.userId ?? ""
+        product.backendId = backendProduct.id
+        
         return product
     }
     

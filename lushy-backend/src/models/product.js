@@ -6,8 +6,8 @@ const ProductSchema = new Schema({
   barcode: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
+    // Removed: index: true (to avoid duplicate with explicit index below)
   },
   productName: {
     type: String,
@@ -67,44 +67,97 @@ ProductSchema.pre('save', function(next) {
   next();
 });
 
-// Static method to find or create product by barcode
+// Static method to find or create product by barcode with better race condition handling
 ProductSchema.statics.findOrCreateByBarcode = async function(barcodeData) {
+  const session = await mongoose.startSession();
+  
   try {
-    let product = await this.findOne({ barcode: barcodeData.barcode });
-    
-    if (!product) {
-      // Create new product entry
-      product = new this({
-        barcode: barcodeData.barcode,
-        productName: barcodeData.productName || 'Unknown Product',
-        brand: barcodeData.brand,
-        imageData: barcodeData.imageData,
-        imageMimeType: barcodeData.imageMimeType,
-        imageUrl: barcodeData.imageUrl,
-        ingredientsTextWithAllergens: barcodeData.ingredients,
-        periodsAfterOpening: barcodeData.periodsAfterOpening,
-        vegan: barcodeData.vegan || false,
-        crueltyFree: barcodeData.crueltyFree || false,
-        category: barcodeData.category || 'beauty',
-        contributedBy: [{
-          source: 'user_submission',
-          timestamp: new Date()
-        }]
-      });
+    return await session.withTransaction(async () => {
+      // Try to find existing product first
+      let product = await this.findOne({ barcode: barcodeData.barcode }).session(session);
       
-      await product.save();
-      console.log(`Created new product in catalog: ${product.productName} (${product.barcode})`);
-    }
-    
-    return product;
-  } catch (error) {
-    console.error('Error in findOrCreateByBarcode:', error);
-    throw error;
+      if (!product) {
+        // Create new product entry
+        const productDoc = new this({
+          barcode: barcodeData.barcode,
+          productName: barcodeData.productName || 'Unknown Product',
+          brand: barcodeData.brand,
+          imageData: barcodeData.imageData,
+          imageMimeType: barcodeData.imageMimeType,
+          imageUrl: barcodeData.imageUrl,
+          ingredients: barcodeData.ingredients,
+          periodsAfterOpening: barcodeData.periodsAfterOpening,
+          vegan: barcodeData.vegan || false,
+          crueltyFree: barcodeData.crueltyFree || false,
+          category: barcodeData.category || 'beauty',
+          contributedBy: [{
+            source: barcodeData.source || 'user_submission',
+            timestamp: new Date()
+          }]
+        });
+        
+        try {
+          product = await productDoc.save({ session });
+          console.log(`Created new product in catalog: ${product.productName} (${product.barcode})`);
+        } catch (error) {
+          if (error.code === 11000) {
+            // Duplicate key error - another process created it, fetch the existing one
+            product = await this.findOne({ barcode: barcodeData.barcode }).session(session);
+            console.log(`Product already exists in catalog: ${product.productName} (${product.barcode})`);
+          } else {
+            throw error;
+          }
+        }
+      }
+      
+      return product;
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
-// Index for efficient barcode lookups
-ProductSchema.index({ barcode: 1 });
+// Static method for manual product creation (without barcode)
+ProductSchema.statics.findOrCreateManualProduct = async function(productData, userId) {
+  const session = await mongoose.startSession();
+  
+  try {
+    return await session.withTransaction(async () => {
+      // For manual entries, create a unique identifier
+      const uniqueKey = `manual_${userId}_${productData.productName}_${productData.brand || ''}`;
+      
+      let product = await this.findOne({ barcode: uniqueKey }).session(session);
+      
+      if (!product) {
+        const productDoc = new this({
+          ...productData,
+          barcode: uniqueKey,
+          contributedBy: [{
+            source: 'manual_entry',
+            timestamp: new Date()
+          }]
+        });
+        
+        try {
+          product = await productDoc.save({ session });
+          console.log(`Created new manual product: ${product.productName}`);
+        } catch (error) {
+          if (error.code === 11000) {
+            product = await this.findOne({ barcode: uniqueKey }).session(session);
+          } else {
+            throw error;
+          }
+        }
+      }
+      
+      return product;
+    });
+  } finally {
+    await session.endSession();
+  }
+};
+
+// Index for efficient lookups (barcode index auto-created by unique constraint)
 ProductSchema.index({ productName: 'text', brand: 'text' });
 
 module.exports = mongoose.model('Product', ProductSchema);

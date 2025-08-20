@@ -68,6 +68,7 @@ function generatePlaceholderImage(category) {
 exports.getUserProducts = async (req, res) => {
   try {
     const products = await UserProduct.find({ user: new mongoose.Types.ObjectId(req.params.userId) })
+       .populate('product') // Populate the product catalog reference
        .populate('tags', 'name color')
        .populate('bags', 'name');
 
@@ -91,6 +92,7 @@ exports.getUserProduct = async (req, res) => {
       _id: req.params.id,
       user: new mongoose.Types.ObjectId(req.params.userId)
     })
+      .populate('product') // Populate the product catalog reference
       .populate('tags', 'name color')
       .populate('bags', 'name');
 
@@ -125,68 +127,82 @@ exports.getUserProduct = async (req, res) => {
   }
 };
 
-// Create a new product
+// Create a new product using the new referential architecture
 exports.createUserProduct = async (req, res) => {
   try {
     console.log('Creating product for user:', req.params.userId);
     const rawBody = req.body || {};
+    
     // Coerce primitive types from multipart form-data strings
     const coerceNumber = v => (v === undefined || v === null || v === '' ? undefined : (isNaN(v) ? undefined : Number(v)));
     if (rawBody.purchaseDate && /^(\d+)$/.test(rawBody.purchaseDate)) rawBody.purchaseDate = new Date(Number(rawBody.purchaseDate));
     if (rawBody.openDate && /^(\d+)$/.test(rawBody.openDate)) rawBody.openDate = new Date(Number(rawBody.openDate));
     if (rawBody.sizeInMl) rawBody.sizeInMl = coerceNumber(rawBody.sizeInMl);
     if (rawBody.spf) rawBody.spf = coerceNumber(rawBody.spf);
-    const productData = {
-      ...rawBody,
-      user: new mongoose.Types.ObjectId(req.params.userId)
+    
+    // Separate product catalog data from user-specific data
+    const productCatalogData = {
+      barcode: rawBody.barcode,
+      productName: rawBody.productName,
+      brand: rawBody.brand,
+      periodsAfterOpening: rawBody.periodsAfterOpening,
+      vegan: rawBody.vegan || false,
+      crueltyFree: rawBody.crueltyFree || false,
+      category: rawBody.category || getFallbackCategory(rawBody.productName)
     };
     
-    // Handle image upload - convert to base64 and store in MongoDB
+    const userProductData = {
+      user: new mongoose.Types.ObjectId(req.params.userId),
+      purchaseDate: rawBody.purchaseDate || new Date(),
+      openDate: rawBody.openDate,
+      favorite: rawBody.favorite || false,
+      shade: rawBody.shade,
+      sizeInMl: rawBody.sizeInMl,
+      spf: rawBody.spf,
+      tags: rawBody.tags || [],
+      bags: rawBody.bags || []
+    };
+    
+    // Handle image upload - convert to base64 and store in product catalog
     if (req.file) {
-      productData.imageData = req.file.buffer.toString('base64');
-      productData.imageMimeType = req.file.mimetype;
-      // Keep imageUrl for backward compatibility but make it a data URL
-      productData.imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      productCatalogData.imageData = req.file.buffer.toString('base64');
+      productCatalogData.imageMimeType = req.file.mimetype;
+      productCatalogData.imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     }
     
-    console.log('🆕 Creating new product instance');
-
-    // Add fallback image if no image is provided - store as base64
-    if (!productData.imageData) {
-      // Generate a simple placeholder as base64
-      const fallbackCategory = getFallbackCategory(productData.productName);
+    // Add fallback image if no image is provided
+    if (!productCatalogData.imageData) {
+      const fallbackCategory = getFallbackCategory(productCatalogData.productName);
       const placeholderBase64 = generatePlaceholderImage(fallbackCategory);
-      productData.imageData = placeholderBase64;
-      productData.imageMimeType = 'image/jpeg';
-      productData.imageUrl = `data:image/jpeg;base64,${placeholderBase64}`;
+      productCatalogData.imageData = placeholderBase64;
+      productCatalogData.imageMimeType = 'image/jpeg';
+      productCatalogData.imageUrl = `data:image/jpeg;base64,${placeholderBase64}`;
     }
-
-    // Calculate expiry date if open date and periods_after_opening are set
-    if (productData.openDate && productData.periodsAfterOpening) {
-      const months = extractMonths(productData.periodsAfterOpening);
-      if (months) {
-        const openDate = new Date(productData.openDate);
-        productData.expireDate = new Date(openDate.setMonth(openDate.getMonth() + months));
-      }
-    }
-
-    console.log('Product data prepared:', {
-      productName: productData.productName,
-      user: productData.user
-    });
-
-    const newProduct = await UserProduct.create(productData);
     
-    // Update quantity for similar products (including the new one)
-    if (newProduct.productName && newProduct.brand) {
-      await UserProduct.updateSimilarProductsQuantity(
-        newProduct.user,
-        newProduct.productName,
-        newProduct.brand,
-        newProduct.sizeInMl,
-        true // increment
-      );
+    console.log('🆕 Creating product with new referential architecture');
+    
+    // Use the new createWithProduct method that handles product catalog creation and user product linking
+    const Product = require('../models/product');
+    let newUserProduct;
+    
+    if (productCatalogData.barcode) {
+      // For products with barcodes, use the atomic findOrCreateByBarcode method
+      newUserProduct = await UserProduct.createWithProduct(userProductData, productCatalogData);
+    } else {
+      // For manual entries without barcode, create unique product per user
+      const uniqueProductData = {
+        ...productCatalogData,
+        barcode: `manual_${userProductData.user}_${productCatalogData.productName}_${productCatalogData.brand || ''}`
+      };
+      newUserProduct = await UserProduct.createWithProduct(userProductData, uniqueProductData);
     }
+    
+    // Update quantity for similar products (products with same product reference)
+    await UserProduct.updateSimilarProductsQuantity(
+      newUserProduct.user,
+      newUserProduct.product,
+      true // increment
+    );
     
     // Activity: Product added
     try {
@@ -197,39 +213,41 @@ exports.createUserProduct = async (req, res) => {
         await Activity.create({
           user: new mongoose.Types.ObjectId(req.params.userId),
           type: 'product_added',
-          targetId: newProduct._id,
+          targetId: newUserProduct._id,
           targetType: 'UserProduct',
-          description: `Added ${newProduct.productName} to their collection`,
-          imageUrl: newProduct.imageUrl, // Include product image for feed display
+          description: `Added ${newUserProduct.product.productName} to their collection`,
+          imageUrl: newUserProduct.product.imageUrl,
           createdAt: new Date()
         });
       }
-    } catch (err) { console.error('Product added activity error:', err); }
+    } catch (err) { 
+      console.error('Product added activity error:', err); 
+    }
 
     // Handle initial tag and bag associations if provided
-    if (req.body.tags && Array.isArray(req.body.tags) && req.body.tags.length) {
-         await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { tags: { $each: req.body.tags } } });
-         // Removed activity creation for tag addition - not used in feed
-     }
-     if (req.body.bags && Array.isArray(req.body.bags) && req.body.bags.length) {
-         await UserProduct.findByIdAndUpdate(newProduct._id, { $addToSet: { bags: { $each: req.body.bags } } });
-         // Removed activity creation for bag addition - not used in feed
-     }
+    if (rawBody.tags && Array.isArray(rawBody.tags) && rawBody.tags.length) {
+      await UserProduct.findByIdAndUpdate(newUserProduct._id, { $addToSet: { tags: { $each: rawBody.tags } } });
+    }
+    if (rawBody.bags && Array.isArray(rawBody.bags) && rawBody.bags.length) {
+      await UserProduct.findByIdAndUpdate(newUserProduct._id, { $addToSet: { bags: { $each: rawBody.bags } } });
+    }
 
-    console.log('Product created successfully:', newProduct._id);
+    console.log('Product created successfully:', newUserProduct._id);
     
-    // After associations, return the newly created product
-     const populatedNewProduct = await UserProduct.findById(newProduct._id)
-       .populate('tags', 'name color')
-       .populate('bags', 'name');
-     res.status(201).json({
-       status: 'success',
-       data: { 
-         product: populatedNewProduct,
-         action: 'new_product',
-         message: 'New product added to your collection.'
-       }
-     });
+    // Return the newly created product with populated product reference
+    const populatedNewProduct = await UserProduct.findById(newUserProduct._id)
+      .populate('product')
+      .populate('tags', 'name color')
+      .populate('bags', 'name');
+      
+    res.status(201).json({
+      status: 'success',
+      data: { 
+        product: populatedNewProduct,
+        action: 'new_product',
+        message: 'New product added to your collection.'
+      }
+    });
   } catch (error) {
     console.error('Product creation error:', error);
     res.status(400).json({
@@ -248,29 +266,34 @@ exports.updateUserProduct = async (req, res) => {
     if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) req.body.sizeInMl = Number(req.body.sizeInMl);
     if (req.body.spf && /^(\d+)$/.test(req.body.spf)) req.body.spf = Number(req.body.spf);
     
-    // Handle image upload - convert to base64 and store in MongoDB
+    // Get the existing user product first
+    const existingUserProduct = await UserProduct.findOne({
+      _id: req.params.id,
+      user: new mongoose.Types.ObjectId(req.params.userId)
+    }).populate('product');
+
+    if (!existingUserProduct) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found'
+      });
+    }
+    
+    // Handle image upload - update the product catalog if new image provided
     if (req.file) {
-      req.body.imageData = req.file.buffer.toString('base64');
-      req.body.imageMimeType = req.file.mimetype;
-      req.body.imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      const Product = require('../models/product');
+      await Product.findByIdAndUpdate(existingUserProduct.product._id, {
+        imageData: req.file.buffer.toString('base64'),
+        imageMimeType: req.file.mimetype,
+        imageUrl: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+      });
     }
 
     // Calculate expiry date if openDate is being updated
-    if (req.body.openDate && req.body.periodsAfterOpening) {
-      const months = extractMonths(req.body.periodsAfterOpening);
-      if (months) {
-        const openDate = new Date(req.body.openDate);
-        req.body.expireDate = new Date(openDate.setMonth(openDate.getMonth() + months));
-      }
-    } else if (req.body.openDate) {
-      // Fetch existing product to get periodsAfterOpening
-      const existingProduct = await UserProduct.findOne({
-        _id: req.params.id,
-        user: new mongoose.Types.ObjectId(req.params.userId)
-      });
-      
-      if (existingProduct && existingProduct.periodsAfterOpening) {
-        const months = extractMonths(existingProduct.periodsAfterOpening);
+    if (req.body.openDate) {
+      const periodsAfterOpening = existingUserProduct.product.periodsAfterOpening;
+      if (periodsAfterOpening) {
+        const months = extractMonths(periodsAfterOpening);
         if (months) {
           const openDate = new Date(req.body.openDate);
           req.body.expireDate = new Date(openDate.setMonth(openDate.getMonth() + months));
@@ -278,34 +301,19 @@ exports.updateUserProduct = async (req, res) => {
       }
     }
 
-    // Toggle favorite status - removed activity creation (not used in feed)
-    if (typeof req.body.favorite === 'boolean') {
-      // Functionality preserved but activity creation removed
-    }
-
-    // Handle openDate - removed activity creation (not used in feed)
-    if (req.body.openDate) {
-      // Functionality preserved but activity creation removed
-    }
-
-    // Handle finish date - removed activity creation (not used in feed)
+    // Handle finish date - update quantity for similar products
     if (req.body.finishDate || req.body.isFinished) {
-      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
-      if (product && !product.isFinished) {
+      if (!existingUserProduct.isFinished) {
         // Update quantity for similar products when a product is finished
-        if (product.productName && product.brand) {
-          await UserProduct.updateSimilarProductsQuantity(
-            product.user,
-            product.productName,
-            product.brand,
-            product.sizeInMl,
-            false // decrement
-          );
-        }
+        await UserProduct.updateSimilarProductsQuantity(
+          existingUserProduct.user,
+          existingUserProduct.product,
+          false // decrement
+        );
       }
     }
 
-    // Handle comment addition - removed activity creation (not used in feed)
+    // Handle comment addition
     if (req.body.newComment) {
       const comment = {
         text: req.body.newComment,
@@ -325,9 +333,6 @@ exports.updateUserProduct = async (req, res) => {
         return res.status(400).json({ status: 'fail', message: 'Missing review fields' });
       }
       
-      // Get the product first for the activity description
-      const product = await UserProduct.findOne({ _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) });
-      
       const review = {
         rating,
         title,
@@ -338,24 +343,24 @@ exports.updateUserProduct = async (req, res) => {
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $push: { reviews: review } }
       );
+      
       // Activity: Review added
       try {
         const Activity = require('../models/activity');
         await Activity.create({
           user: new mongoose.Types.ObjectId(req.params.userId),
           type: 'review_added',
-          targetId: new mongoose.Types.ObjectId(req.params.id), // ensure ObjectId
+          targetId: new mongoose.Types.ObjectId(req.params.id),
           targetType: 'UserProduct',
-          description: text, // Use the actual review text as description
+          description: text,
           rating: rating,
-          imageUrl: product.imageUrl, // Include product image for feed display
-          // Store additional review data in a reviewData field for the frontend to access
+          imageUrl: existingUserProduct.product.imageUrl,
           reviewData: {
             title: title,
             text: text,
             rating: rating,
-            productName: product.productName,
-            brand: product.brand
+            productName: existingUserProduct.product.productName,
+            brand: existingUserProduct.product.brand
           },
           createdAt: new Date()
         });
@@ -366,9 +371,8 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.newReview;
     }
 
-    // Handle adding a product to a beauty bag - removed activity creation (not used in feed)
+    // Handle bag associations
     if (req.body.addToBagId) {
-      // Persist bag association
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
         { $addToSet: { bags: req.body.addToBagId } }
@@ -376,54 +380,42 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.addToBagId;
     }
 
-    // Handle removing a product from a beauty bag - removed activity creation (not used in feed)
     if (req.body.removeFromBagId) {
-      const bagId = req.body.removeFromBagId;
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
-        { $pull: { bags: bagId } }
+        { $pull: { bags: req.body.removeFromBagId } }
       );
       delete req.body.removeFromBagId;
     }
 
-    // Handle tag addition - removed activity creation (not used in feed)
+    // Handle tag associations
     if (req.body.addTagId) {
       const tagId = req.body.addTagId;
       console.log(`Received addTagId ${tagId} for product ${req.params.id}`);
-      const result = await UserProduct.findOneAndUpdate(
+      await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
-        { $addToSet: { tags: tagId } },
-        { new: true }
+        { $addToSet: { tags: tagId } }
       );
-      console.log(`Post-update tags for product ${req.params.id}:`, result.tags);
       delete req.body.addTagId;
     }
     
-    // Handle tag removal - removed activity creation (not used in feed)
     if (req.body.removeTagId) {
-      const tagId = req.body.removeTagId;
       await UserProduct.findOneAndUpdate(
         { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
-        { $pull: { tags: tagId } }
+        { $pull: { tags: req.body.removeTagId } }
       );
       delete req.body.removeTagId;
     }
 
-    // Update and return the product with populated tags and bags
+    // Update and return the product with populated references
     const product = await UserProduct.findOneAndUpdate(
       { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
       req.body,
       { new: true, runValidators: true }
     )
+      .populate('product')
       .populate('tags', 'name color')
       .populate('bags', 'name');
-
-    if (!product) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'Product not found'
-      });
-    }
 
     res.status(200).json({
       status: 'success',

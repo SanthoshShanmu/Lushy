@@ -166,12 +166,33 @@ class ProductDetailViewModel: ObservableObject {
                             }
                         }
                         
-                        // Sync core metadata fields from backend
+                        // Sync core metadata fields from backend - handle new nested structure
                         self.product.productName = backendProd.productName
                         self.product.brand = backendProd.brand
                         self.product.purchaseDate = backendProd.purchaseDate
                         self.product.openDate = backendProd.openDate
-                        if let pao = backendProd.periodsAfterOpening { self.product.periodsAfterOpening = pao }
+                        self.product.expireDate = backendProd.expireDate
+                        self.product.favorite = backendProd.favorite
+                        self.product.isFinished = backendProd.isFinished
+                        self.product.finishDate = backendProd.finishDate
+                        self.product.currentAmount = backendProd.currentAmount
+                        self.product.timesUsed = backendProd.timesUsed
+                        
+                        // Update product catalog fields from nested product
+                        self.product.barcode = backendProd.product.barcode
+                        self.product.periodsAfterOpening = backendProd.product.periodsAfterOpening
+                        self.product.vegan = backendProd.product.vegan
+                        self.product.crueltyFree = backendProd.product.crueltyFree
+                        
+                        // Handle image from product catalog
+                        if let imageData = backendProd.product.imageData,
+                           let mimeType = backendProd.product.imageMimeType {
+                            self.product.imageUrl = "data:\(mimeType);base64,\(imageData)"
+                        } else {
+                            self.product.imageUrl = backendProd.product.imageUrl
+                        }
+                        
+                        // Update user-specific metadata
                         if let shade = backendProd.shade { self.product.shade = shade }
                         if let sizeValue = backendProd.sizeInMl { self.product.sizeInMl = sizeValue }
                         if let spfValue = backendProd.spf { self.product.spf = Int16(spfValue) }

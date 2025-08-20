@@ -58,40 +58,26 @@ const ReviewSchema = new Schema({
   }
 });
 
-// UserProduct schema
+// UserProduct schema - now references Product catalog
 const UserProductSchema = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  barcode: {
-    type: String,
-    required: false // made optional to allow manual products without barcode
-  },
-  productName: {
-    type: String,
+  // Reference to the Product catalog (single source of truth)
+  product: {
+    type: Schema.Types.ObjectId,
+    ref: 'Product',
     required: true
   },
-  brand: String,
-  imageUrl: String, // Keep for backward compatibility
-  imageData: String, // New field for base64 image data
-  imageMimeType: String, // Store MIME type for proper display (e.g., 'image/jpeg')
+  // User-specific product data only
   purchaseDate: {
     type: Date,
     required: true
   },
   openDate: Date,
   expireDate: Date,
-  periodsAfterOpening: String,
-  vegan: {
-    type: Boolean,
-    default: false
-  },
-  crueltyFree: {
-    type: Boolean,
-    default: false
-  },
   favorite: {
     type: Boolean,
     default: false
@@ -114,7 +100,7 @@ const UserProductSchema = new Schema({
   finishDate: Date,
   // Usage entries for detailed tracking
   usageEntries: [UsageEntrySchema],
-  // New optional metadata fields
+  // User-specific metadata (can override product defaults)
   shade: { type: String },
   sizeInMl: { type: Number },
   spf: { type: Number },
@@ -149,13 +135,23 @@ UserProductSchema.pre('save', function(next) {
   next();
 });
 
-// Calculate expireDate from openDate and periodsAfterOpening
-UserProductSchema.pre('save', function(next) {
-  if (this.openDate && this.periodsAfterOpening) {
-    const months = extractMonths(this.periodsAfterOpening);
-    if (months) {
-      const openDate = new Date(this.openDate);
-      this.expireDate = new Date(openDate.setMonth(openDate.getMonth() + months));
+// Calculate expireDate from openDate and product's periodsAfterOpening
+UserProductSchema.pre('save', async function(next) {
+  if (this.openDate && this.isModified('openDate')) {
+    try {
+      // Get the product to access periodsAfterOpening
+      const Product = mongoose.model('Product');
+      const product = await Product.findById(this.product);
+      
+      if (product && product.periodsAfterOpening) {
+        const months = extractMonths(product.periodsAfterOpening);
+        if (months) {
+          const openDate = new Date(this.openDate);
+          this.expireDate = new Date(openDate.setMonth(openDate.getMonth() + months));
+        }
+      }
+    } catch (error) {
+      console.error('Error calculating expiry date:', error);
     }
   }
   next();
@@ -167,38 +163,90 @@ function extractMonths(periodString) {
   return match ? parseInt(match[1]) : null;
 }
 
-// Helper function to find similar products
-UserProductSchema.statics.findSimilarProducts = async function(userId, productName, brand, sizeInMl) {
-  const query = {
-    user: userId,
-    productName: productName,
-    brand: brand
-  };
+// Static method to create user product with proper product reference
+UserProductSchema.statics.createWithProduct = async function(userData, productData) {
+  const session = await mongoose.startSession();
   
-  // Include sizeInMl in comparison if it's specified
-  if (sizeInMl && sizeInMl > 0) {
-    query.sizeInMl = sizeInMl;
+  try {
+    return await session.withTransaction(async () => {
+      const Product = mongoose.model('Product');
+      
+      // Find or create the product in catalog using atomic operation
+      let product;
+      if (productData.barcode) {
+        // Try to find existing product by barcode
+        product = await Product.findOne({ barcode: productData.barcode }).session(session);
+        
+        if (!product) {
+          // Create new product with upsert to handle race conditions
+          const productDoc = new Product(productData);
+          try {
+            product = await productDoc.save({ session });
+          } catch (error) {
+            if (error.code === 11000) {
+              // Duplicate key error - another process created it
+              product = await Product.findOne({ barcode: productData.barcode }).session(session);
+            } else {
+              throw error;
+            }
+          }
+        }
+      } else {
+        // For manual entries without barcode, create a unique product entry
+        // Use a combination of name + brand + user to create unique products for manual entries
+        const uniqueKey = `${userData.user}_${productData.productName}_${productData.brand || ''}`;
+        product = await Product.findOne({ 
+          barcode: uniqueKey,
+          productName: productData.productName,
+          brand: productData.brand || ''
+        }).session(session);
+        
+        if (!product) {
+          const productDoc = new Product({
+            ...productData,
+            barcode: uniqueKey // Use unique key as barcode for manual entries
+          });
+          try {
+            product = await productDoc.save({ session });
+          } catch (error) {
+            if (error.code === 11000) {
+              product = await Product.findOne({ barcode: uniqueKey }).session(session);
+            } else {
+              throw error;
+            }
+          }
+        }
+      }
+      
+      // Create the user product entry
+      const userProduct = new this({
+        ...userData,
+        product: product._id
+      });
+      
+      await userProduct.save({ session });
+      return await userProduct.populate('product');
+    });
+  } finally {
+    await session.endSession();
   }
-  
-  return await this.find(query);
+};
+
+// Helper function to find similar products for a user
+UserProductSchema.statics.findSimilarProducts = async function(userId, productId) {
+  return await this.find({
+    user: userId,
+    product: productId
+  }).populate('product');
 };
 
 // Helper function to update quantity for similar products
-UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId, productName, brand, sizeInMl, increment = true) {
+UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId, productId, increment = true) {
   try {
-    // Find all similar products for this user
-    const query = {
+    const similarProducts = await this.find({
       user: userId,
-      productName: { $regex: new RegExp(`^${productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-      brand: { $regex: new RegExp(`^${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-    };
-    
-    // If size is specified, also match by size (within 10ml tolerance)
-    if (sizeInMl && sizeInMl > 0) {
-      query.sizeInMl = { $gte: sizeInMl - 10, $lte: sizeInMl + 10 };
-    }
-    
-    const similarProducts = await this.find(query);
+      product: productId
+    });
     
     // Calculate new quantity
     let totalQuantity = similarProducts.length;
@@ -207,9 +255,12 @@ UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId,
     }
     
     // Update all similar products with the new quantity
-    await this.updateMany(query, { quantity: totalQuantity });
+    await this.updateMany({
+      user: userId,
+      product: productId
+    }, { quantity: totalQuantity });
     
-    console.log(`Updated quantity to ${totalQuantity} for ${similarProducts.length} similar products: ${productName} by ${brand}`);
+    console.log(`Updated quantity to ${totalQuantity} for ${similarProducts.length} similar products`);
     
     return totalQuantity;
   } catch (error) {
@@ -218,8 +269,11 @@ UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId,
   }
 };
 
-// Index for efficient similarity queries
-UserProductSchema.index({ user: 1, productName: 1, brand: 1 });
-UserProductSchema.index({ user: 1, barcode: 1 });
+// Indexes for efficient queries
+UserProductSchema.index({ user: 1, product: 1 }, { unique: true }); // Prevent duplicate user-product combinations
+UserProductSchema.index({ user: 1 });
+UserProductSchema.index({ product: 1 });
+UserProductSchema.index({ user: 1, isFinished: 1 });
+UserProductSchema.index({ user: 1, favorite: 1 });
 
 module.exports = mongoose.model('UserProduct', UserProductSchema);

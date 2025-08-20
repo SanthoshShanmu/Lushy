@@ -2,7 +2,7 @@ const UserProduct = require('../models/userProduct');
 const Product = require('../models/product');
 const User = require('../models/user');
 
-// Search products by name across catalog and user products
+// Search products by name across catalog only (since UserProduct no longer stores product data directly)
 exports.searchProducts = async (req, res) => {
   try {
     const query = req.query.q || '';
@@ -25,62 +25,29 @@ exports.searchProducts = async (req, res) => {
       };
     }
     
-    // Search in both product catalog and user products
-    const [catalogProducts, userProducts] = await Promise.all([
-      Product.find(searchCriteria)
-        .limit(25)
-        .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree')
-        .lean(),
-      UserProduct.find(searchCriteria)
-        .limit(25)
-        .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree')
-        .lean()
-    ]);
+    // Search only in product catalog (since UserProduct now references Product)
+    const catalogProducts = await Product.find(searchCriteria)
+      .limit(25)
+      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree')
+      .lean();
 
-    // Combine and deduplicate results (prefer catalog over user products)
-    const seenBarcodes = new Set();
-    const combinedProducts = [];
-
-    // Add catalog products first
-    for (const product of catalogProducts) {
-      if (product.barcode && !seenBarcodes.has(product.barcode)) {
-        seenBarcodes.add(product.barcode);
-        combinedProducts.push({
-          _id: product._id,
-          productName: product.productName,
-          brand: product.brand,
-          barcode: product.barcode,
-          vegan: product.vegan,
-          crueltyFree: product.crueltyFree,
-          imageUrl: product.imageData && product.imageMimeType 
-            ? `data:${product.imageMimeType};base64,${product.imageData}`
-            : product.imageUrl || null
-        });
-      }
-    }
-
-    // Add user products that aren't already in catalog
-    for (const product of userProducts) {
-      if (!product.barcode || !seenBarcodes.has(product.barcode)) {
-        if (product.barcode) seenBarcodes.add(product.barcode);
-        combinedProducts.push({
-          _id: product._id,
-          productName: product.productName,
-          brand: product.brand,
-          barcode: product.barcode,
-          vegan: product.vegan,
-          crueltyFree: product.crueltyFree,
-          imageUrl: product.imageData && product.imageMimeType 
-            ? `data:${product.imageMimeType};base64,${product.imageData}`
-            : product.imageUrl || null
-        });
-      }
-    }
+    // Format the results
+    const formattedProducts = catalogProducts.map(product => ({
+      _id: product._id,
+      productName: product.productName,
+      brand: product.brand,
+      barcode: product.barcode,
+      vegan: product.vegan,
+      crueltyFree: product.crueltyFree,
+      imageUrl: product.imageData && product.imageMimeType 
+        ? `data:${product.imageMimeType};base64,${product.imageData}`
+        : product.imageUrl || null
+    }));
 
     res.status(200).json({ 
       status: 'success', 
-      results: combinedProducts.length, 
-      data: { products: combinedProducts } 
+      results: formattedProducts.length, 
+      data: { products: formattedProducts } 
     });
   } catch (error) {
     console.error('Product search error:', error);
@@ -88,22 +55,15 @@ exports.searchProducts = async (req, res) => {
   }
 };
 
-// Get product by barcode - prioritize catalog, fallback to user products
+// Get product by barcode - only check catalog since UserProduct no longer stores product data
 exports.getProductByBarcode = async (req, res) => {
   try {
     const { barcode } = req.params;
     
-    // First check product catalog
-    let product = await Product.findOne({ barcode })
+    // Check product catalog only
+    const product = await Product.findOne({ barcode })
       .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening ingredients')
       .lean();
-    
-    // If not found in catalog, check user products
-    if (!product) {
-      product = await UserProduct.findOne({ barcode })
-        .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening')
-        .lean();
-    }
     
     if (!product) {
       return res.status(404).json({ 
@@ -137,19 +97,22 @@ exports.getProductByBarcode = async (req, res) => {
   }
 };
 
-// Get general product detail by ID
+// Get user product detail by ID (now properly populates product reference)
 exports.getProductDetail = async (req, res) => {
   try {
     const id = req.params.productId;
-    const product = await UserProduct.findById(id)
+    const userProduct = await UserProduct.findById(id)
       .select('-user -createdAt -updatedAt')
+      .populate('product') // Populate the product catalog reference
       .populate('tags', 'name color')
       .populate('bags', 'name')
       .lean();
-    if (!product) {
+      
+    if (!userProduct) {
       return res.status(404).json({ status: 'fail', message: 'Product not found' });
     }
-    res.status(200).json({ status: 'success', data: { product } });
+    
+    res.status(200).json({ status: 'success', data: { product: userProduct } });
   } catch (error) {
     console.error('Product detail error:', error);
     res.status(500).json({ status: 'error', message: error.message });
