@@ -196,39 +196,58 @@ struct ProfileHeaderView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Profile Picture & Name
-            VStack(spacing: 12) {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.lushyPink.opacity(0.7),
-                                Color.lushyPurple.opacity(0.5),
-                                Color.lushyMint.opacity(0.3)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 100, height: 100)
-                    .overlay(
-                        Text(profile.name.prefix(1).uppercased())
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundColor(.white)
-                    )
-                    .shadow(color: Color.lushyPink.opacity(0.3), radius: 12, x: 0, y: 4)
+            // Profile Section - Horizontal Layout with Image on Left
+            HStack(alignment: .top, spacing: 20) {
+                // Profile Image on the Left
+                ProfileImageView(profile: profile, viewModel: viewModel)
                 
-                VStack(spacing: 4) {
-                    Text(profile.name)
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
+                // Stats and Bio on the Right
+                VStack(alignment: .leading, spacing: 16) {
+                    // User Name and Username
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        Text("@\(profile.username)")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
                     
-                    Text(profile.email)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    // Bio Section
+                    if let bio = profile.bio, !bio.isEmpty {
+                        Text(bio)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                    }
+                    
+                    // Mini Stats Row
+                    HStack(spacing: 16) {
+                        MiniStatItem(
+                            count: profile.followers?.count ?? 0,
+                            label: "Followers",
+                            color: .lushyPink
+                        )
+                        
+                        MiniStatItem(
+                            count: profile.following?.count ?? 0,
+                            label: "Following",
+                            color: .lushyPurple
+                        )
+                        
+                        MiniStatItem(
+                            count: viewModel.activeProductsCount,
+                            label: "Products",
+                            color: .lushyMint
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.horizontal)
             
             // Follow Button (if viewing another user's profile)
             if !viewModel.isViewingOwnProfile {
@@ -265,9 +284,108 @@ struct ProfileHeaderView: View {
                     .shadow(color: viewModel.isFollowing ? Color.lushyPink.opacity(0.4) : Color.clear, radius: 8, x: 0, y: 4)
                 }
                 .animation(.easeInOut(duration: 0.2), value: viewModel.isFollowing)
+            } else {
+                // Edit Profile Button (if viewing own profile)
+                NavigationLink(destination: ProfileEditView(currentUser: profile)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pencil")
+                        Text("Edit Profile")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.lushyPink)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 25)
+                            .stroke(Color.lushyPink, lineWidth: 2)
+                    )
+                    .cornerRadius(25)
+                }
             }
         }
         .padding(.top, 20)
+    }
+}
+
+// MARK: - Profile Image Component
+struct ProfileImageView: View {
+    let profile: UserProfile
+    @ObservedObject var viewModel: UserProfileViewModel
+    
+    var body: some View {
+        VStack {
+            if let profileImageUrl = profile.profileImage,
+               !profileImageUrl.isEmpty {
+                AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(profileImageUrl)")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.lushyPink.opacity(0.7),
+                                    Color.lushyPurple.opacity(0.5),
+                                    Color.lushyMint.opacity(0.3)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        )
+                }
+                .frame(width: 80, height: 80)
+                .clipShape(Circle())
+                .shadow(color: Color.lushyPink.opacity(0.3), radius: 8, x: 0, y: 4)
+            } else {
+                // Default avatar with initials
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.lushyPink.opacity(0.7),
+                                Color.lushyPurple.opacity(0.5),
+                                Color.lushyMint.opacity(0.3)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        Text(profile.name.prefix(1).uppercased())
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+                    .shadow(color: Color.lushyPink.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+        }
+    }
+}
+
+// MARK: - Mini Stat Item for Compact Display
+struct MiniStatItem: View {
+    let count: Int
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("\(count)")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
     }
 }
 

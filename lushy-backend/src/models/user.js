@@ -15,6 +15,19 @@ const UserSchema = new mongoose.Schema({
       'Please provide a valid email'
     ]
   },
+  username: {
+    type: String,
+    required: [true, 'Please provide a username'],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    minlength: [3, 'Username must be at least 3 characters long'],
+    maxlength: [20, 'Username must be less than 20 characters'],
+    match: [
+      /^[a-zA-Z0-9_]+$/,
+      'Username can only contain letters, numbers, and underscores'
+    ]
+  },
   password: {
     type: String,
     required: [true, 'Please provide a password'],
@@ -25,6 +38,17 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide a name'],
     trim: true
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Bio must be less than 200 characters'],
+    default: ''
+  },
+  profileImage: {
+    type: String,
+    trim: true,
+    default: null
   },
   pushToken: String,
   createdAt: {

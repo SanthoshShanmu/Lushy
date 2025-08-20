@@ -35,7 +35,9 @@ extension APIService {
                 UserProfile(
                     id: response.data.user.id,
                     name: response.data.user.name,
-                    email: response.data.user.email,
+                    username: response.data.user.username ?? "",
+                    bio: response.data.user.bio,
+                    profileImage: response.data.user.profileImage,
                     followers: nil,
                     following: nil,
                     bags: nil,
@@ -117,7 +119,17 @@ struct ProfileResponse: Codable {
     struct User: Codable {
         let id: String
         let name: String
-        let email: String
+        let username: String?
+        let bio: String?
+        let profileImage: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case id = "_id"
+            case name
+            case username
+            case bio
+            case profileImage
+        }
     }
 }
 

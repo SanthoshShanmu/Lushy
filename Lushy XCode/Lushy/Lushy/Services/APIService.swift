@@ -87,6 +87,11 @@ class APIService {
     // Base URL for our backend server
     let baseURL = URL(string: "http://localhost:5001/api")!
     
+    // Base URL for static files (without /api prefix)
+    var staticBaseURL: String {
+        return "http://localhost:5001"
+    }
+    
     // Helper to convert Date to milliseconds since epoch (backend expects ms)
     private func msSinceEpoch(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970 * 1000) }
 

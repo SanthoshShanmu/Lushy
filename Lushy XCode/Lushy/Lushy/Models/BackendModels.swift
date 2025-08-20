@@ -189,19 +189,23 @@ struct BackendWishlistItem: Codable, Identifiable {
 struct UserSummary: Identifiable, Codable, Hashable {
     let id: String
     let name: String
-    let email: String?
+    let username: String
+    let profileImage: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case name
-        case email
+        case username
+        case profileImage
     }
 }
 
 struct UserProfile: Identifiable, Codable {
     let id: String
     let name: String
-    let email: String
+    let username: String
+    let bio: String?
+    let profileImage: String?
     let followers: [UserSummary]?
     let following: [UserSummary]?
     let bags: [BeautyBagSummary]?
@@ -210,7 +214,9 @@ struct UserProfile: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case name
-        case email
+        case username
+        case bio
+        case profileImage
         case followers
         case following
         case bags

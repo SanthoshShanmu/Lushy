@@ -29,14 +29,23 @@ const createSendToken = (user, statusCode, res) => {
 // Sign up a new user
 exports.signup = async (req, res) => {
   try {
-    const { name, email, password, passwordConfirm } = req.body;
+    const { name, email, password, passwordConfirm, username } = req.body;
 
-    // Check for existing user
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // Check for existing user by email
+    const existingUserByEmail = await User.findOne({ email });
+    if (existingUserByEmail) {
       return res.status(400).json({
         status: 'fail',
         message: 'Email already in use'
+      });
+    }
+
+    // Check for existing user by username
+    const existingUserByUsername = await User.findOne({ username });
+    if (existingUserByUsername) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Username already taken'
       });
     }
 
@@ -44,6 +53,7 @@ exports.signup = async (req, res) => {
     const newUser = await User.create({
       name,
       email,
+      username,
       password,
       passwordConfirm
     });
@@ -57,26 +67,31 @@ exports.signup = async (req, res) => {
   }
 };
 
-// Login a user
+// Login a user (support both email and username)
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body; // identifier can be email or username
 
-    // Check if email and password exist
-    if (!email || !password) {
+    // Check if identifier and password exist
+    if (!identifier || !password) {
       return res.status(400).json({
         status: 'fail',
-        message: 'Please provide email and password'
+        message: 'Please provide email/username and password'
       });
     }
 
-    // Check if user exists && password is correct
-    const user = await User.findOne({ email }).select('+password');
+    // Check if user exists by email or username
+    const user = await User.findOne({
+      $or: [
+        { email: identifier },
+        { username: identifier }
+      ]
+    }).select('+password');
     
     if (!user || !(await user.correctPassword(password, user.password))) {
       return res.status(401).json({
         status: 'fail',
-        message: 'Incorrect email or password'
+        message: 'Incorrect credentials'
       });
     }
 

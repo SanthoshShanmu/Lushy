@@ -2,10 +2,13 @@ import SwiftUI
 
 struct RegisterView: View {
     @State private var name = ""
+    @State private var username = ""
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var isRegistering = false
+    @State private var isCheckingUsername = false
+    @State private var usernameAvailable: Bool? = nil
     @State private var errorMessage: String?
     @Environment(\.presentationMode) var presentationMode
     @Binding var isLoggedIn: Bool
@@ -36,6 +39,52 @@ struct RegisterView: View {
                 .background(Color.white)
                 .cornerRadius(10)
                 .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    TextField("Username", text: $username)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                        .onChange(of: username) { _, newValue in
+                            // Clean username input
+                            let filtered = newValue.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                            if filtered != newValue {
+                                username = filtered
+                            }
+                            
+                            // Check availability after typing stops
+                            if !newValue.isEmpty && newValue.count >= 3 {
+                                checkUsernameAvailability()
+                            } else {
+                                usernameAvailable = nil
+                            }
+                        }
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(10)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                    
+                    if isCheckingUsername {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                            .scaleEffect(0.8)
+                    } else if let available = usernameAvailable {
+                        Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundColor(available ? .green : .red)
+                    }
+                }
+                
+                if let available = usernameAvailable, !username.isEmpty {
+                    Text(available ? "Username is available!" : "Username is already taken")
+                        .font(.caption)
+                        .foregroundColor(available ? .green : .red)
+                }
+                
+                Text("3-20 characters, letters, numbers, and underscores only")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
             TextField("Email", text: $email)
                 .autocapitalization(.none)
                 .keyboardType(.emailAddress)
@@ -75,7 +124,7 @@ struct RegisterView: View {
                 .foregroundColor(.white)
                 .cornerRadius(10)
             }
-            .disabled(name.isEmpty || email.isEmpty || password.isEmpty || password != confirmPassword || isRegistering)
+            .disabled(name.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty || password != confirmPassword || isRegistering || (usernameAvailable == false))
             .lushyButtonStyle(.primary, size: .large)
         }
         .padding(.horizontal)
@@ -112,9 +161,33 @@ struct RegisterView: View {
         }
     }
 
+    private func checkUsernameAvailability() {
+        guard username.count >= 3 else {
+            usernameAvailable = nil
+            return
+        }
+        
+        isCheckingUsername = true
+        
+        // Call the backend to check username availability
+        AuthService.shared.checkUsernameAvailability(username: username)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                self.isCheckingUsername = false
+                if case .failure(let error) = completion {
+                    print("Username availability check failed: \(error)")
+                    // For development, assume username is available if check fails
+                    self.usernameAvailable = true
+                }
+            }, receiveValue: { available in
+                self.usernameAvailable = available
+            })
+            .store(in: &AuthService.shared.cancellables)
+    }
+
     private func register() {
         // Validate inputs
-        guard !name.isEmpty, !email.isEmpty, !password.isEmpty else {
+        guard !name.isEmpty, !username.isEmpty, !email.isEmpty, !password.isEmpty else {
             errorMessage = "All fields are required"
             return
         }
@@ -130,6 +203,17 @@ struct RegisterView: View {
             return
         }
 
+        // Validate username
+        guard username.count >= 3 && username.count <= 20 else {
+            errorMessage = "Username must be between 3 and 20 characters"
+            return
+        }
+
+        guard usernameAvailable == true else {
+            errorMessage = "Please choose an available username"
+            return
+        }
+
         // Validate password strength
         guard password.count >= 8 else {
             errorMessage = "Password must be at least 8 characters"
@@ -139,7 +223,7 @@ struct RegisterView: View {
         isRegistering = true
         errorMessage = nil
 
-        AuthService.shared.register(name: name, email: email, password: password)
+        AuthService.shared.register(name: name, username: username, email: email, password: password)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
                 isRegistering = false

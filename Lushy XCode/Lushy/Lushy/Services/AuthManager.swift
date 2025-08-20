@@ -71,13 +71,13 @@ class AuthManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func login(email: String, password: String) -> AnyPublisher<Bool, Error> {
+    func login(identifier: String, password: String) -> AnyPublisher<Bool, Error> {
         DispatchQueue.main.async {
             self.isCheckingAuth = true
             self.authError = nil
         }
         
-        return AuthService.shared.login(email: email, password: password)
+        return AuthService.shared.login(identifier: identifier, password: password)
             .receive(on: DispatchQueue.main) // Ensure UI updates happen on main thread
             .handleEvents(receiveOutput: { success in
                 if success {

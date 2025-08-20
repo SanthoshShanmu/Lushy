@@ -2,7 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
-    @State private var email = ""
+    @State private var identifier = ""
     @State private var password = ""
     @State private var isLoggingIn = false
     @State private var showRegistration = false
@@ -35,8 +35,9 @@ struct LoginView: View {
                     
                     // Login form
                     VStack(spacing: 20) {
-                        TextField("Email", text: $email)
+                        TextField("Username or Email", text: $identifier)
                             .autocapitalization(.none)
+                            .autocorrectionDisabled()
                             .keyboardType(.emailAddress)
                             .padding()
                             .background(Color.white)
@@ -69,7 +70,7 @@ struct LoginView: View {
                             .padding()
                         }
                         .lushyButtonStyle(.primary, size: .large)
-                        .disabled(email.isEmpty || password.isEmpty || isLoggingIn)
+                        .disabled(identifier.isEmpty || password.isEmpty || isLoggingIn)
                     }
                     .padding(.horizontal)
                     
@@ -98,7 +99,7 @@ struct LoginView: View {
     private func login() {
         isLoggingIn = true
         
-        authManager.login(email: email, password: password)
+        authManager.login(identifier: identifier, password: password)
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
                 isLoggingIn = false

@@ -50,13 +50,19 @@ class AuthService {
         }
     }
     
-    func register(name: String, email: String, password: String) -> AnyPublisher<Bool, Error> {
+    func register(name: String, username: String, email: String, password: String) -> AnyPublisher<Bool, Error> {
         let url = URL(string: "http://localhost:5001/api/auth/signup")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body = ["name": name, "email": email, "password": password, "passwordConfirm": password]
+        let body = [
+            "name": name,
+            "username": username,
+            "email": email,
+            "password": password,
+            "passwordConfirm": password
+        ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
         return URLSession.shared.dataTaskPublisher(for: request)
@@ -76,13 +82,13 @@ class AuthService {
             .eraseToAnyPublisher()
     }
     
-    func login(email: String, password: String) -> AnyPublisher<Bool, Error> {
+    func login(identifier: String, password: String) -> AnyPublisher<Bool, Error> {
         let url = URL(string: "http://localhost:5001/api/auth/login")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body = ["email": email, "password": password]
+        let body = ["identifier": identifier, "password": password]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
         return URLSession.shared.dataTaskPublisher(for: request)
@@ -102,6 +108,26 @@ class AuthService {
             .eraseToAnyPublisher()
     }
     
+    func checkUsernameAvailability(username: String) -> AnyPublisher<Bool, Error> {
+        let url = URL(string: "http://localhost:5001/api/users/username/\(username)/availability")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return data
+            }
+            .decode(type: UsernameAvailabilityResponse.self, decoder: JSONDecoder())
+            .map { response in
+                response.available
+            }
+            .eraseToAnyPublisher()
+    }
+
     func logout() {
         token = nil
         userId = nil
@@ -132,4 +158,8 @@ struct AuthResponse: Codable {
             case email
         }
     }
+}
+
+struct UsernameAvailabilityResponse: Codable {
+    let available: Bool
 }

@@ -65,21 +65,41 @@ struct AccountView: View {
                             VStack(alignment: .leading) {
                                 Text(profile.name)
                                     .font(.headline)
-                                Text(profile.email)
+                                Text("@\(profile.username)")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
                             
                             Spacer()
                             
-                            Circle()
-                                .fill(Color.lushyPink)
+                            // Profile image or initials
+                            if let profileImageUrl = profile.profileImage,
+                               !profileImageUrl.isEmpty {
+                                AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(profileImageUrl)")) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Circle()
+                                        .fill(Color.lushyPink)
+                                        .overlay(
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                .scaleEffect(0.7)
+                                        )
+                                }
                                 .frame(width: 50, height: 50)
-                                .overlay(
-                                    Text(profile.name.prefix(1).uppercased())
-                                        .foregroundColor(.white)
-                                        .font(.system(size: 20, weight: .semibold))
-                                )
+                                .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(Color.lushyPink)
+                                    .frame(width: 50, height: 50)
+                                    .overlay(
+                                        Text(profile.name.prefix(1).uppercased())
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 20, weight: .semibold))
+                                    )
+                            }
                         }
                         .padding(.vertical, 8)
                     } else {

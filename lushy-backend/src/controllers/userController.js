@@ -62,8 +62,8 @@ exports.getUserProfile = async (req, res) => {
     const userId = req.params.userId;
     let user = await User.findById(userId)
       .select('-password')
-      .populate('followers', 'name email')
-      .populate('following', 'name email');
+      .populate('followers', 'name username profileImage')
+      .populate('following', 'name username profileImage');
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -104,9 +104,9 @@ exports.searchUsers = async (req, res) => {
     const users = await User.find({
       $or: [
         { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } }
+        { username: { $regex: q, $options: 'i' } }
       ]
-    }).select('name email');
+    }).select('name username profileImage');
     res.json({ users });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -329,6 +329,124 @@ exports.updateUserSettings = async (req, res) => {
       settings: {
         region: user.region || 'GLOBAL'
       }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Update user profile (name, bio, username)
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    // Authorization: only the authenticated user can update their profile
+    if (!req.user || req.user._id.toString() !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update this profile.' });
+    }
+
+    const { name, bio, username } = req.body;
+    const updates = {};
+
+    if (name && name.trim()) {
+      updates.name = name.trim();
+    }
+
+    if (typeof bio === 'string') {
+      updates.bio = bio.trim();
+    }
+
+    if (username && username.trim()) {
+      const usernameToCheck = username.trim().toLowerCase();
+      // Check if username is already taken by another user
+      const existingUser = await User.findOne({ 
+        username: usernameToCheck, 
+        _id: { $ne: userId } 
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username already taken.' });
+      }
+      updates.username = usernameToCheck;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, 
+      { $set: updates }, 
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.json({ 
+      message: 'Profile updated successfully.',
+      user: updatedUser 
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ message: 'Username already taken.' });
+    }
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Update profile image
+exports.updateProfileImage = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    // Authorization: only the authenticated user can update their profile image
+    if (!req.user || req.user._id.toString() !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update this profile.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided.' });
+    }
+
+    // The upload middleware should handle file storage and provide the file path
+    const imageUrl = `/uploads/profiles/${req.file.filename}`;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profileImage: imageUrl },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.json({
+      message: 'Profile image updated successfully.',
+      profileImage: imageUrl,
+      user: updatedUser
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Check username availability
+exports.checkUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+    const usernameToCheck = username.toLowerCase().trim();
+
+    if (!usernameToCheck || usernameToCheck.length < 3) {
+      return res.status(400).json({ 
+        available: false, 
+        message: 'Username must be at least 3 characters long.' 
+      });
+    }
+
+    const existingUser = await User.findOne({ username: usernameToCheck });
+    const available = !existingUser;
+
+    res.json({ 
+      available,
+      message: available ? 'Username is available.' : 'Username is already taken.'
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
