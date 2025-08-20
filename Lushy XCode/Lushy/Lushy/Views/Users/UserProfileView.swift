@@ -51,10 +51,10 @@ struct UserProfileView: View {
                         // Profile Header
                         ProfileHeaderView(profile: profile, viewModel: viewModel)
                         
-                        // Stats Section (customized)
-                        HStack(spacing: 20) {
-                            // Followers
-                            if viewModel.isViewingOwnProfile {
+                        // Stats Section (only show for own profile)
+                        if viewModel.isViewingOwnProfile {
+                            HStack(spacing: 20) {
+                                // Followers
                                 NavigationLink(destination: FollowersListView(followers: profile.followers ?? [], currentUserId: viewModel.currentUserId)) {
                                     StatItem(
                                         icon: "heart.fill",
@@ -63,17 +63,8 @@ struct UserProfileView: View {
                                         color: .lushyPink
                                     )
                                 }
-                            } else {
-                                StatItem(
-                                    icon: "heart.fill",
-                                    count: profile.followers?.count ?? 0,
-                                    label: "Followers",
-                                    color: .lushyPink
-                                )
-                            }
 
-                            // Following
-                            if viewModel.isViewingOwnProfile {
+                                // Following
                                 NavigationLink(destination: FollowingListView(following: profile.following ?? [], currentUserId: viewModel.currentUserId)) {
                                     StatItem(
                                         icon: "person.2.fill",
@@ -82,33 +73,26 @@ struct UserProfileView: View {
                                         color: .lushyPurple
                                     )
                                 }
-                            } else {
+
+                                // Products (active only)
                                 StatItem(
-                                    icon: "person.2.fill",
-                                    count: profile.following?.count ?? 0,
-                                    label: "Following",
-                                    color: .lushyPurple
+                                    icon: "sparkles",
+                                    count: viewModel.activeProductsCount,
+                                    label: "Products",
+                                    color: .lushyMint
+                                )
+                                
+                                // Finished Products
+                                StatItem(
+                                    icon: "checkmark.circle.fill",
+                                    count: viewModel.finishedProductsCount,
+                                    label: "Finished",
+                                    color: .lushyPeach
                                 )
                             }
-
-                            // Products (active only)
-                            StatItem(
-                                icon: "sparkles",
-                                count: viewModel.activeProductsCount,
-                                label: "Products",
-                                color: .lushyMint
-                            )
-                            
-                            // Finished Products
-                            StatItem(
-                                icon: "checkmark.circle.fill",
-                                count: viewModel.finishedProductsCount,
-                                label: "Finished",
-                                color: .lushyPeach
-                            )
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
-                        
+
                         // Favorites Section
                         if !viewModel.favorites.isEmpty {
                             FavoritesSection(favorites: viewModel.favorites)
@@ -224,25 +208,33 @@ struct ProfileHeaderView: View {
                             .multilineTextAlignment(.leading)
                     }
                     
-                    // Mini Stats Row
-                    HStack(spacing: 16) {
-                        MiniStatItem(
-                            count: profile.followers?.count ?? 0,
-                            label: "Followers",
-                            color: .lushyPink
-                        )
-                        
-                        MiniStatItem(
-                            count: profile.following?.count ?? 0,
-                            label: "Following",
-                            color: .lushyPurple
-                        )
-                        
-                        MiniStatItem(
-                            count: viewModel.activeProductsCount,
-                            label: "Products",
-                            color: .lushyMint
-                        )
+                    // Mini Stats Row (only show for other users' profiles)
+                    if !viewModel.isViewingOwnProfile {
+                        HStack(spacing: 16) {
+                            MiniStatItem(
+                                count: profile.followers?.count ?? 0,
+                                label: "Followers",
+                                color: .lushyPink
+                            )
+                            
+                            MiniStatItem(
+                                count: profile.following?.count ?? 0,
+                                label: "Following",
+                                color: .lushyPurple
+                            )
+                            
+                            MiniStatItem(
+                                count: viewModel.activeProductsCount,
+                                label: "Products",
+                                color: .lushyMint
+                            )
+                            
+                            MiniStatItem(
+                                count: viewModel.finishedProductsCount,
+                                label: "Finished",
+                                color: .lushyPeach
+                            )
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -285,23 +277,24 @@ struct ProfileHeaderView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: viewModel.isFollowing)
             } else {
-                // Edit Profile Button (if viewing own profile)
+                // Edit Profile Button (if viewing own profile) - smaller and more subtle
                 NavigationLink(destination: ProfileEditView(currentUser: profile)) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 4) {
                         Image(systemName: "pencil")
-                        Text("Edit Profile")
+                            .font(.caption2)
+                        Text("Edit")
+                            .font(.caption2)
                     }
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.lushyPink)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                     .background(Color.clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 25)
-                            .stroke(Color.lushyPink, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
                     )
-                    .cornerRadius(25)
+                    .cornerRadius(12)
                 }
             }
         }
