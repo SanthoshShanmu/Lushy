@@ -463,25 +463,147 @@ class APIService {
     func searchProducts(query: String, completion: @escaping (Result<[ProductSearchSummary], Error>) -> Void) {
         var components = URLComponents(url: baseURL.appendingPathComponent("products").appendingPathComponent("search"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "q", value: query)]
-        guard let url = components.url else { completion(.failure(APIError.invalidURL)); return }
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = AuthService.shared.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        
+        let request = URLRequest(url: components.url!)
+        
         URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error { completion(.failure(error)); return }
-            guard let http = response as? HTTPURLResponse, let data = data else { completion(.failure(APIError.invalidResponse)); return }
-            guard (200...299).contains(http.statusCode) else { completion(.failure(APIError.invalidResponse)); return }
-            // Decode wrapper { status, results, data: { products: [] } }
-            struct Wrapper: Decodable {
-                let status: String
-                let results: Int?
-                let data: Inner?
-                struct Inner: Decodable { let products: [ProductSearchSummary]? }
+            if let error = error {
+                completion(.failure(error))
+                return
             }
+            
+            guard let data = data else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
             do {
-                let wrapper = try self.jsonDecoder.decode(Wrapper.self, from: data)
-                let products = wrapper.data?.products ?? []
-                completion(.success(products))
+                struct SearchResponse: Decodable {
+                    let status: String
+                    let results: Int
+                    let data: SearchData
+                    
+                    struct SearchData: Decodable {
+                        let products: [ProductSearchSummary]
+                    }
+                }
+                
+                let response = try JSONDecoder().decode(SearchResponse.self, from: data)
+                completion(.success(response.data.products))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    
+    // Get users who own a specific product
+    func getUsersWhoOwnProduct(barcode: String, currentUserId: String? = nil, completion: @escaping (Result<UsersWhoOwnProductResponse, Error>) -> Void) {
+        var components = URLComponents(url: baseURL.appendingPathComponent("products").appendingPathComponent("barcode").appendingPathComponent(barcode).appendingPathComponent("users"), resolvingAgainstBaseURL: false)!
+        
+        if let currentUserId = currentUserId {
+            components.queryItems = [URLQueryItem(name: "currentUserId", value: currentUserId)]
+        }
+        
+        let request = URLRequest(url: components.url!)
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            do {
+                let response = try JSONDecoder().decode(UsersWhoOwnProductResponse.self, from: data)
+                completion(.success(response))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    
+    // Add product to user's collection from search results
+    func addProductToCollection(barcode: String, productName: String, brand: String?, imageUrl: String?, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let userId = AuthService.shared.userId else {
+            completion(.failure(APIError.authenticationRequired))
+            return
+        }
+        
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "barcode": barcode,
+            "productName": productName,
+            "brand": brand ?? "",
+            "imageUrl": imageUrl ?? "",
+            "purchaseDate": Date().timeIntervalSince1970 * 1000, // Convert to milliseconds
+            "vegan": false,
+            "crueltyFree": false
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401 {
+                    completion(.failure(APIError.authenticationRequired))
+                } else {
+                    completion(.failure(APIError.invalidResponse))
+                }
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            do {
+                struct ProductResponse: Codable {
+                    let status: String
+                    let data: ProductData
+                    
+                    struct ProductData: Codable {
+                        let product: ProductInfo
+                        
+                        struct ProductInfo: Codable {
+                            let _id: String
+                        }
+                    }
+                }
+                
+                let response = try JSONDecoder().decode(ProductResponse.self, from: data)
+                completion(.success(response.data.product._id))
             } catch {
                 completion(.failure(error))
             }

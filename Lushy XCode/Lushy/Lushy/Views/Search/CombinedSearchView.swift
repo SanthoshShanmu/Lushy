@@ -105,7 +105,7 @@ struct CombinedSearchView: View {
                         if !viewModel.productResults.isEmpty {
                             Text("Products").font(.headline).padding(.top)
                             ForEach(viewModel.productResults, id: \.id) { prod in
-                                NavigationLink(destination: ProductSlideshowView(products: [prod], currentUserId: currentUserId)) {
+                                NavigationLink(destination: SearchProductDetailView(product: prod, currentUserId: currentUserId)) {
                                     productRow(prod)
                                 }
                             }

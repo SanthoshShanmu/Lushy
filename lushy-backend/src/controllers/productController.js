@@ -28,17 +28,23 @@ exports.searchProducts = async (req, res) => {
     // Search only in product catalog (since UserProduct now references Product)
     const catalogProducts = await Product.find(searchCriteria)
       .limit(25)
-      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree')
+      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening category shade sizeInMl spf ingredients')
       .lean();
 
-    // Format the results
+    // Format the results with all detailed information
     const formattedProducts = catalogProducts.map(product => ({
       _id: product._id,
       productName: product.productName,
       brand: product.brand,
       barcode: product.barcode,
-      vegan: product.vegan,
-      crueltyFree: product.crueltyFree,
+      vegan: product.vegan || false,
+      crueltyFree: product.crueltyFree || false,
+      periodsAfterOpening: product.periodsAfterOpening,
+      category: product.category,
+      shade: product.shade,
+      sizeInMl: product.sizeInMl,
+      spf: product.spf,
+      ingredients: product.ingredients,
       imageUrl: product.imageData && product.imageMimeType 
         ? `data:${product.imageMimeType};base64,${product.imageData}`
         : product.imageUrl || '/uploads/defaults/default-placeholder.jpg'
@@ -116,5 +122,95 @@ exports.getProductDetail = async (req, res) => {
   } catch (error) {
     console.error('Product detail error:', error);
     res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+// Get users who own a specific product by barcode
+exports.getUsersWhoOwnProduct = async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    const currentUserId = req.query.currentUserId;
+    
+    // First, find the product in the catalog
+    const product = await Product.findOne({ barcode });
+    if (!product) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found'
+      });
+    }
+
+    // Find all user products that reference this product
+    const userProducts = await UserProduct.find({ product: product._id })
+      .populate('user', 'name username profileImage')
+      .lean();
+
+    // Get unique users and filter out the current user
+    const usersMap = new Map();
+    userProducts.forEach(userProduct => {
+      if (userProduct.user && userProduct.user._id.toString() !== currentUserId) {
+        const userId = userProduct.user._id.toString();
+        if (!usersMap.has(userId)) {
+          usersMap.set(userId, {
+            id: userProduct.user._id,
+            name: userProduct.user.name,
+            username: userProduct.user.username,
+            profileImage: userProduct.user.profileImage
+          });
+        }
+      }
+    });
+
+    const users = Array.from(usersMap.values());
+
+    // If current user is provided, filter to only show users they follow
+    if (currentUserId) {
+      try {
+        const currentUser = await User.findById(currentUserId).populate('following', '_id');
+        if (currentUser) {
+          const followingIds = currentUser.following.map(f => f._id.toString());
+          const followedUsers = users.filter(user => followingIds.includes(user.id.toString()));
+          
+          res.status(200).json({
+            status: 'success',
+            data: {
+              product: {
+                barcode: product.barcode,
+                productName: product.productName,
+                brand: product.brand,
+                imageUrl: product.imageData && product.imageMimeType 
+                  ? `data:${product.imageMimeType};base64,${product.imageData}`
+                  : product.imageUrl
+              },
+              users: followedUsers
+            }
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('Error filtering by following:', err);
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        product: {
+          barcode: product.barcode,
+          productName: product.productName,
+          brand: product.brand,
+          imageUrl: product.imageData && product.imageMimeType 
+            ? `data:${product.imageMimeType};base64,${product.imageData}`
+            : product.imageUrl
+        },
+        users: users
+      }
+    });
+  } catch (error) {
+    console.error('Get users who own product error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
   }
 };

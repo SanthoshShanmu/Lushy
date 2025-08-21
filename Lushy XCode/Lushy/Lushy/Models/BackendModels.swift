@@ -515,6 +515,14 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
     let productName: String
     let brand: String?
     let imageUrl: String?
+    let vegan: Bool
+    let crueltyFree: Bool
+    let periodsAfterOpening: String?
+    let category: String?
+    let shade: String?
+    let sizeInMl: Double?
+    let spf: Int?
+    let ingredients: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -522,6 +530,14 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         case productName
         case brand
         case imageUrl
+        case vegan
+        case crueltyFree
+        case periodsAfterOpening
+        case category
+        case shade
+        case sizeInMl
+        case spf
+        case ingredients
     }
 
     init(from decoder: Decoder) throws {
@@ -531,5 +547,31 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         productName = try container.decode(String.self, forKey: .productName)
         brand = try? container.decode(String.self, forKey: .brand)
         imageUrl = try? container.decode(String.self, forKey: .imageUrl)
+        vegan = (try? container.decode(Bool.self, forKey: .vegan)) ?? false
+        crueltyFree = (try? container.decode(Bool.self, forKey: .crueltyFree)) ?? false
+        periodsAfterOpening = try? container.decode(String.self, forKey: .periodsAfterOpening)
+        category = try? container.decode(String.self, forKey: .category)
+        shade = try? container.decode(String.self, forKey: .shade)
+        sizeInMl = try? container.decode(Double.self, forKey: .sizeInMl)
+        spf = try? container.decode(Int.self, forKey: .spf)
+        ingredients = try? container.decode([String].self, forKey: .ingredients)
+    }
+}
+
+// Model for users who own a product response
+struct UsersWhoOwnProductResponse: Codable {
+    let status: String
+    let data: UsersWhoOwnProductData
+    
+    struct UsersWhoOwnProductData: Codable {
+        let product: ProductInfo
+        let users: [UserSummary]
+        
+        struct ProductInfo: Codable {
+            let barcode: String
+            let productName: String
+            let brand: String?
+            let imageUrl: String?
+        }
     }
 }
