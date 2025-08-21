@@ -111,12 +111,24 @@ class ProductDetailViewModel: ObservableObject {
         // Prevent further remote lookups if product deleted
         if isDeleted { return }
         guard let userId = AuthService.shared.userId,
-              let prodBackendId = product.backendId else { return }
+              let prodBackendId = product.backendId else { 
+            print("❌ refreshRemoteDetail failed: Missing userId or product backendId")
+            print("   userId: \(AuthService.shared.userId ?? "nil")")
+            print("   backendId: \(product.backendId ?? "nil")")
+            return 
+        }
+        
+        print("🔄 refreshRemoteDetail starting for product: \(prodBackendId)")
+        
         APIService.shared.fetchUserProduct(userId: userId, productId: prodBackendId) { [weak self] result in
             guard let self = self, !self.isDeleted else { return }
             switch result {
             case .success(let backendProd):
+                print("✅ refreshRemoteDetail succeeded for product: \(prodBackendId)")
                 DispatchQueue.main.async {
+                    // Clear any previous error state since the call succeeded
+                    self.error = nil
+                    
                     let ctx = CoreDataManager.shared.viewContext
                     ctx.performAndWait {
                         // Ensure tag definitions exist locally for any fetched tags
@@ -201,10 +213,16 @@ class ProductDetailViewModel: ObservableObject {
                     }
                     self.refreshProduct()
                 }
-            case .failure:
+            case .failure(let error):
+                print("❌ refreshRemoteDetail failed for product: \(prodBackendId)")
+                print("   Error type: \(type(of: error))")
+                print("   Error description: \(error.localizedDescription)")
+                print("   APIError details: \(error)")
+                
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self, !self.isDeleted else { return }
-                    self.error = "Failed to refresh from server. Pull to refresh or tap to retry."
+                    // Show more detailed error message for debugging
+                    self.error = "Failed to refresh from server: \(error.localizedDescription)"
                 }
             }
         }

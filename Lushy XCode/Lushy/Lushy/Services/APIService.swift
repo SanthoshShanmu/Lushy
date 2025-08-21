@@ -66,7 +66,13 @@ struct UserSearchResponse: Codable {
 typealias UserSummaryResponse = [UserSummary]
 
 struct FeedResponse: Codable {
-    let feed: [Activity]
+    let status: String
+    let results: Int
+    let data: FeedData
+    
+    struct FeedData: Codable {
+        let activities: [Activity]
+    }
 }
 
 struct UserProfileWrapper: Codable {
@@ -95,6 +101,40 @@ class APIService {
     // Helper to convert Date to milliseconds since epoch (backend expects ms)
     private func msSinceEpoch(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970 * 1000) }
 
+    // Centralized JSONDecoder configuration for consistent date handling
+    private var jsonDecoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            // Try ISO8601 with fractional seconds first
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+            
+            // Try ISO8601 without fractional seconds
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+            
+            // Try standard date formatter as fallback
+            let fallbackFormatter = DateFormatter()
+            fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+            if let date = fallbackFormatter.date(from: dateString) {
+                return date
+            }
+            
+            // If all else fails, return current date
+            print("⚠️ Failed to decode date string: \(dateString), using current date")
+            return Date()
+        }
+        return decoder
+    }
+
     private init() {}
 
     func perform<T: Decodable>(request: URLRequest, completion: @escaping (Result<T, Error>) -> Void) {
@@ -110,7 +150,7 @@ class APIService {
             }
 
             do {
-                let decodedResponse = try JSONDecoder().decode(T.self, from: data)
+                let decodedResponse = try self.jsonDecoder.decode(T.self, from: data)
                 completion(.success(decodedResponse))
             } catch {
                 completion(.failure(error))
@@ -132,7 +172,7 @@ class APIService {
                 completion(.failure(http.statusCode == 401 ? .authenticationRequired : .invalidResponse)); return
             }
             do {
-                let resp = try JSONDecoder().decode(UserSettingsResponse.self, from: data)
+                let resp = try self.jsonDecoder.decode(UserSettingsResponse.self, from: data)
                 completion(.success(resp))
             } catch { completion(.failure(.decodingError)) }
         }.resume()
@@ -156,7 +196,7 @@ class APIService {
             }
             do {
                 struct UpdateResp: Codable { let settings: UserSettingsResponse.Settings }
-                let resp = try JSONDecoder().decode(UpdateResp.self, from: data)
+                let resp = try self.jsonDecoder.decode(UpdateResp.self, from: data)
                 completion(.success(resp.settings))
             } catch { completion(.failure(.decodingError)) }
         }.resume()
@@ -193,7 +233,11 @@ class APIService {
             
             guard (200...299).contains(httpResponse.statusCode) else {
                 print("APIService: HTTP error: \(httpResponse.statusCode)")
-                completion(.failure(APIError.invalidResponse))
+                if httpResponse.statusCode == 401 {
+                    completion(.failure(APIError.authenticationRequired))
+                } else {
+                    completion(.failure(APIError.invalidResponse))
+                }
                 return
             }
             
@@ -209,11 +253,43 @@ class APIService {
             }
             
             do {
-                let feedResponse = try JSONDecoder().decode(FeedResponse.self, from: data)
-                print("APIService: Successfully decoded \(feedResponse.feed.count) activities")
-                completion(.success(feedResponse.feed))
+                let feedResponse = try self.jsonDecoder.decode(FeedResponse.self, from: data)
+                print("APIService: Successfully decoded \(feedResponse.data.activities.count) activities")
+                completion(.success(feedResponse.data.activities))
             } catch {
                 print("APIService: Decoding error: \(error)")
+                if let decodingError = error as? DecodingError {
+                    switch decodingError {
+                    case .dataCorrupted(let context):
+                        print("Data corrupted: \(context)")
+                    case .keyNotFound(let key, let context):
+                        print("Key '\(key)' not found: \(context)")
+                        print("Available keys: \(context.codingPath)")
+                    case .typeMismatch(let type, let context):
+                        print("Type mismatch for type \(type): \(context)")
+                        print("Coding path: \(context.codingPath)")
+                    case .valueNotFound(let type, let context):
+                        print("Value not found for type \(type): \(context)")
+                        print("Coding path: \(context.codingPath)")
+                    @unknown default:
+                        print("Unknown decoding error")
+                    }
+                }
+                
+                // Try to decode just the status to see if the basic structure is there
+                if let basicResponse = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("Basic JSON structure: \(basicResponse.keys)")
+                    if let dataSection = basicResponse["data"] as? [String: Any] {
+                        print("Data section keys: \(dataSection.keys)")
+                        if let activities = dataSection["activities"] as? [[String: Any]] {
+                            print("Found \(activities.count) activities in raw JSON")
+                            if let firstActivity = activities.first {
+                                print("First activity keys: \(firstActivity.keys)")
+                            }
+                        }
+                    }
+                }
+                
                 completion(.failure(error))
             }
         }.resume()
@@ -282,7 +358,7 @@ class APIService {
                 completion(.failure(APIError.invalidResponse)); return }
             struct LikeResp: Decodable { let likes: Int; let liked: Bool }
             do {
-                let resp = try JSONDecoder().decode(LikeResp.self, from: data)
+                let resp = try self.jsonDecoder.decode(LikeResp.self, from: data)
                 completion(.success((likes: resp.likes, liked: resp.liked)))
             } catch { completion(.failure(error)) }
         }.resume()
@@ -305,7 +381,7 @@ class APIService {
                 completion(.failure(APIError.invalidResponse)); return }
             struct CommentResp: Decodable { let comments: [CommentSummary] }
             do {
-                let resp = try JSONDecoder().decode(CommentResp.self, from: data)
+                let resp = try self.jsonDecoder.decode(CommentResp.self, from: data)
                 completion(.success(resp.comments))
             } catch { completion(.failure(error)) }
         }.resume()
@@ -359,7 +435,7 @@ class APIService {
             }
             
             do {
-                let userProfileWrapper = try JSONDecoder().decode(UserProfileWrapper.self, from: data)
+                let userProfileWrapper = try self.jsonDecoder.decode(UserProfileWrapper.self, from: data)
                 print("APIService: Successfully decoded user profile for \(userProfileWrapper.user.name)")
                 completion(.success(userProfileWrapper))
             } catch {
@@ -403,7 +479,7 @@ class APIService {
                 struct Inner: Decodable { let products: [ProductSearchSummary]? }
             }
             do {
-                let wrapper = try JSONDecoder().decode(Wrapper.self, from: data)
+                let wrapper = try self.jsonDecoder.decode(Wrapper.self, from: data)
                 let products = wrapper.data?.products ?? []
                 completion(.success(products))
             } catch {
@@ -483,7 +559,7 @@ class APIService {
                     }
                 }
                 
-                let response = try JSONDecoder().decode(ProductResponse.self, from: data)
+                let response = try self.jsonDecoder.decode(ProductResponse.self, from: data)
                 let productInfo = response.data.product
                 
                 return Product(
@@ -743,7 +819,7 @@ class APIService {
                             }
                         }
                         
-                        let response = try JSONDecoder().decode(ProductResponse.self, from: data)
+                        let response = try self.jsonDecoder.decode(ProductResponse.self, from: data)
                         promise(.success(response.data.product._id))
                     } catch {
                         promise(.failure(.decodingError))
@@ -797,7 +873,7 @@ class APIService {
                     }
                 }
                 
-                let response = try JSONDecoder().decode(Response.self, from: data)
+                let response = try self.jsonDecoder.decode(Response.self, from: data)
                 return response.data.products
             }
             .mapError { error -> APIError in
@@ -862,9 +938,14 @@ class APIService {
                     }
                 }
                 
-                let response = try JSONDecoder().decode(Response.self, from: data)
+                // Configure JSONDecoder to properly parse ISO 8601 date strings
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                
+                let response = try decoder.decode(Response.self, from: data)
                 completion(.success(response.data.product))
             } catch {
+                print("JSONDecoder error: \(error)")
                 completion(.failure(.decodingError))
             }
         }.resume()
@@ -920,7 +1001,7 @@ class APIService {
                     }
                 }
                 
-                let response = try JSONDecoder().decode(Response.self, from: data)
+                let response = try self.jsonDecoder.decode(Response.self, from: data)
                 completion(.success(response.data.tags))
             } catch {
                 completion(.failure(.decodingError))
@@ -983,7 +1064,7 @@ class APIService {
                             let tag: TagSummary
                         }
                         
-                        let response = try JSONDecoder().decode(Response.self, from: data)
+                        let response = try self.jsonDecoder.decode(Response.self, from: data)
                         promise(.success(response.tag))
                     } catch {
                         promise(.failure(.decodingError))
@@ -1088,7 +1169,7 @@ class APIService {
                     }
                 }
                 
-                let response = try JSONDecoder().decode(Response.self, from: data)
+                let response = try self.jsonDecoder.decode(Response.self, from: data)
                 completion(.success(response.data.bags))
             } catch {
                 completion(.failure(.decodingError))
@@ -1152,7 +1233,7 @@ class APIService {
                             let bag: BeautyBagSummary
                         }
                         
-                        let response = try JSONDecoder().decode(Response.self, from: data)
+                        let response = try self.jsonDecoder.decode(Response.self, from: data)
                         promise(.success(response.bag))
                     } catch {
                         promise(.failure(.decodingError))

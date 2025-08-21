@@ -228,7 +228,7 @@ struct ActivityCard: View {
                     }
                 }
                 
-                // Compact content
+                // Compact content - only show description, no duplicate product name
                 VStack(alignment: .leading, spacing: 6) {
                     if let description = activity.description {
                         Text(description)
@@ -237,14 +237,6 @@ struct ActivityCard: View {
                             .foregroundColor(.primary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    
-                    if let productName = extractProductName() {
-                        Text(productName)
-                            .font(.caption)
-                            .foregroundColor(.lushyPink)
-                            .fontWeight(.semibold)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -335,30 +327,8 @@ struct ActivityCard: View {
         }
     }
     
-    private func timeAgoString(from dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        // Try full ISO8601 with fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withFractionalSeconds,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        // Fallback without fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        return "Unknown"
+    private func timeAgoString(from date: Date) -> String {
+        return date.timeAgoDisplay
     }
 }
 
@@ -649,23 +619,8 @@ struct ReviewActivityCard: View {
         return nil
     }
 
-    private func timeAgoString(from dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        // Fallback without fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        return "Unknown"
+    private func timeAgoString(from date: Date) -> String {
+        return date.timeAgoDisplay
     }
 }
 
@@ -878,30 +833,8 @@ struct BundledActivityCard: View {
         return "Product"
     }
     
-    private func timeAgoString(from dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        // Try full ISO8601 with fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withFractionalSeconds,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        // Fallback without fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        return "Unknown time"
+    private func timeAgoString(from date: Date) -> String {
+        return date.timeAgoDisplay
     }
 }
 

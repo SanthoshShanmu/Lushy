@@ -1,4 +1,6 @@
 const UserProduct = require('../models/userProduct');
+const ProductTag = require('../models/productTag');
+const BeautyBag = require('../models/beautyBag');
 const mongoose = require('mongoose');
 
 // Add PAO taxonomy data directly in the backend
@@ -70,14 +72,36 @@ exports.getUserProducts = async (req, res) => {
     const products = await UserProduct.find({ user: new mongoose.Types.ObjectId(req.params.userId) })
        .populate('product') // Populate the product catalog reference
        .populate('tags', 'name color')
-       .populate('bags', 'name');
+       .populate('bags', 'name')
+       .lean(); // Use lean for better performance
+
+    // Ensure all fields are present in the response for each product
+    const responseProducts = products.map(product => ({
+      _id: product._id,
+      product: product.product,
+      purchaseDate: product.purchaseDate,
+      openDate: product.openDate,
+      expireDate: product.expireDate,
+      favorite: product.favorite || false,
+      isFinished: product.isFinished || false,
+      finishDate: product.finishDate,
+      currentAmount: product.currentAmount || 100.0,
+      timesUsed: product.timesUsed || 0,
+      tags: product.tags || [],
+      bags: product.bags || [],
+      quantity: product.quantity || 1,
+      comments: product.comments || [],
+      reviews: product.reviews || [],
+      usageEntries: product.usageEntries || []
+    }));
 
     res.status(200).json({
       status: 'success',
-      results: products.length,
-      data: { products }
+      results: responseProducts.length,
+      data: { products: responseProducts }
     });
   } catch (error) {
+    console.error('getUserProducts error:', error);
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -94,7 +118,8 @@ exports.getUserProduct = async (req, res) => {
     })
       .populate('product') // Populate the product catalog reference
       .populate('tags', 'name color')
-      .populate('bags', 'name');
+      .populate('bags', 'name')
+      .lean(); // Use lean for better performance
 
     if (!product) {
       return res.status(404).json({
@@ -102,24 +127,54 @@ exports.getUserProduct = async (req, res) => {
         message: 'Product not found'
       });
     }
-    
-    // Get user's region from request or user profile
-    const userRegion = req.query.region || req.user?.region || 'GLOBAL';
-    
-    // Add compliance advisory
-    const complianceInfo = {
-      advisory: getExpiryGuideline(userRegion),
-      region: userRegion
+
+    // Format the response to match the iOS app's expected BackendUserProduct structure
+    const responseProduct = {
+      _id: product._id,
+      // Nested product catalog structure that matches BackendProductCatalog
+      product: {
+        _id: product.product._id,
+        barcode: product.product.barcode,
+        productName: product.product.productName,
+        brand: product.product.brand || null,
+        imageUrl: product.product.imageData && product.product.imageMimeType 
+          ? `data:${product.product.imageMimeType};base64,${product.product.imageData}`
+          : product.product.imageUrl || '/uploads/defaults/default-placeholder.jpg',
+        imageData: product.product.imageData || null,
+        imageMimeType: product.product.imageMimeType || null,
+        periodsAfterOpening: product.product.periodsAfterOpening || null,
+        vegan: product.product.vegan || false,
+        crueltyFree: product.product.crueltyFree || false,
+        category: product.product.category || null,
+        shade: product.product.shade || null,
+        sizeInMl: product.product.sizeInMl || null,
+        spf: product.product.spf || null
+      },
+      // User-specific fields with proper date formatting
+      purchaseDate: product.purchaseDate ? product.purchaseDate.toISOString() : new Date().toISOString(),
+      openDate: product.openDate ? product.openDate.toISOString() : null,
+      expireDate: product.expireDate ? product.expireDate.toISOString() : null,
+      favorite: product.favorite || false,
+      isFinished: product.isFinished || false,
+      finishDate: product.finishDate ? product.finishDate.toISOString() : null,
+      currentAmount: product.currentAmount || 100.0,
+      timesUsed: product.timesUsed || 0,
+      tags: product.tags || [],
+      bags: product.bags || [],
+      quantity: product.quantity || 1,
+      comments: product.comments || [],
+      reviews: product.reviews || [],
+      usageEntries: product.usageEntries || []
     };
 
     res.status(200).json({
       status: 'success',
       data: { 
-        product,
-        compliance: complianceInfo
+        product: responseProduct
       }
     });
   } catch (error) {
+    console.error('getUserProduct error:', error);
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -148,6 +203,10 @@ exports.createUserProduct = async (req, res) => {
       periodsAfterOpening: rawBody.periodsAfterOpening,
       vegan: rawBody.vegan || false,
       crueltyFree: rawBody.crueltyFree || false,
+      // Product-specific attributes (different values = different barcodes)
+      shade: rawBody.shade,
+      sizeInMl: rawBody.sizeInMl,
+      spf: rawBody.spf,
       category: rawBody.category || getFallbackCategory(rawBody.productName)
     };
     
@@ -156,9 +215,6 @@ exports.createUserProduct = async (req, res) => {
       purchaseDate: rawBody.purchaseDate || new Date(),
       openDate: rawBody.openDate,
       favorite: rawBody.favorite || false,
-      shade: rawBody.shade,
-      sizeInMl: rawBody.sizeInMl,
-      spf: rawBody.spf,
       tags: rawBody.tags || [],
       bags: rawBody.bags || []
     };
@@ -263,8 +319,6 @@ exports.updateUserProduct = async (req, res) => {
     if (req.body.userId) delete req.body.userId;
     if (req.body.purchaseDate && /^(\d+)$/.test(req.body.purchaseDate)) req.body.purchaseDate = new Date(Number(req.body.purchaseDate));
     if (req.body.openDate && /^(\d+)$/.test(req.body.openDate)) req.body.openDate = new Date(Number(req.body.openDate));
-    if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) req.body.sizeInMl = Number(req.body.sizeInMl);
-    if (req.body.spf && /^(\d+)$/.test(req.body.spf)) req.body.spf = Number(req.body.spf);
     
     // Get the existing user product first
     const existingUserProduct = await UserProduct.findOne({
@@ -277,6 +331,27 @@ exports.updateUserProduct = async (req, res) => {
         status: 'fail',
         message: 'Product not found'
       });
+    }
+    
+    // Handle updates to product-specific fields (shade, sizeInMl, spf)
+    const productUpdates = {};
+    if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) {
+      productUpdates.sizeInMl = Number(req.body.sizeInMl);
+      delete req.body.sizeInMl; // Remove from user product updates
+    }
+    if (req.body.spf && /^(\d+)$/.test(req.body.spf)) {
+      productUpdates.spf = Number(req.body.spf);
+      delete req.body.spf; // Remove from user product updates
+    }
+    if (req.body.shade) {
+      productUpdates.shade = req.body.shade;
+      delete req.body.shade; // Remove from user product updates
+    }
+    
+    // Update product catalog if there are product-specific field changes
+    if (Object.keys(productUpdates).length > 0) {
+      const Product = require('../models/product');
+      await Product.findByIdAndUpdate(existingUserProduct.product._id, productUpdates);
     }
     
     // Handle image upload - update the product catalog if new image provided

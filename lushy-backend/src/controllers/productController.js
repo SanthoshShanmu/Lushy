@@ -41,7 +41,7 @@ exports.searchProducts = async (req, res) => {
       crueltyFree: product.crueltyFree,
       imageUrl: product.imageData && product.imageMimeType 
         ? `data:${product.imageMimeType};base64,${product.imageData}`
-        : product.imageUrl || null
+        : product.imageUrl || '/uploads/defaults/default-placeholder.jpg'
     }));
 
     res.status(200).json({ 
@@ -84,7 +84,7 @@ exports.getProductByBarcode = async (req, res) => {
       ingredients: product.ingredients,
       imageUrl: product.imageData && product.imageMimeType 
         ? `data:${product.imageMimeType};base64,${product.imageData}`
-        : product.imageUrl || null
+        : product.imageUrl || '/uploads/defaults/default-placeholder.jpg'
     };
 
     res.status(200).json({ 

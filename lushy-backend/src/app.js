@@ -35,8 +35,8 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // Body parser, reading data from body into req.body
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.json({ limit: '15mb' })); // Increased from '10kb' to '15mb' to handle base64 images
+app.use(express.urlencoded({ extended: true, limit: '15mb' })); // Also increased urlencoded limit
 
 // Enable CORS
 app.use(cors());

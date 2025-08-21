@@ -100,10 +100,6 @@ const UserProductSchema = new Schema({
   finishDate: Date,
   // Usage entries for detailed tracking
   usageEntries: [UsageEntrySchema],
-  // User-specific metadata (can override product defaults)
-  shade: { type: String },
-  sizeInMl: { type: Number },
-  spf: { type: Number },
   // Quantity field to track similar products
   quantity: {
     type: Number,

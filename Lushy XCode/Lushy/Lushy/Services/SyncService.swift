@@ -294,9 +294,6 @@ class SyncService {
         localProduct.finishDate = backendProduct.finishDate
         localProduct.currentAmount = backendProduct.currentAmount
         localProduct.timesUsed = backendProduct.timesUsed
-        localProduct.shade = backendProduct.shade
-        localProduct.sizeInMl = backendProduct.sizeInMl ?? 0
-        localProduct.spf = Int16(backendProduct.spf ?? 0)
         localProduct.quantity = Int32(backendProduct.quantity)
         
         // Update product catalog fields from nested product object
@@ -306,6 +303,9 @@ class SyncService {
         localProduct.periodsAfterOpening = backendProduct.product.periodsAfterOpening
         localProduct.vegan = backendProduct.product.vegan
         localProduct.crueltyFree = backendProduct.product.crueltyFree
+        localProduct.shade = backendProduct.product.shade
+        localProduct.sizeInMl = backendProduct.product.sizeInMl ?? 0
+        localProduct.spf = Int16(backendProduct.product.spf ?? 0)
         
         // Handle image URL from product catalog
         if let imageData = backendProduct.product.imageData,
@@ -333,6 +333,11 @@ class SyncService {
         product.vegan = backendProduct.product.vegan
         product.crueltyFree = backendProduct.product.crueltyFree
         
+        // Set product-specific attributes from product catalog
+        product.shade = backendProduct.product.shade
+        product.sizeInMl = backendProduct.product.sizeInMl ?? 0
+        product.spf = Int16(backendProduct.product.spf ?? 0)
+        
         // Handle image URL from product catalog
         if let imageData = backendProduct.product.imageData,
            let mimeType = backendProduct.product.imageMimeType {
@@ -350,12 +355,9 @@ class SyncService {
         product.finishDate = backendProduct.finishDate
         product.currentAmount = backendProduct.currentAmount
         product.timesUsed = backendProduct.timesUsed
-        product.shade = backendProduct.shade
-        product.sizeInMl = backendProduct.sizeInMl ?? 0
-        product.spf = Int16(backendProduct.spf ?? 0)
         product.quantity = Int32(backendProduct.quantity)
         
-        // Set Core Data metadata
+        // Set metadata
         product.userId = AuthService.shared.userId ?? ""
         product.backendId = backendProduct.id
         

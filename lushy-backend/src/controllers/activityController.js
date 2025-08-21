@@ -118,7 +118,14 @@ exports.getFeed = async (req, res) => {
       }
     });
     
-    res.json({ feed: feedWithLiked || [] });
+    // Return response in the format expected by iOS frontend
+    res.json({ 
+      status: 'success',
+      results: feedWithLiked.length,
+      data: {
+        activities: feedWithLiked || []
+      }
+    });
   } catch (err) {
     console.error('Feed error:', err);
     res.status(500).json({

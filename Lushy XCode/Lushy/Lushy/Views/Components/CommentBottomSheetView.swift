@@ -253,33 +253,8 @@ struct CommentRowView: View {
         )
     }
     
-    private func timeAgoString(from dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withFractionalSeconds,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        
-        // Fallback without fractional seconds
-        formatter.formatOptions = [
-            .withFullDate, .withTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withColonSeparatorInTimeZone
-        ]
-        
-        if let date = formatter.date(from: dateString) {
-            return date.timeAgoDisplay
-        }
-        
-        return "Unknown"
+    private func timeAgoString(from date: Date) -> String {
+        return date.timeAgoDisplay
     }
 }
 

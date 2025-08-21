@@ -75,21 +75,49 @@ exports.getUserProfile = async (req, res) => {
       bags = await BeautyBag.find({ user: userId }).select('name color icon');
       // Remove duplicate bag entries by name
       bags = bags.filter((bag, idx) => bags.findIndex(b => b.name === bag.name) === idx);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error fetching bags:', e);
+    }
     try {
       const UserProduct = require('../models/userProduct');
-      // Fetch products for user with populated tags and bags
-      products = await UserProduct.find({ user: userId })
-        .select('productName brand favorite tags bags barcode imageUrl purchaseDate openDate periodsAfterOpening vegan crueltyFree isFinished')
+      // Fetch products for user with populated product catalog and relationships
+      const userProducts = await UserProduct.find({ user: userId })
+        .populate('product') // Populate the product catalog reference
         .populate('tags', 'name color')
-        .populate('bags', 'name');
-    } catch (e) {}
+        .populate('bags', 'name')
+        .lean();
+
+      // Transform to match expected structure for profile
+      products = userProducts.map(userProduct => ({
+        _id: userProduct._id,
+        // Use product catalog fields
+        productName: userProduct.product?.productName || 'Unknown Product',
+        brand: userProduct.product?.brand,
+        barcode: userProduct.product?.barcode,
+        imageUrl: userProduct.product?.imageData && userProduct.product?.imageMimeType 
+          ? `data:${userProduct.product.imageMimeType};base64,${userProduct.product.imageData}`
+          : userProduct.product?.imageUrl || '/uploads/defaults/default-placeholder.jpg',
+        periodsAfterOpening: userProduct.product?.periodsAfterOpening,
+        vegan: userProduct.product?.vegan || false,
+        crueltyFree: userProduct.product?.crueltyFree || false,
+        // User-specific fields
+        favorite: userProduct.favorite || false,
+        isFinished: userProduct.isFinished || false,
+        purchaseDate: userProduct.purchaseDate,
+        openDate: userProduct.openDate,
+        tags: userProduct.tags || [],
+        bags: userProduct.bags || []
+      }));
+    } catch (e) {
+      console.error('Error fetching products:', e);
+    }
     // Attach bags and products to user object
     user = user.toObject();
     user.bags = bags;
     user.products = products;
     res.json({ user });
   } catch (err) {
+    console.error('getUserProfile error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
