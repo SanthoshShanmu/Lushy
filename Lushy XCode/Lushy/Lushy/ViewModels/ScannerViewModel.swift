@@ -22,6 +22,10 @@ class ScannerViewModel: ObservableObject {
     @Published var manualShade = ""
     @Published var manualSizeInMl = ""
     @Published var manualSpf = ""
+    
+    // Ethics properties for UI binding
+    @Published var isVegan = false
+    @Published var isCrueltyFree = false
 
     // Form data for adding product
     @Published var purchaseDate = Date()
@@ -194,6 +198,10 @@ class ScannerViewModel: ObservableObject {
                 
                 // Set default ethics info since we only use database
                 self.ethicsInfo = EthicsInfo(vegan: product.vegan ?? false, crueltyFree: product.crueltyFree ?? false)
+                
+                // Also populate the individual properties for UI binding
+                self.isVegan = product.vegan ?? false
+                self.isCrueltyFree = product.crueltyFree ?? false
             })
             .store(in: &cancellables)
     }
@@ -292,8 +300,8 @@ class ScannerViewModel: ObservableObject {
             purchaseDate: purchaseDate,
             openDate: openDateValue,
             periodsAfterOpening: paoValue,
-            vegan: ethicsInfo?.vegan ?? false,
-            crueltyFree: ethicsInfo?.crueltyFree ?? false,
+            vegan: isVegan,
+            crueltyFree: isCrueltyFree,
             expiryOverride: expiryDate
         )
         // Let caller handle navigation after saving
@@ -326,8 +334,8 @@ class ScannerViewModel: ObservableObject {
             purchaseDate: purchaseDate,
             openDate: isProductOpen ? openDate : nil,
             periodsAfterOpening: periodsAfterOpening ?? self.periodsAfterOpening,
-            vegan: ethicsInfo?.vegan ?? false,
-            crueltyFree: ethicsInfo?.crueltyFree ?? false,
+            vegan: isVegan,
+            crueltyFree: isCrueltyFree,
             expiryOverride: nil,
             shade: shadeValue,
             sizeInMl: sizeValue,
@@ -363,6 +371,8 @@ class ScannerViewModel: ObservableObject {
         manualShade = ""
         manualSizeInMl = ""
         manualSpf = ""
+        isVegan = false
+        isCrueltyFree = false
         isProductOpen = false
         openDate = nil
         purchaseDate = Date()

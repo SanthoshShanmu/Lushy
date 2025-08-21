@@ -378,6 +378,69 @@ struct ManualEntryView: View {
                 .focused($focusField, equals: .productName)
             TextField("Brand (Optional)", text: $viewModel.manualBrand)
                 .textFieldStyle(.roundedBorder)
+            
+            // Ethics toggles in a nice card layout
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ethics Information")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                HStack(spacing: 20) {
+                    // Vegan toggle
+                    Button(action: {
+                        viewModel.isVegan.toggle()
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: viewModel.isVegan ? "leaf.fill" : "leaf")
+                                .foregroundColor(viewModel.isVegan ? .green : .gray)
+                                .font(.system(size: 18))
+                            Text("Vegan")
+                                .font(.subheadline)
+                                .foregroundColor(viewModel.isVegan ? .green : .primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(viewModel.isVegan ? Color.green.opacity(0.15) : Color.gray.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(viewModel.isVegan ? Color.green : Color.clear, lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Cruelty-free toggle
+                    Button(action: {
+                        viewModel.isCrueltyFree.toggle()
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: viewModel.isCrueltyFree ? "heart.fill" : "heart")
+                                .foregroundColor(viewModel.isCrueltyFree ? .pink : .gray)
+                                .font(.system(size: 18))
+                            Text("Cruelty-Free")
+                                .font(.subheadline)
+                                .foregroundColor(viewModel.isCrueltyFree ? .pink : .primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(viewModel.isCrueltyFree ? Color.pink.opacity(0.15) : Color.gray.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(viewModel.isCrueltyFree ? Color.pink : Color.clear, lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                }
+            }
+            .padding(.vertical, 4)
+            
             // Metadata inputs
             TextField("Shade (Optional)", text: $viewModel.manualShade)
                 .textFieldStyle(.roundedBorder)

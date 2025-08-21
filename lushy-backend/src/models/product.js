@@ -7,7 +7,6 @@ const ProductSchema = new Schema({
     type: String,
     required: true,
     unique: true
-    // Removed: index: true (to avoid duplicate with explicit index below)
   },
   productName: {
     type: String,
@@ -17,16 +16,7 @@ const ProductSchema = new Schema({
   imageUrl: String, // Keep for backward compatibility
   imageData: String, // Base64 image data stored in MongoDB
   imageMimeType: String, // MIME type for proper display
-  ingredients: [String], // Array of ingredients
   periodsAfterOpening: String, // PAO information like "12M"
-  periodsAfterOpeningTags: [String], // Alternative PAO formats
-  batchCode: String,
-  manufactureDate: Date,
-  complianceAdvisory: String,
-  regionSpecificGuidelines: {
-    type: Map,
-    of: String
-  },
   // Ethics information
   vegan: {
     type: Boolean,
@@ -42,7 +32,6 @@ const ProductSchema = new Schema({
   spf: Number, // e.g., 15, 30, 50 for different SPF levels
   // Additional metadata
   category: String, // e.g., "skincare", "makeup", "haircare"
-  subcategory: String,
   // Contribution tracking
   contributedBy: [{
     source: String, // "user_submission", "manual_entry", etc.
@@ -51,10 +40,6 @@ const ProductSchema = new Schema({
       default: Date.now
     }
   }],
-  verified: {
-    type: Boolean,
-    default: false
-  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -89,7 +74,6 @@ ProductSchema.statics.findOrCreateByBarcode = async function(barcodeData) {
           imageData: barcodeData.imageData,
           imageMimeType: barcodeData.imageMimeType,
           imageUrl: barcodeData.imageUrl,
-          ingredients: barcodeData.ingredients,
           periodsAfterOpening: barcodeData.periodsAfterOpening,
           vegan: barcodeData.vegan || false,
           crueltyFree: barcodeData.crueltyFree || false,

@@ -319,8 +319,67 @@ struct ProductFoundView: View {
                     }
                     .padding(.vertical, 5)
                     
-                    Divider()
-                        .background(Color.gray)
+                    // Ethics toggles for user to modify
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Ethics Information")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        HStack(spacing: 20) {
+                            // Vegan toggle
+                            Button(action: {
+                                viewModel.isVegan.toggle()
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: viewModel.isVegan ? "leaf.fill" : "leaf")
+                                        .foregroundColor(viewModel.isVegan ? .green : .gray)
+                                        .font(.system(size: 16))
+                                    Text("Vegan")
+                                        .font(.caption)
+                                        .foregroundColor(viewModel.isVegan ? .green : .white)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(viewModel.isVegan ? Color.green.opacity(0.2) : Color.gray.opacity(0.3))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .stroke(viewModel.isVegan ? Color.green : Color.clear, lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            // Cruelty-free toggle
+                            Button(action: {
+                                viewModel.isCrueltyFree.toggle()
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: viewModel.isCrueltyFree ? "heart.fill" : "heart")
+                                        .foregroundColor(viewModel.isCrueltyFree ? .pink : .gray)
+                                        .font(.system(size: 16))
+                                    Text("Cruelty-Free")
+                                        .font(.caption)
+                                        .foregroundColor(viewModel.isCrueltyFree ? .pink : .white)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(viewModel.isCrueltyFree ? Color.pink.opacity(0.2) : Color.gray.opacity(0.3))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .stroke(viewModel.isCrueltyFree ? Color.pink : Color.clear, lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                        }
+                    }
+                    .padding(.vertical, 4)
                     
                     VStack(alignment: .leading, spacing: 15) {
                         DatePicker("Purchase Date", selection: $viewModel.purchaseDate, displayedComponents: .date)
