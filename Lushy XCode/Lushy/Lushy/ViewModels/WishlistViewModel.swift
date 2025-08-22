@@ -63,6 +63,17 @@ class WishlistViewModel: ObservableObject {
     func addWishlistItem() {
         guard !newProductName.isEmpty, !newProductURL.isEmpty else { return }
         
+        // Check for duplicates by product name and URL
+        let isDuplicate = wishlistItems.contains { item in
+            item.productName.lowercased() == newProductName.lowercased() ||
+            item.productURL.lowercased() == newProductURL.lowercased()
+        }
+        
+        if isDuplicate {
+            errorMessage = "This product is already in your wishlist!"
+            return
+        }
+        
         let item = NewWishlistItem(
             productName: newProductName,
             productURL: newProductURL,

@@ -241,6 +241,9 @@ exports.createUserProduct = async (req, res) => {
     const Product = require('../models/product');
     let newUserProduct;
     
+    // REMOVED: Quantity-based logic that prevented duplicate products
+    // Now always create a new UserProduct instance, allowing multiple instances of the same product
+    
     if (productCatalogData.barcode) {
       // For products with barcodes, use the atomic findOrCreateByBarcode method
       newUserProduct = await UserProduct.createWithProduct(userProductData, productCatalogData);
@@ -248,17 +251,10 @@ exports.createUserProduct = async (req, res) => {
       // For manual entries without barcode, create unique product per user
       const uniqueProductData = {
         ...productCatalogData,
-        barcode: `manual_${userProductData.user}_${productCatalogData.productName}_${productCatalogData.brand || ''}`
+        barcode: `manual_${userProductData.user}_${productCatalogData.productName}_${productCatalogData.brand || ''}_${Date.now()}`  // Add timestamp for uniqueness
       };
       newUserProduct = await UserProduct.createWithProduct(userProductData, uniqueProductData);
     }
-    
-    // Update quantity for similar products (products with same product reference)
-    await UserProduct.updateSimilarProductsQuantity(
-      newUserProduct.user,
-      newUserProduct.product,
-      true // increment
-    );
     
     // Activity: Product added
     try {

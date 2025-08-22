@@ -88,7 +88,7 @@ struct FinishedProductDetailView: View {
                 
                 // Finish date
                 if let finishDate = product.finishDate {
-                    Text("Completed on \(DateFormatter.mediumDate.string(from: finishDate))")
+                    Text("Completed on \(DateFormatter.medium.string(from: finishDate))")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -129,11 +129,11 @@ struct FinishedProductDetailView: View {
                 }
                 
                 if let purchaseDate = product.purchaseDate {
-                    detailRow(label: "Purchased", value: DateFormatter.mediumDate.string(from: purchaseDate))
+                    detailRow(label: "Purchased", value: DateFormatter.medium.string(from: purchaseDate))
                 }
                 
                 if let openDate = product.openDate {
-                    detailRow(label: "Opened", value: DateFormatter.mediumDate.string(from: openDate))
+                    detailRow(label: "Opened", value: DateFormatter.medium.string(from: openDate))
                 }
             }
         }
@@ -198,7 +198,7 @@ struct FinishedProductDetailView: View {
                         }
                         Spacer()
                         if let createdAt = review.createdAt {
-                            Text(DateFormatter.mediumDate.string(from: createdAt))
+                            Text(DateFormatter.medium.string(from: createdAt))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -319,12 +319,4 @@ struct FinishedProductDetailView: View {
             return "\(years) year\(years == 1 ? "" : "s")"
         }
     }
-}
-
-extension DateFormatter {
-    static let mediumDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter
-    }()
 }

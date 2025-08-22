@@ -266,7 +266,6 @@ UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId,
 };
 
 // Indexes for efficient queries
-UserProductSchema.index({ user: 1, product: 1 }, { unique: true }); // Prevent duplicate user-product combinations
 UserProductSchema.index({ user: 1 });
 UserProductSchema.index({ product: 1 });
 UserProductSchema.index({ user: 1, isFinished: 1 });

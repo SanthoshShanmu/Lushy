@@ -8,6 +8,9 @@ struct SearchProductDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     @State private var showingWishlistAlert = false
     @State private var wishlistMessage: String?
+    // Add separate alert state for collection
+    @State private var showingCollectionAlert = false
+    @State private var collectionMessage: String?
     
     init(product: ProductSearchSummary, currentUserId: String) {
         self.product = product
@@ -55,6 +58,12 @@ struct SearchProductDetailView: View {
             Button("OK") { wishlistMessage = nil }
         } message: {
             Text(wishlistMessage ?? "")
+        }
+        // Add separate alert for collection
+        .alert("Collection", isPresented: $showingCollectionAlert) {
+            Button("OK") { collectionMessage = nil }
+        } message: {
+            Text(collectionMessage ?? "")
         }
     }
     
@@ -172,11 +181,11 @@ struct SearchProductDetailView: View {
                 viewModel.addToCollection { result in
                     switch result {
                     case .success:
-                        wishlistMessage = "Added to your collection! 🎉"
-                        showingWishlistAlert = true
+                        collectionMessage = "Added to your collection! 🎉"
+                        showingCollectionAlert = true
                     case .failure(let error):
-                        wishlistMessage = "Failed to add to collection: \(error.localizedDescription)"
-                        showingWishlistAlert = true
+                        collectionMessage = "Failed to add to collection: \(error.localizedDescription)"
+                        showingCollectionAlert = true
                     }
                 }
             }) {

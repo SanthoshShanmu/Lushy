@@ -12,10 +12,10 @@ const router = express.Router();
 // Mount all route modules
 router.use('/users', userRoutes);
 router.use('/users/:userId/products', userProductRoutes); // Add this line to mount user product routes
+router.use('/users/:userId/wishlist', wishlistRoutes); // Mount wishlist routes under users path
 router.use('/products', productRoutes);
 router.use('/auth', authRoutes);
 router.use('/activities', activityRoutes);
-router.use('/wishlist', wishlistRoutes);
 router.use('/notifications', notificationRoutes);
 
 module.exports = router;

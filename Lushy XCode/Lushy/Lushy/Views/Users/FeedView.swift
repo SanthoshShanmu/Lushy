@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct FeedView: View {
     @StateObject var viewModel: FeedViewModel
@@ -841,34 +842,421 @@ struct BundledActivityCard: View {
 // MARK: - General Product Detail View
 struct GeneralProductDetailView: View {
     @StateObject private var viewModel: GeneralProductDetailViewModel
+    @State private var showingWishlistAlert = false
+    @State private var wishlistMessage: String?
+    @State private var alertTitle: String = "Success"
+    
     init(userId: String, productId: String) {
         _viewModel = StateObject(wrappedValue: GeneralProductDetailViewModel(userId: userId, productId: productId))
     }
+    
     var body: some View {
-        VStack {
+        ZStack {
+            // Beautiful gradient background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.lushyPink.opacity(0.08),
+                    Color.lushyPurple.opacity(0.04),
+                    Color.lushyCream.opacity(0.3),
+                    Color.white
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
             if viewModel.isLoading {
-                ProgressView()
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                        .scaleEffect(1.5)
+                    Text("Loading product details...")
+                        .font(.subheadline)
+                        .foregroundColor(.lushyPink)
+                }
             } else if let error = viewModel.error {
-                Text(error).foregroundColor(.red).multilineTextAlignment(.center).padding()
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 50))
+                        .foregroundColor(.lushyPink.opacity(0.6))
+                    Text("Product Unavailable")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.lushyPink)
+                    Text(error)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .padding()
             } else if let product = viewModel.product {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if let urlString = product.imageUrl, let url = URL(string: urlString) {
-                            AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { Color.gray.opacity(0.3) }
-                                .frame(maxWidth: .infinity, maxHeight: 200)
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Product Header
+                        GeneralProductHeader(product: product)
+                        
+                        // Product Details
+                        GeneralProductDetails(product: product)
+                        
+                        // Ethics Information
+                        if product.product.vegan || product.product.crueltyFree {
+                            GeneralEthicsSection(product: product.product)
                         }
-                        Text(product.productName)
-                            .font(.title2).fontWeight(.bold)
-                        if let brand = product.brand {
-                            Text(brand).font(.subheadline).foregroundColor(.secondary)
-                        }
+                        
+                        // Add to Collection/Wishlist Actions
+                        GeneralProductActions(
+                            product: product.product,
+                            wishlistMessage: $wishlistMessage,
+                            showingWishlistAlert: $showingWishlistAlert,
+                            alertTitle: $alertTitle
+                        )
                     }
                     .padding()
                 }
             } else {
-                Text("No product details available").foregroundColor(.secondary)
+                Text("No product details available")
+                    .foregroundColor(.secondary)
             }
         }
-        .navigationTitle(viewModel.product?.productName ?? "Product")
+        .navigationTitle(viewModel.product?.product.productName ?? "Product")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(alertTitle, isPresented: $showingWishlistAlert) {
+            Button("OK") { 
+                wishlistMessage = nil
+                alertTitle = "Success"
+            }
+        } message: {
+            Text(wishlistMessage ?? "")
+        }
+    }
+}
+
+// MARK: - General Product Header
+private struct GeneralProductHeader: View {
+    let product: BackendUserProduct
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Product Image
+            HStack {
+                Spacer()
+                AsyncImage(url: URL(string: product.product.imageUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray)
+                        )
+                }
+                .frame(width: 200, height: 200)
+                .cornerRadius(16)
+                .shadow(radius: 8)
+                Spacer()
+            }
+            
+            // Product Info
+            VStack(alignment: .leading, spacing: 8) {
+                if let brand = product.product.brand, !brand.isEmpty {
+                    Text(brand.uppercased())
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.lushyPurple)
+                        .textCase(.uppercase)
+                        .tracking(1)
+                }
+                
+                Text(product.product.productName)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                // Product metadata tags
+                HStack(spacing: 8) {
+                    if let shade = product.product.shade, !shade.isEmpty {
+                        Text(shade)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyPurple.opacity(0.2))
+                            .foregroundColor(.lushyPurple)
+                            .cornerRadius(12)
+                    }
+                    if let sizeInMl = product.product.sizeInMl, sizeInMl > 0 {
+                        Text("\(String(format: "%.0f", sizeInMl)) ml")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyMint.opacity(0.2))
+                            .foregroundColor(.lushyMint)
+                            .cornerRadius(12)
+                    }
+                    if let spf = product.product.spf, spf > 0 {
+                        Text("SPF \(spf)")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.lushyPeach.opacity(0.2))
+                            .foregroundColor(.lushyPeach)
+                            .cornerRadius(12)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+        )
+    }
+}
+
+// MARK: - General Product Details
+private struct GeneralProductDetails: View {
+    let product: BackendUserProduct
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Product Details")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.lushyPurple)
+            
+            VStack(spacing: 12) {
+                if !product.product.barcode.isEmpty {
+                    detailRow(label: "Barcode", value: product.product.barcode)
+                }
+                
+                if let category = product.product.category, !category.isEmpty {
+                    detailRow(label: "Category", value: category.capitalized)
+                }
+                
+                if let pao = product.product.periodsAfterOpening, !pao.isEmpty {
+                    detailRow(label: "Period After Opening", value: pao)
+                }
+                
+                // Fix: Remove optional binding since purchaseDate is not optional
+                detailRow(label: "Owner purchased", value: DateFormatter.medium.string(from: product.purchaseDate))
+                
+                if product.favorite {
+                    HStack {
+                        Text("This is one of their favorites")
+                            .font(.subheadline)
+                            .foregroundColor(.lushyPink)
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.lushyPink)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
+    }
+    
+    private func detailRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.medium)
+        }
+    }
+}
+
+// MARK: - General Ethics Section
+private struct GeneralEthicsSection: View {
+    let product: BackendProductCatalog
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Ethics & Sustainability")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.lushyPurple)
+            
+            HStack(spacing: 20) {
+                ethicsTag(label: "Vegan", isTrue: product.vegan, icon: "leaf.fill")
+                ethicsTag(label: "Cruelty Free", isTrue: product.crueltyFree, icon: "heart.fill")
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
+    }
+    
+    private func ethicsTag(label: String, isTrue: Bool, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+            Text(label)
+                .font(.caption)
+                .fontWeight(.medium)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isTrue ? Color.green.opacity(0.2) : Color.gray.opacity(0.2))
+        )
+        .foregroundColor(isTrue ? .green : .gray)
+    }
+}
+
+// MARK: - General Product Actions
+private struct GeneralProductActions: View {
+    let product: BackendProductCatalog
+    @Binding var wishlistMessage: String?
+    @Binding var showingWishlistAlert: Bool
+    @Binding var alertTitle: String
+    @State private var isAddingToCollection = false
+    @State private var isAddingToWishlist = false
+    @State private var cancellables = Set<AnyCancellable>()
+    
+    // Separate alert states for collection and wishlist
+    @State private var showingCollectionAlert = false
+    @State private var collectionMessage: String?
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Add to My Collection
+            Button(action: {
+                addToCollection()
+            }) {
+                HStack(spacing: 8) {
+                    if isAddingToCollection {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    Text("Add to My Collection")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(isAddingToCollection)
+            
+            // Add to Wishlist
+            Button(action: {
+                addToWishlist()
+            }) {
+                HStack(spacing: 8) {
+                    if isAddingToWishlist {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .lushyPurple))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "heart.fill")
+                    }
+                    Text("Add to Wishlist")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.lushyMint, Color.lushyCream]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.lushyPurple)
+                .cornerRadius(12)
+            }
+            .disabled(isAddingToWishlist)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
+        // Separate alert for collection
+        .alert("Collection", isPresented: $showingCollectionAlert) {
+            Button("OK") { 
+                collectionMessage = nil
+            }
+        } message: {
+            Text(collectionMessage ?? "")
+        }
+        // Keep existing alert for wishlist
+        .alert("Wishlist", isPresented: $showingWishlistAlert) {
+            Button("OK") { 
+                wishlistMessage = nil
+            }
+        } message: {
+            Text(wishlistMessage ?? "")
+        }
+    }
+    
+    private func addToCollection() {
+        isAddingToCollection = true
+        
+        APIService.shared.addProductToCollection(
+            barcode: product.barcode,
+            productName: product.productName,
+            brand: product.brand,
+            imageUrl: product.imageUrl
+        ) { result in
+            DispatchQueue.main.async {
+                isAddingToCollection = false
+                
+                switch result {
+                case .success(_):
+                    collectionMessage = "Added to your collection! 🎉"
+                    showingCollectionAlert = true
+                case .failure(let error):
+                    collectionMessage = "Failed to add to collection: \(error.localizedDescription)"
+                    showingCollectionAlert = true
+                }
+            }
+        }
+    }
+    
+    private func addToWishlist() {
+        isAddingToWishlist = true
+        
+        let wishlistItem = NewWishlistItem(
+            productName: product.productName,
+            productURL: "https://lushy.app/product/\(product.barcode)",
+            notes: "Added from user's profile",
+            imageURL: product.imageUrl
+        )
+        
+        APIService.shared.addWishlistItem(wishlistItem)
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                isAddingToWishlist = false
+                
+                if case .failure(let error) = completion {
+                    wishlistMessage = "Failed to add to wishlist: \(error.localizedDescription)"
+                    showingWishlistAlert = true
+                }
+            } receiveValue: { _ in
+                wishlistMessage = "Added to wishlist! 💕"
+                showingWishlistAlert = true
+            }
+            .store(in: &cancellables)
     }
 }

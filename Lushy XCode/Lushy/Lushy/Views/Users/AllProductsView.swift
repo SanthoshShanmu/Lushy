@@ -36,23 +36,31 @@ struct AllProductsView: View {
                             GridItem(.flexible())
                         ], spacing: 12) {
                             ForEach(allProductsViewModel.filteredProducts) { summary in
-                                // Create a local UserProduct for navigation
-                                let localProduct: UserProduct = {
-                                    if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
-                                        return existing
-                                    } else {
-                                        let context = CoreDataManager.shared.viewContext
-                                        let stub = UserProduct(context: context)
-                                        stub.backendId = summary.id
-                                        stub.productName = summary.name
-                                        stub.brand = summary.brand
-                                        stub.userId = viewModel.currentUserId
-                                        try? context.save()
-                                        return stub
+                                // Check if viewing own profile or another user's profile
+                                if viewModel.isViewingOwnProfile {
+                                    // For own profile, create/fetch local UserProduct for full editing
+                                    let localProduct: UserProduct = {
+                                        if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
+                                            return existing
+                                        } else {
+                                            let context = CoreDataManager.shared.viewContext
+                                            let stub = UserProduct(context: context)
+                                            stub.backendId = summary.id
+                                            stub.productName = summary.name
+                                            stub.brand = summary.brand
+                                            stub.userId = viewModel.currentUserId
+                                            try? context.save()
+                                            return stub
+                                        }
+                                    }()
+                                    NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
+                                        AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
                                     }
-                                }()
-                                NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
-                                    AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                                } else {
+                                    // For other users' profiles, use general product detail view
+                                    NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
+                                        AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                                    }
                                 }
                             }
                         }
