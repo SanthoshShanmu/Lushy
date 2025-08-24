@@ -6,14 +6,25 @@ class SearchProductDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isLoadingUsers = false
     @Published var error: String?
+    @Published var wishlistItems: [AppWishlistItem] = []
+    @Published var isLoadingWishlist = false
     
     private let product: ProductSearchSummary
     private let currentUserId: String
     private var cancellables = Set<AnyCancellable>()
     
+    // Computed property to check if product is already in wishlist
+    var isProductInWishlist: Bool {
+        return wishlistItems.contains { item in
+            item.productName.lowercased() == product.productName.lowercased() ||
+            item.productURL.lowercased().contains(product.barcode.lowercased())
+        }
+    }
+    
     init(product: ProductSearchSummary, currentUserId: String) {
         self.product = product
         self.currentUserId = currentUserId
+        loadWishlist()
     }
     
     func loadUsersWhoOwnProduct() {
@@ -34,6 +45,22 @@ class SearchProductDetailViewModel: ObservableObject {
         }
     }
     
+    func loadWishlist() {
+        isLoadingWishlist = true
+        
+        APIService.shared.fetchWishlist()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                self?.isLoadingWishlist = false
+                if case .failure(let error) = completion {
+                    print("Failed to load wishlist: \(error)")
+                }
+            } receiveValue: { [weak self] items in
+                self?.wishlistItems = items
+            }
+            .store(in: &cancellables)
+    }
+
     func addToCollection(completion: @escaping (Result<Void, Error>) -> Void) {
         isLoading = true
         
@@ -57,6 +84,12 @@ class SearchProductDetailViewModel: ObservableObject {
     }
     
     func addToWishlist(completion: @escaping (Result<Void, Error>) -> Void) {
+        // Check for duplicates before adding
+        if isProductInWishlist {
+            completion(.failure(NSError(domain: "DuplicateError", code: 1, userInfo: [NSLocalizedDescriptionKey: "This product is already in your wishlist!"])))
+            return
+        }
+        
         let wishlistItem = NewWishlistItem(
             productName: product.productName,
             productURL: "https://lushy.app/product/\(product.barcode)",
@@ -73,7 +106,9 @@ class SearchProductDetailViewModel: ObservableObject {
                 case .failure(let error):
                     completion(.failure(error))
                 }
-            } receiveValue: { _ in
+            } receiveValue: { [weak self] _ in
+                // Refresh wishlist after successful addition
+                self?.loadWishlist()
                 completion(.success(()))
             }
             .store(in: &cancellables)

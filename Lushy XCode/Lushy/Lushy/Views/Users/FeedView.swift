@@ -1124,10 +1124,20 @@ private struct GeneralProductActions: View {
     @State private var isAddingToCollection = false
     @State private var isAddingToWishlist = false
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var wishlistItems: [AppWishlistItem] = []
+    @State private var isLoadingWishlist = false
     
     // Separate alert states for collection and wishlist
     @State private var showingCollectionAlert = false
     @State private var collectionMessage: String?
+    
+    // Computed property to check if product is already in wishlist
+    private var isProductInWishlist: Bool {
+        return wishlistItems.contains { item in
+            item.productName.lowercased() == product.productName.lowercased() ||
+            item.productURL.lowercased().contains(product.barcode.lowercased())
+        }
+    }
     
     var body: some View {
         VStack(spacing: 16) {
@@ -1169,29 +1179,34 @@ private struct GeneralProductActions: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .lushyPurple))
                             .scaleEffect(0.8)
                     } else {
-                        Image(systemName: "heart.fill")
+                        Image(systemName: isProductInWishlist ? "checkmark.circle.fill" : "heart.fill")
                     }
-                    Text("Add to Wishlist")
+                    Text(isProductInWishlist ? "Already in Wishlist" : "Add to Wishlist")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyMint, Color.lushyCream]),
+                        gradient: Gradient(colors: isProductInWishlist ? 
+                            [Color.gray.opacity(0.3), Color.gray.opacity(0.2)] :
+                            [Color.lushyMint, Color.lushyCream]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .foregroundColor(.lushyPurple)
+                .foregroundColor(isProductInWishlist ? .secondary : .lushyPurple)
                 .cornerRadius(12)
             }
-            .disabled(isAddingToWishlist)
+            .disabled(isAddingToWishlist || isProductInWishlist)
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
         )
+        .onAppear {
+            loadWishlist()
+        }
         // Separate alert for collection
         .alert("Collection", isPresented: $showingCollectionAlert) {
             Button("OK") { 
@@ -1208,6 +1223,22 @@ private struct GeneralProductActions: View {
         } message: {
             Text(wishlistMessage ?? "")
         }
+    }
+    
+    private func loadWishlist() {
+        isLoadingWishlist = true
+        
+        APIService.shared.fetchWishlist()
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                isLoadingWishlist = false
+                if case .failure(let error) = completion {
+                    print("Failed to load wishlist: \(error)")
+                }
+            } receiveValue: { items in
+                wishlistItems = items
+            }
+            .store(in: &cancellables)
     }
     
     private func addToCollection() {
@@ -1235,6 +1266,13 @@ private struct GeneralProductActions: View {
     }
     
     private func addToWishlist() {
+        // Check for duplicates before adding
+        if isProductInWishlist {
+            wishlistMessage = "This product is already in your wishlist!"
+            showingWishlistAlert = true
+            return
+        }
+        
         isAddingToWishlist = true
         
         let wishlistItem = NewWishlistItem(
@@ -1254,6 +1292,8 @@ private struct GeneralProductActions: View {
                     showingWishlistAlert = true
                 }
             } receiveValue: { _ in
+                // Refresh wishlist after successful addition
+                loadWishlist()
                 wishlistMessage = "Added to wishlist! 💕"
                 showingWishlistAlert = true
             }

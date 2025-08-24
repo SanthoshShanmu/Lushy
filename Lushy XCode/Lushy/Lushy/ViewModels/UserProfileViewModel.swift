@@ -10,6 +10,7 @@ class UserProfileViewModel: ObservableObject {
     @Published var error: String?
     @Published var isFollowing: Bool = false
     @Published var addedWishlistIds: Set<String> = []
+    @Published var wishlistItems: [AppWishlistItem] = []
     
     private var cancellables = Set<AnyCancellable>()
     let currentUserId: String
@@ -35,6 +36,9 @@ class UserProfileViewModel: ObservableObject {
         self.currentUserId = currentUserId
         self.targetUserId = targetUserId
         
+        // Load wishlist for duplicate checking
+        loadWishlist()
+        
         // Refresh profile whenever requested, using remote data
         NotificationCenter.default.publisher(for: NSNotification.Name("RefreshProfile"))
             .receive(on: RunLoop.main)
@@ -45,6 +49,29 @@ class UserProfileViewModel: ObservableObject {
 
         // Initial load
         fetchProfile(force: true)
+    }
+
+    private func loadWishlist() {
+        APIService.shared.fetchWishlist()
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    print("Failed to load wishlist: \(error)")
+                }
+            } receiveValue: { [weak self] items in
+                self?.wishlistItems = items
+            }
+            .store(in: &cancellables)
+    }
+    
+    // Check if product is already in wishlist
+    func isProductInWishlist(productId: String) -> Bool {
+        guard let product = products.first(where: { $0.id == productId }) else { return false }
+        
+        return wishlistItems.contains { item in
+            item.productName.lowercased() == product.name.lowercased() ||
+            item.productURL.lowercased().contains(productId.lowercased())
+        }
     }
 
     // MARK: - Profile Fetching
@@ -129,6 +156,12 @@ class UserProfileViewModel: ObservableObject {
     }
     
     func addProductToWishlist(productId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Check for duplicates before adding
+        if isProductInWishlist(productId: productId) {
+            completion(.failure(NSError(domain: "DuplicateError", code: 1, userInfo: [NSLocalizedDescriptionKey: "This product is already in your wishlist!"])))
+            return
+        }
+        
         guard let product = products.first(where: { $0.id == productId }) else {
             completion(.failure(APIError.productNotFound))
             return
@@ -149,6 +182,8 @@ class UserProfileViewModel: ObservableObject {
                     completion(.failure(error))
                 }
             } receiveValue: { _ in
+                // Refresh wishlist after successful addition
+                self.loadWishlist()
                 self.addedWishlistIds.insert(productId)
                 completion(.success(()))
             }

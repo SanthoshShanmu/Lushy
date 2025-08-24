@@ -221,22 +221,24 @@ struct SearchProductDetailView: View {
                 }
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "heart.fill")
-                    Text("Add to Wishlist")
+                    Image(systemName: viewModel.isProductInWishlist ? "checkmark.circle.fill" : "heart.fill")
+                    Text(viewModel.isProductInWishlist ? "Already in Wishlist" : "Add to Wishlist")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyMint, Color.lushyCream]),
+                        gradient: Gradient(colors: viewModel.isProductInWishlist ? 
+                            [Color.gray.opacity(0.3), Color.gray.opacity(0.2)] :
+                            [Color.lushyMint, Color.lushyCream]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .foregroundColor(.lushyPurple)
+                .foregroundColor(viewModel.isProductInWishlist ? .secondary : .lushyPurple)
                 .cornerRadius(12)
             }
-            .disabled(viewModel.isLoading)
+            .disabled(viewModel.isLoading || viewModel.isProductInWishlist)
         }
         .padding()
         .background(
