@@ -531,7 +531,7 @@ struct ManualEntryView: View {
             if !periodsAfterOpening.isEmpty {
                 if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening), viewModel.isProductOpen {
                     HStack {
-                        Image(systemName: "calendar").foregroundColor(.lushyMint)
+                        Image(systemName: "calendar").foregroundColor(.mossGreen)
                         Text("Will set expiry to \(preview)")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -633,7 +633,7 @@ struct ManualEntryView: View {
                 TextField("New Tag", text: $newTagName)
                     .textFieldStyle(.roundedBorder)
                 Picker("Color", selection: $newTagColor) {
-                    ForEach(["lushyPink","lushyPurple","lushyMint","lushyPeach"], id: \.self) {
+                    ForEach(["lushyPink","lushyPurple","mossGreen","lushyPeach"], id: \.self) {
                         Text($0.capitalized)
                     }
                 }
@@ -864,9 +864,9 @@ struct ManualEntryBagAssignSheet: View {
     @State private var newBagIcon = "bag.fill"
     @State private var newBagColor = "lushyPink"
     
-    // Predefined options for bag creation
-    private let iconOptions = ["bag.fill","shippingbox.fill","case.fill","suitcase.fill","heart.fill","star.fill"]
-    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
+    // Predefined options for bag creation - updated with sparkles for Special Occasions
+    private let iconOptions = ["bag.fill","sparkles","case.fill","suitcase.fill","heart.fill","star.fill"]
+    private let colorOptions = ["lushyPink","lushyPurple","mossGreen","lushyPeach"]
 
     var body: some View {
         NavigationView {

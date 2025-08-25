@@ -146,7 +146,7 @@ extension View {
                     .offset(x: 25, y: -10)
                 
                 SparkleShape()
-                    .fill(Color.lushyMint.opacity(0.5))
+                    .fill(Color.mossGreen.opacity(0.5))
                     .frame(width: 10, height: 10)
                     .offset(x: 15, y: 20)
             }
@@ -337,7 +337,7 @@ extension Color {
     
     static var lushyGradientSecondary: LinearGradient {
         LinearGradient(
-            gradient: Gradient(colors: [Color.lushyMint, Color.lushyPeach]),
+            gradient: Gradient(colors: [Color.mossGreen, Color.lushyPeach]),
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )

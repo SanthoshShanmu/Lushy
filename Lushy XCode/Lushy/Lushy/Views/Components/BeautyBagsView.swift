@@ -415,8 +415,8 @@ struct ModernAddBagSheet: View {
     @ObservedObject var viewModel: BeautyBagViewModel
     @Environment(\.presentationMode) var presentationMode
     
-    let iconOptions = ["bag.fill", "shippingbox.fill", "case.fill", "suitcase.fill", "heart.fill", "star.fill"]
-    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"]
+    private let iconOptions = ["bag.fill", "sparkles", "case.fill", "suitcase.fill", "heart.fill", "star.fill"]
+    private let colorOptions = ["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"]
 
     var body: some View {
         NavigationView {
@@ -613,8 +613,8 @@ struct ModernEditBagSheet: View {
     @State private var editIcon: String = ""
     @State private var editColor: String = ""
     
-    let iconOptions = ["bag.fill", "shippingbox.fill", "case.fill", "suitcase.fill", "heart.fill", "star.fill"]
-    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"]
+    private let iconOptions = ["bag.fill", "sparkles", "case.fill", "suitcase.fill", "heart.fill", "star.fill"]
+    private let colorOptions = ["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"]
 
     var body: some View {
         NavigationView {
@@ -879,7 +879,7 @@ struct BeautyBagDetailView: View {
                             VStack(spacing: 4) {
                                 Text("\(openCount)")
                                     .font(.headline)
-                                    .foregroundColor(.lushyMint)
+                                    .foregroundColor(.mossGreen)
                                 Text("Opened")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)

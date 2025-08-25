@@ -42,7 +42,7 @@ struct UsageHistoryView: View {
                     Spacer()
                     Text("\(viewModel.totalCheckIns) check-ins")
                         .font(.subheadline)
-                        .foregroundColor(.lushyPink)
+                        .foregroundColor(Color.lushyPink)
                         .fontWeight(.medium)
                 }
             }
@@ -54,7 +54,7 @@ struct UsageHistoryView: View {
                     title: "Total Uses",
                     value: "\(viewModel.totalCheckIns)",
                     subtitle: "check-ins",
-                    color: .lushyMint
+                    color: Color.mossGreen
                 )
                 
                 UsageStatCard(
@@ -62,7 +62,7 @@ struct UsageHistoryView: View {
                     title: "This Week",
                     value: "\(viewModel.weeklyCheckIns)",
                     subtitle: "uses",
-                    color: .lushyPeach
+                    color: Color.lushyPeach
                 )
                 
                 UsageStatCard(
@@ -70,7 +70,7 @@ struct UsageHistoryView: View {
                     title: "Last Used",
                     value: viewModel.daysSinceLastUse == 0 ? "Today" : "\(viewModel.daysSinceLastUse)d ago",
                     subtitle: "days",
-                    color: .lushyPurple
+                    color: Color.lushyPurple
                 )
             }
             
@@ -78,7 +78,7 @@ struct UsageHistoryView: View {
             if !viewModel.usageFrequencyInsight.isEmpty {
                 HStack {
                     Image(systemName: "lightbulb")
-                        .foregroundColor(.lushyPink)
+                        .foregroundColor(Color.lushyPink)
                     Text(viewModel.usageFrequencyInsight)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -101,7 +101,7 @@ struct UsageHistoryView: View {
     }
 
     private var checkInsList: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             LazyVStack(spacing: 12) {
                 ForEach(groupedCheckIns, id: \.date) { group in
                     VStack(alignment: .leading, spacing: 8) {
@@ -265,7 +265,7 @@ struct UsageEntryRow: View {
         let rating = parsedMetadata.rating
         switch rating {
         case 5: return .green
-        case 4: return .lushyMint
+        case 4: return .mossGreen
         case 3: return .orange
         case 2: return .lushyPeach
         case 1: return .red
@@ -290,4 +290,103 @@ struct UsageCheckInGroup {
 struct UsageGroup {
     let date: String
     let entries: [UsageEntry]
+}
+
+// MARK: - UsageStatCard Component
+struct UsageStatCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let subtitle: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.8))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(color.opacity(0.1))
+        )
+    }
+}
+
+// MARK: - UsageCheckInRow Component
+struct UsageCheckInRow: View {
+    let checkIn: UsageEntryDisplay
+    let contexts: [(String, String, String)]
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Context icon
+            let contextInfo = contexts.first { $0.0 == checkIn.context } ?? ("general", "General", "circle")
+            
+            Circle()
+                .fill(Color.lushyPink.opacity(0.2))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Image(systemName: contextInfo.2)
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.lushyPink)
+                )
+            
+            // Check-in details
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(contextInfo.1)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    Text(formatTime(checkIn.date))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                if let notes = checkIn.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+        )
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
 }

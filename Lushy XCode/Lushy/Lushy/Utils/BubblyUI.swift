@@ -8,7 +8,7 @@ struct BubblyBackground: View {
                 gradient: Gradient(colors: [
                     Color.lushyPink.opacity(0.25),
                     Color.lushyPurple.opacity(0.18),
-                    Color.lushyMint.opacity(0.15),
+                    Color.mossGreen.opacity(0.15),
                     Color.lushyPeach.opacity(0.12)
                 ]),
                 startPoint: .topLeading,
@@ -29,7 +29,7 @@ struct BubblyBackground: View {
             
             BlobShape()
                 .fill(LinearGradient(
-                    gradient: Gradient(colors: [Color.lushyMint.opacity(0.25), Color.lushyPeach.opacity(0.2)]),
+                    gradient: Gradient(colors: [Color.mossGreen.opacity(0.25), Color.lushyPeach.opacity(0.2)]),
                     startPoint: .topTrailing,
                     endPoint: .bottomLeading
                 ))
@@ -49,14 +49,14 @@ struct BubblyBackground: View {
                 .offset(x: -80, y: 100)
             
             SparkleShape()
-                .fill(Color.lushyMint.opacity(0.35))
+                .fill(Color.mossGreen.opacity(0.35))
                 .frame(width: 18, height: 18)
                 .offset(x: 150, y: 200)
             
             // Soft circles
             Circle()
                 .fill(RadialGradient(
-                    gradient: Gradient(colors: [Color.lushyMint.opacity(0.2), Color.clear]),
+                    gradient: Gradient(colors: [Color.mossGreen.opacity(0.2), Color.clear]),
                     center: .center,
                     startRadius: 0,
                     endRadius: 60

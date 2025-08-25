@@ -21,7 +21,7 @@ struct MoreView: View {
                     
                     NavigationLink(destination: FavoritesView(viewModel: FavoritesViewModel())) {
                         Label("Favorites", systemImage: "star.fill")
-                            .foregroundColor(.lushyMint)
+                            .foregroundColor(.mossGreen)
                     }
                     
                     NavigationLink(destination: BeautyBagsView()) {

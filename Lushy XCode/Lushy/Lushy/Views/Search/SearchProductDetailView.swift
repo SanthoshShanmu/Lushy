@@ -245,7 +245,7 @@ struct SearchProductDetailView: View {
                     LinearGradient(
                         gradient: Gradient(colors: viewModel.isProductInWishlist ? 
                             [Color.red.opacity(0.6), Color.red.opacity(0.4)] :
-                            [Color.lushyMint, Color.lushyCream]),
+                            [Color.mossGreen, Color.lushyCream]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )

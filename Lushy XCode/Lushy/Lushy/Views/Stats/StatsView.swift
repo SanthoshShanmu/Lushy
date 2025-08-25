@@ -590,7 +590,7 @@ struct StatsView: View {
     }
     
     private func randomColor(for string: String) -> Color {
-        let colors: [Color] = [.lushyPink, .lushyPurple, .lushyMint, .lushyPeach, .lushyCream]
+        let colors: [Color] = [.lushyPink, .lushyPurple, .mossGreen, .lushyPeach, .lushyCream]
         var hash = 0
         for char in string.unicodeScalars {
             hash = Int(char.value) + ((hash << 5) - hash)

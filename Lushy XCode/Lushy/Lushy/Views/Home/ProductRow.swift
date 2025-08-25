@@ -222,7 +222,7 @@ struct PrettyProductRow: View {
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(days > 14 ? Color.lushyMint.opacity(0.15) :
+                            .fill(days > 14 ? Color.mossGreen.opacity(0.15) :
                                   days > 0 ? Color.lushyPeach.opacity(0.15) : Color.red.opacity(0.15))
                     )
                 }

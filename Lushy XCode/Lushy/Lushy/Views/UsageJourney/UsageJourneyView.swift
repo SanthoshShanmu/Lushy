@@ -27,15 +27,15 @@ struct UsageJourneyView: View {
                     // Header
                     headerSection
                     
-                    // Timeline
+                    // Add thought section - moved to top for better UX
+                    addThoughtSection
+                    
+                    // Timeline - now shows newest entries first
                     if viewModel.events.isEmpty {
                         emptyStateView
                     } else {
                         timelineView
                     }
-                    
-                    // Add thought section
-                    addThoughtSection
                 }
                 .padding(.bottom, 30)
             }
@@ -72,7 +72,7 @@ struct UsageJourneyView: View {
                     icon: "calendar",
                     title: "Milestones",
                     value: "\(milestoneCount)",
-                    color: .lushyMint
+                    color: .mossGreen
                 )
                 
                 StatCard(
@@ -122,10 +122,10 @@ struct UsageJourneyView: View {
     
     private var timelineView: some View {
         LazyVStack(spacing: 20) {
-            ForEach(Array(viewModel.events.enumerated()), id: \.element.objectID) { index, event in
+            ForEach(Array(viewModel.events.enumerated().reversed()), id: \.element.objectID) { index, event in
                 TimelineEventView(
                     event: event,
-                    isLast: index == viewModel.events.count - 1
+                    isLast: index == 0
                 )
             }
         }
@@ -324,7 +324,7 @@ struct TimelineEventView: View {
     
     private var eventColor: Color {
         switch event.eventType {
-        case "purchase": return .lushyMint
+        case "purchase": return .mossGreen
         case "open": return .lushyPeach
         case "finished": return .green
         case "thought": return .lushyPink

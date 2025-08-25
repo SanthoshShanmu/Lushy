@@ -183,7 +183,7 @@ struct WishlistItemRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.3), Color.lushyMint.opacity(0.2)]),
+                        gradient: Gradient(colors: [Color.lushyPink.opacity(0.3), Color.mossGreen.opacity(0.2)]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )

@@ -99,27 +99,24 @@ struct ProductDetailView: View {
     private var mainScrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 25) {
-                // Product header with dreamy styling
+                // Product header with dreamy styling and favorite heart in top-right
                 _PrettyProductHeader(viewModel: viewModel)
                 
-                // Compliance & Dates
-                _PrettyComplianceSection(viewModel: viewModel)
+                // Move Beauty Bags and Tags before usage tracking
+                _PrettyBagsSection(viewModel: viewModel, showBagAssignSheet: $showBagAssignSheet)
+                _PrettyTagsSection(viewModel: viewModel, showTagAssignSheet: $showTagAssignSheet)
+                
+                // Product Insights & Dates (renamed from Compliance)
+                _PrettyProductInsightsSection(viewModel: viewModel)
                 
                 // Usage info with soft cards
                 _PrettyUsageInfo(viewModel: viewModel)
                 
-                // Actions with bubbly buttons
-                _PrettyActionButtons(viewModel: viewModel)
+                // Beauty Journey preview (renamed from Usage Journey)
+                _PrettyBeautyJourneySection(viewModel: viewModel)
                 
-                // Usage Journey preview
-                _PrettyUsageJourneySection(viewModel: viewModel)
-                
-                // Reviews with girly theme
+                // Reviews with girly theme - full width
                 _PrettyReviewsSection(viewModel: viewModel)
-                
-                // Bags & Tags with soft design
-                _PrettyBagsSection(viewModel: viewModel, showBagAssignSheet: $showBagAssignSheet)
-                _PrettyTagsSection(viewModel: viewModel, showTagAssignSheet: $showTagAssignSheet)
             }
             .padding(.bottom, 30)
         }
@@ -156,15 +153,6 @@ struct ProductDetailView: View {
             // Delete full product
             Button(role: .destructive) { showingDeleteAlert = true } label: {
                 Label("Remove Product", systemImage: "trash")
-            }
-            
-            Button {
-                viewModel.toggleFavorite()
-            } label: {
-                Label(
-                    viewModel.product.favorite ? "Remove from Favorites" : "Add to Favorites",
-                    systemImage: viewModel.product.favorite ? "heart.slash" : "heart"
-                )
             }
             
             // Only show edit button if product is not finished
@@ -286,7 +274,7 @@ struct ProductDetailView: View {
                             // Expiry preview / advisory
                             if !editPAO.isEmpty {
                                 if editIsOpened, let preview = expiryPreview(openDate: editOpenDate, pao: editPAO) {
-                                    HStack { Image(systemName: "calendar").foregroundColor(.lushyMint); Text("Will set expiry to \(preview)").font(.caption).foregroundColor(.secondary) }
+                                    HStack { Image(systemName: "calendar").foregroundColor(.mossGreen); Text("Will set expiry to \(preview)").font(.caption).foregroundColor(.secondary) }
                                 } else if !editIsOpened {
                                     HStack { Image(systemName: "info.circle").foregroundColor(.secondary); Text("PAO applies once product is marked opened.").font(.caption).foregroundColor(.secondary) }
                                 }
@@ -398,46 +386,66 @@ struct _PrettyProductHeader: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Product image with soft shadow
-            if let imageUrl = viewModel.product.imageUrl {
-                HStack {
-                    Spacer()
-                    // Attempt to load from local file path
-                    let fileURL = URL(fileURLWithPath: imageUrl)
-                    if FileManager.default.fileExists(atPath: fileURL.path),
-                       let uiImage = UIImage(contentsOfFile: fileURL.path) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
+            // Product image with favorite heart in top-right corner
+            ZStack(alignment: .topTrailing) {
+                if let imageUrl = viewModel.product.imageUrl {
+                    HStack {
+                        Spacer()
+                        // Attempt to load from local file path
+                        let fileURL = URL(fileURLWithPath: imageUrl)
+                        if FileManager.default.fileExists(atPath: fileURL.path),
+                           let uiImage = UIImage(contentsOfFile: fileURL.path) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 250)
+                                .clipShape(RoundedRectangle(cornerRadius: 25))
+                                .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
+                        } else if let remoteURL = URL(string: imageUrl) {
+                            AsyncImage(url: remoteURL) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 25)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.lushyPink.opacity(0.1), Color.lushyPurple.opacity(0.05)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .overlay(
+                                        Image(systemName: "sparkles")
+                                            .font(.system(size: 30))
+                                            .foregroundColor(.lushyPink.opacity(0.3))
+                                    )
+                            }
                             .frame(height: 250)
                             .clipShape(RoundedRectangle(cornerRadius: 25))
                             .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
-                    } else if let remoteURL = URL(string: imageUrl) {
-                        AsyncImage(url: remoteURL) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        } placeholder: {
-                            RoundedRectangle(cornerRadius: 25)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.lushyPink.opacity(0.1), Color.lushyPurple.opacity(0.05)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .overlay(
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.lushyPink.opacity(0.3))
-                                )
                         }
-                        .frame(height: 250)
-                        .clipShape(RoundedRectangle(cornerRadius: 25))
-                        .shadow(color: .lushyPink.opacity(0.2), radius: 15, x: 0, y: 8)
+                        Spacer()
                     }
-                    Spacer()
                 }
+                
+                // Favorite heart button in top-right corner
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.toggleFavorite()
+                }) {
+                    Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(viewModel.product.favorite ? .lushyPink : .gray)
+                        .background(
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 44, height: 44)
+                        )
+                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                }
+                .padding(.top, 16)
+                .padding(.trailing, 16)
             }
             
             // Product info with dreamy styling
@@ -454,7 +462,7 @@ struct _PrettyProductHeader: View {
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                 
-                // Display metadata as styled tags
+                // Display metadata as styled tags with improved logic
                 HStack(spacing: 8) {
                     if let shade = viewModel.product.shade, !shade.isEmpty {
                         Text(shade)
@@ -470,8 +478,18 @@ struct _PrettyProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.lushyMint.opacity(0.2))
-                            .foregroundColor(.lushyMint)
+                            .background(Color("mossGreen", bundle: nil).opacity(0.2))
+                            .foregroundColor(Color("mossGreen", bundle: nil))
+                            .cornerRadius(12)
+                    }
+                    // Travel-size-friendly tag for products less than 100ml
+                    if viewModel.product.sizeInMl > 0 && viewModel.product.sizeInMl < 100 {
+                        Text("Travel-Size-Friendly")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.mossGreen.opacity(0.2))
+                            .foregroundColor(.mossGreen)
                             .cornerRadius(12)
                     }
                     if viewModel.product.spf > 0 {
@@ -496,9 +514,33 @@ struct _PrettyProductHeader: View {
                     }
                 }
                 
-                // Expiry countdown
+                // Certification tags (Vegan, Cruelty-Free)
+                HStack(spacing: 8) {
+                    if viewModel.product.vegan {
+                        Text("Vegan")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.2))
+                            .foregroundColor(.green)
+                            .cornerRadius(12)
+                    }
+                    if viewModel.product.crueltyFree {
+                        Text("Cruelty-Free")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundColor(.blue)
+                            .cornerRadius(12)
+                    }
+                }
+                
+                // Best Before countdown (updated from Expiry)
                 if let days = viewModel.daysUntilExpiry {
-                    Text(days > 0 ? "Expires in \(days) days" : "Expired")
+                    Text(days > 0 ? "Best before \(days) days" : "Past best before date")
                         .font(.subheadline)
                         .foregroundColor(days > 7 ? .green : (days > 0 ? .orange : .red))
                 }
@@ -508,16 +550,16 @@ struct _PrettyProductHeader: View {
     }
 }
 
-// MARK: - Compliance & Dates Section
-private struct _PrettyComplianceSection: View {
+// MARK: - Pretty Product Insights Section
+private struct _PrettyProductInsightsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "info.circle.fill")
-                    .foregroundColor(.lushyMint)
-                Text("Compliance & Dates")
+                    .foregroundColor(.mossGreen)
+                Text("Product Insights & Dates")
                     .font(.headline)
             }
             .padding(.bottom, 2)
@@ -646,8 +688,8 @@ struct _PrettyActionButtons: View {
     }
 }
 
-// MARK: - Usage Journey Section Component
-private struct _PrettyUsageJourneySection: View {
+// MARK: - Beauty Journey Section Component
+private struct _PrettyBeautyJourneySection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
@@ -657,7 +699,7 @@ private struct _PrettyUsageJourneySection: View {
                     Image(systemName: "map.fill")
                         .font(.title3)
                         .foregroundColor(.lushyPink)
-                    Text("Usage Journey")
+                    Text("Beauty Journey")
                         .font(.headline)
                         .fontWeight(.semibold)
                     Spacer()
@@ -676,7 +718,7 @@ private struct _PrettyUsageJourneySection: View {
                         icon: "calendar",
                         label: "Events",
                         value: "\(journeyEventCount)",
-                        color: .lushyMint
+                        color: .mossGreen
                     )
                     
                     JourneyStatItem(
@@ -911,7 +953,7 @@ private struct _PrettyTagsSection: View {
                     .font(.headline)
                 Spacer()
                 // Only show plus button if product is not finished
-                if !viewModel.isEditingDisabled {
+                if (!viewModel.isEditingDisabled) {
                     Button(action: {
                         viewModel.fetchBagsAndTags()
                         showTagAssignSheet = true
@@ -968,9 +1010,9 @@ private struct BagAssignSheet: View {
     @State private var isCreatingBag = false
     @State private var cancellables = Set<AnyCancellable>()
     
-    // Added predefined options instead of free text fields
-    private let iconOptions = ["bag.fill","shippingbox.fill","case.fill","suitcase.fill","heart.fill","star.fill"]
-    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
+    // Added predefined options instead of free text fields - updated with sparkles
+    private let iconOptions = ["bag.fill","sparkles","case.fill","suitcase.fill","heart.fill","star.fill"]
+    private let colorOptions = ["lushyPink","lushyPurple","mossGreen","lushyPeach"]
 
     var body: some View {
         NavigationView {
@@ -1165,7 +1207,7 @@ private struct TagAssignSheet: View {
     @State private var selectedTagIDs: Set<NSManagedObjectID> = []
     @State private var newTagName = ""
     @State private var newTagColor = "lushyPink"
-    private let colorOptions = ["lushyPink","lushyPurple","lushyMint","lushyPeach"]
+    private let colorOptions = ["lushyPink","lushyPurple","mossGreen","lushyPeach"]
 
     var body: some View {
         NavigationView {

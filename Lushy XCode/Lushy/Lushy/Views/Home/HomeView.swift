@@ -22,7 +22,7 @@ struct HomeView: View {
                                 VStack(spacing: 8) {
                                     Image(systemName: bag.icon ?? "bag.fill")
                                         .font(.largeTitle)
-                                        .foregroundColor(.lushyMint)
+                                        .foregroundColor(.mossGreen)
                                     Text(bag.name ?? "Unnamed Bag")
                                         .font(.subheadline)
                                         .fontWeight(.medium)
@@ -47,7 +47,7 @@ struct HomeView: View {
                                 VStack(spacing: 8) {
                                     Image(systemName: bag.icon ?? "bag.fill")
                                         .font(.largeTitle)
-                                        .foregroundColor(.lushyMint)
+                                        .foregroundColor(.mossGreen)
                                     Text(bag.name ?? "Unnamed Bag")
                                         .font(.subheadline)
                                         .fontWeight(.medium)

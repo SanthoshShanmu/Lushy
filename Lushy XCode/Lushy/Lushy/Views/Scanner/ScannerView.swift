@@ -442,7 +442,7 @@ struct ProductFoundView: View {
                             TextField("New Tag", text: $newTagName)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                             Picker("Color", selection: $newTagColor) {
-                                ForEach(["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"], id: \.self) { color in
+                                ForEach(["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"], id: \.self) { color in
                                     Text(color.capitalized)
                                 }
                             }

@@ -4,7 +4,7 @@ import SwiftUI
 enum LushyPalette {
     static let pink = Color.lushyPink
     static let purple = Color.lushyPurple
-    static let mint = Color.lushyMint
+    static let mint = Color.mossGreen
     static let peach = Color.lushyPeach
     static let cream = Color.lushyCream
 

@@ -70,7 +70,7 @@ struct LushyButtonStyle: ButtonStyle {
             )
         case .accent:
             return LinearGradient(
-                gradient: Gradient(colors: [Color.lushyMint, Color.lushyPeach.opacity(0.8)]),
+                gradient: Gradient(colors: [Color.mossGreen, Color.lushyPeach.opacity(0.8)]),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -114,7 +114,7 @@ struct LushyButtonStyle: ButtonStyle {
         switch variant {
         case .primary: return Color.lushyPink.opacity(0.4)
         case .secondary: return Color.lushyCream.opacity(0.3)
-        case .accent: return Color.lushyMint.opacity(0.4)
+        case .accent: return Color.mossGreen.opacity(0.4)
         case .outline: return Color.lushyPink.opacity(0.2)
         case .destructive: return Color.red.opacity(0.3)
         }

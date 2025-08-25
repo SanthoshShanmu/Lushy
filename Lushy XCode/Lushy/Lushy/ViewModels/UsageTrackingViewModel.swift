@@ -1,10 +1,15 @@
 import Foundation
 import CoreData
 import Combine
+import UserNotifications
 
 class UsageTrackingViewModel: ObservableObject {
     @Published var usageEntries: [UsageEntry] = []
     @Published var isShowingFinishConfirmation = false
+    @Published var currentAmount: Double? = nil
+    @Published var lastTrackingDate: Date? = nil
+    @Published var estimatedFinishDate: Date? = nil
+    @Published var usagePatternInsight: String? = nil
     
     let product: UserProduct  // Changed from private to public
     private var cancellables = Set<AnyCancellable>()
@@ -13,12 +18,15 @@ class UsageTrackingViewModel: ObservableObject {
     init(product: UserProduct) {
         self.product = product
         loadUsageEntries()
+        loadAmountTracking()
+        calculateUsagePatterns()
         
         // Subscribe to Core Data changes
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.loadUsageEntries()
+                self?.calculateUsagePatterns()
             }
             .store(in: &cancellables)
     }
@@ -93,6 +101,101 @@ class UsageTrackingViewModel: ObservableObject {
             )
         } catch {
             print("Error saving usage check-in: \(error)")
+        }
+    }
+    
+    // New method to track product amount
+    func trackAmount(_ amount: Double) {
+        currentAmount = amount
+        lastTrackingDate = Date()
+        
+        // Calculate estimated finish date based on usage patterns
+        calculateEstimatedFinishDate()
+        
+        // Save to Core Data or UserDefaults
+        let key = "amount_\(product.objectID.uriRepresentation().absoluteString)"
+        UserDefaults.standard.set(amount, forKey: key)
+        UserDefaults.standard.set(Date(), forKey: "\(key)_date")
+        
+        // Trigger low amount notifications if needed
+        if amount < 25 {
+            scheduleAmountNotification()
+        }
+    }
+    
+    private func loadAmountTracking() {
+        let key = "amount_\(product.objectID.uriRepresentation().absoluteString)"
+        let amount = UserDefaults.standard.double(forKey: key)
+        if amount > 0 {
+            currentAmount = amount
+            lastTrackingDate = UserDefaults.standard.object(forKey: "\(key)_date") as? Date
+            calculateEstimatedFinishDate()
+        }
+    }
+    
+    private func calculateEstimatedFinishDate() {
+        guard let currentAmount = currentAmount,
+              currentAmount > 0,
+              let _ = lastTrackingDate else { return }
+        
+        // Calculate usage rate based on recent check-ins
+        let recentEntries = usageEntries.filter { entry in
+            entry.createdAt >= Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        }
+        
+        if !recentEntries.isEmpty {
+            let daysInPeriod = 30.0
+            let usageRate = Double(recentEntries.count) / daysInPeriod // uses per day
+            
+            if usageRate > 0 {
+                let estimatedDaysLeft = currentAmount / (usageRate * 2.0) // Assuming 2% per use
+                estimatedFinishDate = Calendar.current.date(byAdding: .day, value: Int(estimatedDaysLeft), to: Date())
+            }
+        }
+    }
+    
+    private func calculateUsagePatterns() {
+        let recentEntries = usageEntries.filter { entry in
+            entry.createdAt >= Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        }
+        
+        guard !recentEntries.isEmpty else {
+            usagePatternInsight = nil
+            return
+        }
+        
+        // Analyze usage patterns
+        let usageFrequency = Double(recentEntries.count) / 30.0
+        let weekendUse = recentEntries.filter { Calendar.current.isDateInWeekend($0.createdAt) }.count
+        let weekdayUse = recentEntries.count - weekendUse
+        
+        if usageFrequency >= 0.8 { // Nearly daily use
+            usagePatternInsight = "You're using this daily - perfect for maintaining consistency!"
+        } else if weekendUse > weekdayUse {
+            usagePatternInsight = "You prefer using this on weekends - great for self-care time!"
+        } else if weekdayUse > weekendUse * 2 {
+            usagePatternInsight = "This seems to be part of your work week routine"
+        } else if usageFrequency < 0.2 {
+            usagePatternInsight = "You use this occasionally - perfect for special moments"
+        } else {
+            usagePatternInsight = "You have a balanced usage pattern with this product"
+        }
+    }
+    
+    private func scheduleAmountNotification() {
+        // Schedule local notification for low amount
+        let content = UNMutableNotificationContent()
+        content.title = "Running Low!"
+        content.body = "\(product.productName ?? "Your product") is running low. Consider restocking soon."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: false) // 24 hours
+        let request = UNNotificationRequest(identifier: "low_amount_\(product.objectID)", content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling amount notification: \(error)")
+            }
         }
     }
     
@@ -192,7 +295,13 @@ class UsageTrackingViewModel: ObservableObject {
         let usagePerWeek = Double(totalCheckIns) / Double(totalDays) * 7.0
         
         if usagePerWeek >= 5 {
-            return "You use this daily - consider stocking up!"
+            // Updated logic: only suggest stocking up if running low or high usage + time since purchase
+            let daysSincePurchase = Calendar.current.dateComponents([.day], from: product.purchaseDate ?? Date(), to: Date()).day ?? 0
+            if daysSincePurchase > 90 || (currentAmount ?? 100) < 30 {
+                return "You use this daily - consider stocking up!"
+            } else {
+                return "You use this daily - great consistency!"
+            }
         } else if usagePerWeek >= 3 {
             return "Regular use - great for your routine"
         } else if usagePerWeek >= 1 {

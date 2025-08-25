@@ -992,8 +992,8 @@ private struct GeneralProductHeader: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.lushyMint.opacity(0.2))
-                            .foregroundColor(.lushyMint)
+                            .background(Color.mossGreen.opacity(0.2))
+                            .foregroundColor(.mossGreen)
                             .cornerRadius(12)
                     }
                     if let spf = product.product.spf, spf > 0 {
@@ -1176,7 +1176,7 @@ private struct GeneralProductActions: View {
                 HStack(spacing: 8) {
                     if isAddingToWishlist {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .lushyPurple))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .mossGreen))
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: isProductInWishlist ? "checkmark.circle.fill" : "heart.fill")
@@ -1189,7 +1189,7 @@ private struct GeneralProductActions: View {
                     LinearGradient(
                         gradient: Gradient(colors: isProductInWishlist ? 
                             [Color.gray.opacity(0.3), Color.gray.opacity(0.2)] :
-                            [Color.lushyMint, Color.lushyCream]),
+                            [Color.mossGreen, Color.lushyCream]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
