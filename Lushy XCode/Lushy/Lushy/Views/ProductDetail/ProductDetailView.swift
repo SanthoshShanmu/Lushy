@@ -102,6 +102,9 @@ struct ProductDetailView: View {
                 // Product header with dreamy styling and favorite heart in top-right
                 _PrettyProductHeader(viewModel: viewModel)
                 
+                // Action buttons (favorite and mark as finished)
+                _PrettyActionButtons(viewModel: viewModel)
+                
                 // Move Beauty Bags and Tags before usage tracking
                 _PrettyBagsSection(viewModel: viewModel, showBagAssignSheet: $showBagAssignSheet)
                 _PrettyTagsSection(viewModel: viewModel, showTagAssignSheet: $showTagAssignSheet)
@@ -655,36 +658,60 @@ struct _PrettyActionButtons: View {
     
     var body: some View {
         VStack(spacing: 15) {
-            // Only Favorite Heart Button (removed Add to Bag button)
-            Button(action: {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                viewModel.toggleFavorite()
-            }) {
+            // Mark as Finished Button (only show if product is not finished)
+            if !viewModel.product.isFinished {
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    viewModel.markAsEmpty()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("Mark as Finished")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 15)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [.green, .mossGreen],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
+                    )
+                }
+            } else {
+                // Show finished status for completed products
                 HStack(spacing: 8) {
-                    Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
-                    Text(viewModel.product.favorite ? "Favorited" : "Favorite")
+                        .foregroundColor(.green)
+                    Text("Product Finished")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .foregroundColor(.green)
                 }
-                .foregroundColor(viewModel.product.favorite ? .white : .lushyPink)
                 .padding(.vertical, 15)
                 .padding(.horizontal, 20)
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 20)
-                        .fill(
-                            viewModel.product.favorite ?
-                                LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing) :
-                                LinearGradient(colors: [.white, .white], startPoint: .leading, endPoint: .trailing)
-                        )
+                        .fill(Color.green.opacity(0.1))
                         .overlay(
                             RoundedRectangle(cornerRadius: 20)
-                                .stroke(.lushyPink.opacity(0.3), lineWidth: viewModel.product.favorite ? 0 : 1.5)
-                        ))
+                                .stroke(Color.green.opacity(0.3), lineWidth: 1.5)
+                        )
+                )
             }
-            .padding(.horizontal)
         }
+        .padding(.horizontal)
     }
 }
 
