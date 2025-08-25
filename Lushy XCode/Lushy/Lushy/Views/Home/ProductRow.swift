@@ -13,9 +13,10 @@ struct PrettyProductRow: View {
     let product: UserProduct
     
     var body: some View {
-        HStack(spacing: 15) {
-            // Product image with prettier styling
+        HStack(alignment: .center, spacing: 15) {
+            // Product image with prettier styling - restructured for better alignment
             ZStack {
+                // Background circle
                 Circle()
                     .fill(LinearGradient(
                         gradient: Gradient(colors: [Color.lushyCream, Color.white]),
@@ -25,73 +26,68 @@ struct PrettyProductRow: View {
                     .frame(width: 70, height: 70)
                     .shadow(color: Color.lushyPink.opacity(0.2), radius: 8, x: 0, y: 3)
                 
-                if let imageUrlString = product.imageUrl,
-                   let imageUrl = URL(string: imageUrlString) {
-                    if imageUrl.isFileURL {
-                        if let data = try? Data(contentsOf: imageUrl), let uiImage = UIImage(data: data) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 58, height: 58)
-                                .clipShape(Circle())
-                        } else {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24))
-                                .foregroundColor(.gray.opacity(0.7))
-                                .frame(width: 58, height: 58)
-                        }
-                    } else {
-                        AsyncImage(url: imageUrl) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                                    .frame(width: 58, height: 58)
-                            case .success(let image):
-                                image
+                // Product image - centered within the circle
+                Group {
+                    if let imageUrlString = product.imageUrl,
+                       let imageUrl = URL(string: imageUrlString) {
+                        if imageUrl.isFileURL {
+                            if let data = try? Data(contentsOf: imageUrl), let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
                                     .resizable()
-                                    .aspectRatio(contentMode: .fit)
+                                    .aspectRatio(contentMode: .fill)
                                     .frame(width: 58, height: 58)
                                     .clipShape(Circle())
-                            case .failure:
+                            } else {
                                 Image(systemName: "photo")
                                     .font(.system(size: 24))
                                     .foregroundColor(.gray.opacity(0.7))
                                     .frame(width: 58, height: 58)
-                            @unknown default:
-                                EmptyView()
+                            }
+                        } else {
+                            AsyncImage(url: imageUrl) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(width: 58, height: 58)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 58, height: 58)
+                                        .clipShape(Circle())
+                                case .failure:
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.gray.opacity(0.7))
+                                        .frame(width: 58, height: 58)
+                                @unknown default:
+                                    EmptyView()
+                                }
                             }
                         }
-                    }
-                } else {
-                    Image(systemName: "photo")
-                        .font(.system(size: 24))
-                        .foregroundColor(.gray.opacity(0.7))
-                        .frame(width: 58, height: 58)
-                }
-                
-                // Add quantity badge overlay
-                if product.quantity > 1 {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text("×\(product.quantity)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.lushyPink)
-                                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
-                                )
-                                .offset(x: 8, y: -8)
-                        }
-                        Spacer()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 24))
+                            .foregroundColor(.gray.opacity(0.7))
+                            .frame(width: 58, height: 58)
                     }
                 }
             }
+            // Heart icon overlay positioned outside the main ZStack to avoid alignment issues
+            .overlay(
+                Image(systemName: product.favorite ? "heart.fill" : "heart")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(product.favorite ? .lushyPink : .gray)
+                    .background(
+                        Circle()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: 18, height: 18)
+                    )
+                    .offset(x: -25, y: -25),
+                alignment: .topLeading
+            )
             
+            // Product information - properly aligned
             VStack(alignment: .leading, spacing: 6) {
                 Text(product.productName ?? "Unknown Product")
                     .font(.system(size: 17, weight: .medium))
@@ -180,55 +176,59 @@ struct PrettyProductRow: View {
             
             Spacer()
             
-            // Show days until expiry with prettier styling
-            if let expireDate = product.expireDate {
-                let daysComponent = Calendar.current.dateComponents([.day], from: Date(), to: expireDate)
-                let days = max(0, daysComponent.day ?? 0) // Ensure non-negative values
+            // Right side with days and quantity - properly aligned
+            VStack(alignment: .trailing, spacing: 8) {
+                // Quantity badge positioned properly at the top right
+                if product.quantity > 1 {
+                    Text("×\(product.quantity)")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color.lushyPink)
+                                .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+                        )
+                }
                 
-                ZStack {
-                    Circle()
-                        .fill(days > 14 ? Color.lushyMint.opacity(0.2) :
-                              days > 0 ? Color.lushyPeach.opacity(0.2) : Color.red.opacity(0.2))
-                        .frame(width: 65, height: 65)
+                // Show days until expiry with smaller text
+                if let expireDate = product.expireDate {
+                    let daysComponent = Calendar.current.dateComponents([.day], from: Date(), to: expireDate)
+                    let days = max(0, daysComponent.day ?? 0)
                     
                     VStack(spacing: 2) {
                         if days > 0 {
                             Text("\(days)")
-                                .font(.system(size: 20, weight: .bold))
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(days < 14 ? .orange : .lushyPurple)
                             
                             Text("days")
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                                 .foregroundColor(days < 14 ? .orange : .lushyPurple)
                         } else {
                             Text("Expired")
-                                .font(.caption)
+                                .font(.caption2)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
                                 .background(Color.red)
-                                .cornerRadius(8)
+                                .cornerRadius(6)
                         }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(days > 14 ? Color.lushyMint.opacity(0.15) :
+                                  days > 0 ? Color.lushyPeach.opacity(0.15) : Color.red.opacity(0.15))
+                    )
                 }
-                .overlay(
-                    product.favorite ?
-                    Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
-                        .font(.system(size: 14))
-                        .background(
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 22, height: 22)
-                        )
-                        .offset(x: 0, y: -25)
-                    : nil
-                )
             }
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 16)
-        // Remove old background, shadow, and padding here
     }
 }
