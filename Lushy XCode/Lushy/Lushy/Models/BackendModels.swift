@@ -540,6 +540,23 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         case ingredients
     }
 
+    // Memberwise initializer for manual creation
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, vegan: Bool, crueltyFree: Bool, periodsAfterOpening: String?, category: String?, shade: String?, sizeInMl: Double?, spf: Int?, ingredients: [String]? = nil) {
+        self.id = id
+        self.barcode = barcode
+        self.productName = productName
+        self.brand = brand
+        self.imageUrl = imageUrl
+        self.vegan = vegan
+        self.crueltyFree = crueltyFree
+        self.periodsAfterOpening = periodsAfterOpening
+        self.category = category
+        self.shade = shade
+        self.sizeInMl = sizeInMl
+        self.spf = spf
+        self.ingredients = ingredients
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)

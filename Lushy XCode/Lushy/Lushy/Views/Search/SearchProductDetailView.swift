@@ -207,38 +207,53 @@ struct SearchProductDetailView: View {
             }
             .disabled(viewModel.isLoading)
             
-            // Add to Wishlist
+            // Add to Wishlist / Remove from Wishlist
             Button(action: {
-                viewModel.addToWishlist { result in
-                    switch result {
-                    case .success:
-                        wishlistMessage = "Added to wishlist! 💕"
-                        showingWishlistAlert = true
-                    case .failure(let error):
-                        wishlistMessage = "Failed to add to wishlist: \(error.localizedDescription)"
-                        showingWishlistAlert = true
+                if viewModel.isProductInWishlist {
+                    // Remove from wishlist
+                    viewModel.removeFromWishlist { result in
+                        switch result {
+                        case .success:
+                            wishlistMessage = "Removed from wishlist! 💔"
+                            showingWishlistAlert = true
+                        case .failure(let error):
+                            wishlistMessage = "Failed to remove from wishlist: \(error.localizedDescription)"
+                            showingWishlistAlert = true
+                        }
+                    }
+                } else {
+                    // Add to wishlist
+                    viewModel.addToWishlist { result in
+                        switch result {
+                        case .success:
+                            wishlistMessage = "Added to wishlist! 💕"
+                            showingWishlistAlert = true
+                        case .failure(let error):
+                            wishlistMessage = "Failed to add to wishlist: \(error.localizedDescription)"
+                            showingWishlistAlert = true
+                        }
                     }
                 }
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: viewModel.isProductInWishlist ? "checkmark.circle.fill" : "heart.fill")
-                    Text(viewModel.isProductInWishlist ? "Already in Wishlist" : "Add to Wishlist")
+                    Image(systemName: viewModel.isProductInWishlist ? "heart.slash.fill" : "heart.fill")
+                    Text(viewModel.isProductInWishlist ? "Remove from Wishlist" : "Add to Wishlist")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(
                     LinearGradient(
                         gradient: Gradient(colors: viewModel.isProductInWishlist ? 
-                            [Color.gray.opacity(0.3), Color.gray.opacity(0.2)] :
+                            [Color.red.opacity(0.6), Color.red.opacity(0.4)] :
                             [Color.lushyMint, Color.lushyCream]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .foregroundColor(viewModel.isProductInWishlist ? .secondary : .lushyPurple)
+                .foregroundColor(viewModel.isProductInWishlist ? .white : .lushyPurple)
                 .cornerRadius(12)
             }
-            .disabled(viewModel.isLoading || viewModel.isProductInWishlist)
+            .disabled(viewModel.isLoading)
         }
         .padding()
         .background(

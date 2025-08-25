@@ -112,7 +112,7 @@ class WishlistViewModel: ObservableObject {
         let itemToDelete = wishlistItems[index]
         
         // Use the correct API extension method
-        APIService.shared.deleteWishlistItem(id: itemToDelete.id.uuidString) // This calls the APIService+Wishlist extension
+        APIService.shared.deleteWishlistItem(id: itemToDelete.id) // Remove .uuidString since id is already a String
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case .failure(let error) = completion {

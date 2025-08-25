@@ -113,4 +113,31 @@ class SearchProductDetailViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
+    
+    func removeFromWishlist(completion: @escaping (Result<Void, Error>) -> Void) {
+        // Find the wishlist item that matches this product
+        guard let wishlistItem = wishlistItems.first(where: { item in
+            item.productName.lowercased() == product.productName.lowercased() ||
+            item.productURL.lowercased().contains(product.barcode.lowercased())
+        }) else {
+            completion(.failure(NSError(domain: "NotFoundError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Product not found in wishlist"])))
+            return
+        }
+        
+        APIService.shared.deleteWishlistItem(id: wishlistItem.id)
+            .receive(on: DispatchQueue.main)
+            .sink { completionResult in
+                switch completionResult {
+                case .finished:
+                    break
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            } receiveValue: { [weak self] _ in
+                // Refresh wishlist after successful removal
+                self?.loadWishlist()
+                completion(.success(()))
+            }
+            .store(in: &cancellables)
+    }
 }

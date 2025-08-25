@@ -35,7 +35,7 @@ extension APIService {
                 // Convert BackendWishlistItems to AppWishlistItems
                 return response.data.wishlistItems.map { item in
                     AppWishlistItem(
-                        id: UUID(uuidString: item.id) ?? UUID(),
+                        id: item.id,  // Use the original MongoDB ObjectId string directly
                         productName: item.productName,
                         productURL: item.productURL,
                         notes: item.notes ?? "",

@@ -127,6 +127,16 @@ exports.updateWishlistItem = async (req, res) => {
 // Delete a wishlist item
 exports.deleteWishlistItem = async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    
+    // Validate that the ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid wishlist item ID format'
+      });
+    }
+
     const wishlistItem = await WishlistItem.findOneAndDelete({
       _id: req.params.id,
       user: req.params.userId

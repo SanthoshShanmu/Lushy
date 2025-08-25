@@ -3,10 +3,9 @@ import SwiftUI
 
 struct WishlistView: View {
     @StateObject private var viewModel = WishlistViewModel()
-    @State private var showingAddItem = false
     @State private var showingLoginPrompt = false
-    @State private var selectedProduct: AppWishlistItem?
-    @State private var showProductDetail = false
+    @State private var showingProductNotFound = false
+    @State private var productNotFoundMessage = ""
     @EnvironmentObject var authManager: AuthManager
     
     var body: some View {
@@ -70,28 +69,42 @@ struct WishlistView: View {
                         .glassCard()
                         .padding(32)
                     } else if viewModel.wishlistItems.isEmpty {
-                        Text("Your wishlist is empty 💖")
-                            .lushyHeadline()
-                            .glassCard()
-                            .padding(20)
+                        VStack(spacing: 24) {
+                            Image(systemName: "heart.circle")
+                                .font(.system(size: 80))
+                                .foregroundStyle(LushyPalette.gradientPrimary.opacity(0.6))
+                            
+                            VStack(spacing: 8) {
+                                Text("Your wishlist is empty 💖")
+                                    .lushyHeadline()
+                                
+                                Text("Products you add to your wishlist from search and product views will appear here!")
+                                    .lushyCaption()
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .glassCard()
+                        .padding(20)
                     } else {
                         // Enhanced wishlist items display
                         ScrollView {
                             LazyVStack(spacing: 16) {
                                 ForEach(viewModel.wishlistItems) { item in
-                                    WishlistItemRow(item: item)
-                                        .onTapGesture {
-                                            selectedProduct = item
-                                            showProductDetail = true
-                                        }
-                                        .onSwipe(perform: { direction in
-                                            if direction == .leading {
-                                                // Handle delete
-                                                if let index = viewModel.wishlistItems.firstIndex(where: { $0.id == item.id }) {
-                                                    viewModel.removeItem(at: IndexSet(integer: index))
-                                                }
+                                    NavigationLink(destination: SearchProductDetailView(
+                                        product: createProductSummary(from: item),
+                                        currentUserId: AuthService.shared.userId ?? ""
+                                    )) {
+                                        WishlistItemRow(item: item)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .onSwipe(perform: { direction in
+                                        if direction == .leading {
+                                            // Handle delete
+                                            if let index = viewModel.wishlistItems.firstIndex(where: { $0.id == item.id }) {
+                                                viewModel.removeItem(at: IndexSet(integer: index))
                                             }
-                                        })
+                                        }
+                                    })
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -102,26 +115,6 @@ struct WishlistView: View {
             }
             .navigationTitle("💕 Wishlist")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if authManager.isAuthenticated {
-                        Button(action: { showingAddItem = true }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddItem) {
-                AddWishlistItemView(viewModel: viewModel)
-            }
             .sheet(isPresented: $showingLoginPrompt) {
                 LoginView(isLoggedIn: .constant(false))
                     .environmentObject(authManager)
@@ -134,10 +127,10 @@ struct WishlistView: View {
                         }
                     }
             }
-            .sheet(isPresented: $showProductDetail) {
-                if let product = selectedProduct {
-                    WishlistProductDetailView(item: product)
-                }
+            .alert("Product Not Found", isPresented: $showingProductNotFound) {
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text(productNotFoundMessage)
             }
         }
         .onAppear {
@@ -149,6 +142,35 @@ struct WishlistView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("AuthenticationFailed"))) { _ in
             showingLoginPrompt = true
         }
+    }
+    
+    // Helper function to extract barcode from wishlist URLs for ProductSearchSummary
+    private func extractBarcodeFromWishlistURL(_ urlString: String) -> String? {
+        if urlString.contains("lushy.app/product/") {
+            let components = urlString.components(separatedBy: "lushy.app/product/")
+            if components.count > 1 {
+                return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
+    }
+    
+    // Create ProductSearchSummary from wishlist item
+    private func createProductSummary(from item: AppWishlistItem) -> ProductSearchSummary {
+        return ProductSearchSummary(
+            id: item.id,
+            barcode: extractBarcodeFromWishlistURL(item.productURL) ?? "",
+            productName: item.productName,
+            brand: "",
+            imageUrl: item.imageURL,
+            vegan: false,
+            crueltyFree: false,
+            periodsAfterOpening: nil,
+            category: nil,
+            shade: nil,
+            sizeInMl: nil,
+            spf: nil
+        )
     }
 }
 
@@ -180,17 +202,14 @@ struct WishlistItemRow: View {
                     .foregroundColor(.lushyPurple)
                     .lineLimit(2)
                 
-                if let url = URL(string: item.productURL) {
-                    Link(destination: url) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "link.circle.fill")
-                                .font(.caption)
-                            Text("View Product")
-                                .font(.caption)
-                        }
-                        .foregroundColor(.lushyPink)
-                    }
+                // Remove the direct link - tapping anywhere will now handle navigation
+                HStack(spacing: 4) {
+                    Image(systemName: "heart.circle.fill")
+                        .font(.caption)
+                    Text("Tap to view details")
+                        .font(.caption)
                 }
+                .foregroundColor(.lushyPink)
                 
                 if (!item.notes.isEmpty) {
                     Text(item.notes)
@@ -396,167 +415,4 @@ extension View {
 
 enum SwipeDirection {
     case leading, trailing
-}
-
-// MARK: - Wishlist Product Detail View
-
-struct WishlistProductDetailView: View {
-    let item: AppWishlistItem
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            ZStack {
-                // Beautiful gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.lushyPink.opacity(0.08),
-                        Color.lushyPurple.opacity(0.04),
-                        Color.lushyCream.opacity(0.3),
-                        Color.white
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // Product Header
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Product image placeholder
-                            HStack {
-                                Spacer()
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink.opacity(0.3), Color.lushyMint.opacity(0.2)]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 200, height: 200)
-                                    .overlay(
-                                        VStack(spacing: 8) {
-                                            Image(systemName: "sparkles")
-                                                .font(.system(size: 60))
-                                                .foregroundColor(.lushyPink)
-                                            Text("Wishlist Item")
-                                                .font(.caption)
-                                                .foregroundColor(.lushyPink.opacity(0.8))
-                                        }
-                                    )
-                                    .shadow(radius: 12)
-                                Spacer()
-                            }
-                            
-                            // Product Info
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(item.productName)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                                    .multilineTextAlignment(.leading)
-                                
-                                if !item.notes.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Your Notes")
-                                            .font(.headline)
-                                            .foregroundColor(.lushyPurple)
-                                        
-                                        Text(item.notes)
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
-                                            .padding()
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.lushyPink.opacity(0.1))
-                                            )
-                                    }
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(.ultraThinMaterial)
-                        )
-                        
-                        // Actions Section
-                        VStack(spacing: 16) {
-                            Text("Actions")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.lushyPurple)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            
-                            // Visit Product URL
-                            if let url = URL(string: item.productURL) {
-                                Link(destination: url) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "link.circle.fill")
-                                            .font(.title2)
-                                        Text("Visit Product Page")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                    }
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .cornerRadius(16)
-                                }
-                            }
-                            
-                            // Note about adding to collection
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Image(systemName: "lightbulb.fill")
-                                        .foregroundColor(.yellow)
-                                    Text("Tip")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                }
-                                
-                                Text("When you purchase this product, you can add it to your collection using the scanner or manual entry!")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.yellow.opacity(0.1))
-                            )
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(.ultraThinMaterial)
-                        )
-                    }
-                    .padding()
-                }
-            }
-            .navigationTitle("Wishlist Item")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                    .foregroundColor(.lushyPink)
-                }
-            }
-        }
-    }
 }

@@ -19,13 +19,13 @@ struct WishlistItem: Identifiable, Codable {
 
 // App-specific model (renamed to avoid conflicts)
 struct AppWishlistItem: Identifiable, Codable {
-    let id: UUID
+    let id: String  // Changed from UUID to String to preserve MongoDB ObjectId
     let productName: String
     let productURL: String
     let notes: String
     let imageURL: String?
     
-    init(id: UUID = UUID(), productName: String, productURL: String, notes: String, imageURL: String? = nil) {
+    init(id: String = UUID().uuidString, productName: String, productURL: String, notes: String, imageURL: String? = nil) {
         self.id = id
         self.productName = productName
         self.productURL = productURL
