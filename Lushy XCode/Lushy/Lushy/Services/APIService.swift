@@ -526,6 +526,42 @@ class APIService {
         }.resume()
     }
     
+    // Fetch all reviews for a product from all users
+    func getAllReviewsForProduct(barcode: String) -> AnyPublisher<[BackendReview], APIError> {
+        guard let userId = AuthService.shared.userId else {
+            return Fail(error: APIError.authenticationRequired).eraseToAnyPublisher()
+        }
+        
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent("reviews")
+            .appendingPathComponent("barcode")
+            .appendingPathComponent(barcode)
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .map(\.data)
+            .decode(type: AllReviewsResponse.self, decoder: jsonDecoder)
+            .map { response in
+                return response.data.reviews
+            }
+            .mapError { error -> APIError in
+                if let apiError = error as? APIError {
+                    return apiError
+                }
+                return .networkError
+            }
+            .eraseToAnyPublisher()
+    }
+    
     // Add product to user's collection from search results
     func addProductToCollection(barcode: String, productName: String, brand: String?, imageUrl: String?, completion: @escaping (Result<String, Error>) -> Void) {
         guard let userId = AuthService.shared.userId else {

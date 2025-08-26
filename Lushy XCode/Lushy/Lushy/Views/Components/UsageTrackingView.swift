@@ -6,8 +6,6 @@ struct UsageTrackingView: View {
     @State private var checkInContext: String = "general"
     @State private var checkInNotes: String = ""
     @State private var customCheckInDate: Date = Date()
-    @State private var showingAmountTracker = false
-    @State private var currentAmount: Double = 100.0
     @State private var reminderEnabled: Bool = false
     @State private var reminderDays: Int = 7
     @State private var dailyUseToggle: Bool = false
@@ -31,11 +29,13 @@ struct UsageTrackingView: View {
                 finishedSection
             } else {
                 checkInSection
-                amountTrackingSection
                 usageSettingsSection
             }
             
-            usageInsightsSection
+            // Only show insights section when there's actually an insight to display
+            if usageViewModel.usagePatternInsight != nil && !(usageViewModel.usagePatternInsight?.isEmpty ?? true) {
+                usageInsightsSection
+            }
         }
     }
     
@@ -173,25 +173,6 @@ struct UsageTrackingView: View {
                         )
                     }
                 }
-                
-                Button(action: {
-                    showingAmountTracker = true
-                }) {
-                    HStack {
-                        Image(systemName: "drop.halffull")
-                        Text("Track Amount Left")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.mossGreen)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.mossGreen, lineWidth: 1.5)
-                    )
-                }
             }
         }
         .padding()
@@ -219,14 +200,6 @@ struct UsageTrackingView: View {
                 }
             )
         }
-        .sheet(isPresented: $showingAmountTracker) {
-            AmountTrackerSheet(
-                currentAmount: $currentAmount,
-                onSave: { amount in
-                    usageViewModel.trackAmount(amount)
-                }
-            )
-        }
         .alert("Mark Product as Finished?", isPresented: $usageViewModel.isShowingFinishConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Finish", role: .destructive) {
@@ -235,51 +208,6 @@ struct UsageTrackingView: View {
         } message: {
             Text("This will mark the product as finished. You can still view your usage history.")
         }
-    }
-    
-    private var amountTrackingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Product Amount")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-                if let lastTracking = usageViewModel.lastTrackingDate {
-                    Text("Last tracked: \(formatDate(lastTracking))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            if let currentAmount = usageViewModel.currentAmount {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("Amount left: \(Int(currentAmount))%")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Spacer()
-                        if let estimatedFinish = usageViewModel.estimatedFinishDate {
-                            Text("Est. finish: \(formatDate(estimatedFinish))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    ProgressView(value: currentAmount / 100.0)
-                        .progressViewStyle(LinearProgressViewStyle(tint: amountColor(currentAmount)))
-                        .scaleEffect(x: 1, y: 2, anchor: .center)
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.mossGreen.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.mossGreen.opacity(0.2), lineWidth: 1)
-                )
-        )
     }
     
     private var usageSettingsSection: some View {
@@ -350,22 +278,6 @@ struct UsageTrackingView: View {
                 .fontWeight(.semibold)
             
             VStack(spacing: 8) {
-                if shouldShowStockingAdvice {
-                    HStack {
-                        Image(systemName: "cart.badge.plus")
-                            .foregroundColor(.orange)
-                        Text("Consider stocking up - you're running low!")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.orange.opacity(0.1))
-                    )
-                }
-                
                 if let insight = usageViewModel.usagePatternInsight {
                     HStack {
                         Image(systemName: "chart.line.uptrend.xyaxis")
@@ -432,89 +344,6 @@ struct UsageTrackingView: View {
         } else {
             formatter.dateStyle = .short
             return formatter.string(from: date)
-        }
-    }
-    
-    private func amountColor(_ amount: Double) -> Color {
-        if amount > 50 { return .green }
-        else if amount > 25 { return .orange }
-        else { return .red }
-    }
-    
-    private var shouldShowStockingAdvice: Bool {
-        guard let currentAmount = usageViewModel.currentAmount else { return false }
-        
-        if dailyUseToggle && currentAmount > 25 {
-            return false
-        }
-        
-        return currentAmount < 30
-    }
-}
-
-struct AmountTrackerSheet: View {
-    @Binding var currentAmount: Double
-    let onSave: (Double) -> Void
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 30) {
-                VStack(spacing: 16) {
-                    Text("How much product is left?")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("Move the slider to indicate the approximate amount remaining")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                
-                VStack(spacing: 20) {
-                    HStack {
-                        Text("0%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("100%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Slider(value: $currentAmount, in: 0...100, step: 5)
-                        .accentColor(.lushyPink)
-                    
-                    Text("\(Int(currentAmount))% remaining")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.lushyPink)
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.lushyPink.opacity(0.05))
-                )
-                
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Track Amount")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        onSave(currentAmount)
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
         }
     }
 }

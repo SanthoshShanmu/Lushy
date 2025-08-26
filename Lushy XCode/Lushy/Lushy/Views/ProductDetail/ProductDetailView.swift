@@ -119,7 +119,7 @@ struct ProductDetailView: View {
                 _PrettyBeautyJourneySection(viewModel: viewModel)
                 
                 // Reviews with girly theme - full width
-                _PrettyReviewsSection(viewModel: viewModel)
+                reviewsSection
             }
             .padding(.bottom, 30)
         }
@@ -378,6 +378,189 @@ struct ProductDetailView: View {
         // PAO comparison now independent of opened state
         if editPAO != (viewModel.product.periodsAfterOpening ?? "") { return true }
         return false
+    }
+    
+    // Reviews section
+    private var reviewsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "star.fill")
+                    .foregroundColor(.yellow)
+                Text("Reviews")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                
+                // Show loading indicator when fetching reviews
+                if viewModel.isLoadingReviews {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+            
+            // User's own reviews
+            if let reviews = viewModel.product.reviews as? Set<Review>, !reviews.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your Review")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(Array(reviews), id: \.objectID) { review in
+                        reviewRow(review)
+                    }
+                }
+                
+                // Add divider if there are also community reviews
+                if let allReviews = viewModel.allReviewsForProduct, !allReviews.isEmpty {
+                    Divider()
+                        .padding(.vertical, 8)
+                }
+            }
+            
+            // Community reviews from all users
+            if let allReviews = viewModel.allReviewsForProduct, !allReviews.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Community Reviews (\(allReviews.count))")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(allReviews) { review in
+                        reviewRow(review)
+                    }
+                }
+            } else if !viewModel.isLoadingReviews && viewModel.allReviewsForProduct?.isEmpty == true {
+                Text("No community reviews yet for this product")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
+            
+            // Show review form button or message based on product state
+            if !viewModel.hasUserReviewed && viewModel.product.isFinished {
+                Button("Write a Review") {
+                    viewModel.showReviewForm = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color("LushyPrimary"))
+            } else if !viewModel.hasUserReviewed && !viewModel.product.isFinished {
+                Text("Finish this product to write a review")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
+        }
+        .padding()
+        .background(Color("lushyBackground"))
+        .cornerRadius(12)
+    }
+    
+    // Helper function to display review rows for both user reviews and backend reviews
+    @ViewBuilder
+    private func reviewRow(_ review: Review) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                // Star rating
+                HStack(spacing: 2) {
+                    ForEach(1...5, id: \.self) { star in
+                        Image(systemName: star <= review.rating ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
+                            .font(.caption)
+                    }
+                }
+                
+                Spacer()
+                
+                // Date
+                if let date = review.createdAt {
+                    Text(date, style: .date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Review title
+            if let title = review.title, !title.isEmpty {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+            }
+            
+            // Review text
+            if let text = review.text, !text.isEmpty {
+                Text(text)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.gray.opacity(0.1))
+        )
+    }
+    
+    @ViewBuilder
+    private func reviewRow(_ review: BackendReview) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                // User info for community reviews
+                if let user = review.user {
+                    HStack(spacing: 6) {
+                        // Profile image placeholder
+                        Circle()
+                            .fill(Color.lushyPink.opacity(0.3))
+                            .frame(width: 20, height: 20)
+                            .overlay(
+                                Text(String(user.name.prefix(1)).uppercased())
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.lushyPink)
+                            )
+                        
+                        Text(user.name)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                Spacer()
+                
+                // Star rating
+                HStack(spacing: 2) {
+                    ForEach(1...5, id: \.self) { star in
+                        Image(systemName: star <= review.rating ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
+                            .font(.caption)
+                    }
+                }
+                
+                // Date
+                Text(review.createdAt, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Review title
+            if !review.title.isEmpty {
+                Text(review.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+            }
+            
+            // Review text
+            if !review.text.isEmpty {
+                Text(review.text)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.gray.opacity(0.1))
+        )
     }
 }
 
@@ -839,87 +1022,6 @@ struct JourneyStatItem: View {
     }
 }
 
-// MARK: - Reviews Section Component
-private struct _PrettyReviewsSection: View {
-    @ObservedObject var viewModel: ProductDetailViewModel
-    
-    // Local formatter to avoid referencing outer scope helper
-    private func dateString(_ date: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .medium; return df.string(from: date)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Reviews")
-                .font(.headline)
-            
-            reviewsContent
-            
-            // Remove the "Write a Review" button since reviews are now automatic when finishing products
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    @ViewBuilder
-    private var reviewsContent: some View {
-        if let reviews = viewModel.product.reviews as? Set<Review>, !reviews.isEmpty {
-            ForEach(Array(reviews), id: \.self) { review in
-                reviewRow(review)
-            }
-        } else {
-            if viewModel.product.isFinished {
-                Text("No review yet.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("Review will be available after finishing this product")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .italic()
-            }
-        }
-    }
-    
-    private func reviewRow(_ review: Review) -> some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text(review.title ?? "")
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                starRating(rating: Int(review.rating))
-            }
-            
-            Text(review.text ?? "")
-                .font(.caption)
-                .padding(.top, 1)
-            
-            Text(dateString(review.createdAt ?? Date()))
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.top, 2)
-            
-            Divider()
-        }
-        .padding(.bottom, 8)
-    }
-    
-    private func starRating(rating: Int) -> some View {
-        HStack {
-            ForEach(1...5, id: \.self) { index in
-                Image(systemName: index <= rating ? "star.fill" : "star")
-                    .foregroundColor(.yellow)
-                    .font(.caption)
-            }
-        }
-    }
-}
-
 // MARK: - Bags Section
 private struct _PrettyBagsSection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
@@ -962,9 +1064,12 @@ private struct _PrettyBagsSection: View {
             }
         }
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
     }
 }
 
@@ -1020,9 +1125,12 @@ private struct _PrettyTagsSection: View {
             }
         }
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
     }
 }
 

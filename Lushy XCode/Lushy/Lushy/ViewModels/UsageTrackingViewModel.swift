@@ -6,19 +6,15 @@ import UserNotifications
 class UsageTrackingViewModel: ObservableObject {
     @Published var usageEntries: [UsageEntry] = []
     @Published var isShowingFinishConfirmation = false
-    @Published var currentAmount: Double? = nil
-    @Published var lastTrackingDate: Date? = nil
-    @Published var estimatedFinishDate: Date? = nil
     @Published var usagePatternInsight: String? = nil
     
-    let product: UserProduct  // Changed from private to public
+    let product: UserProduct
     private var cancellables = Set<AnyCancellable>()
     private var isFinishingProduct = false
     
     init(product: UserProduct) {
         self.product = product
         loadUsageEntries()
-        loadAmountTracking()
         calculateUsagePatterns()
         
         // Subscribe to Core Data changes
@@ -104,56 +100,6 @@ class UsageTrackingViewModel: ObservableObject {
         }
     }
     
-    // New method to track product amount
-    func trackAmount(_ amount: Double) {
-        currentAmount = amount
-        lastTrackingDate = Date()
-        
-        // Calculate estimated finish date based on usage patterns
-        calculateEstimatedFinishDate()
-        
-        // Save to Core Data or UserDefaults
-        let key = "amount_\(product.objectID.uriRepresentation().absoluteString)"
-        UserDefaults.standard.set(amount, forKey: key)
-        UserDefaults.standard.set(Date(), forKey: "\(key)_date")
-        
-        // Trigger low amount notifications if needed
-        if amount < 25 {
-            scheduleAmountNotification()
-        }
-    }
-    
-    private func loadAmountTracking() {
-        let key = "amount_\(product.objectID.uriRepresentation().absoluteString)"
-        let amount = UserDefaults.standard.double(forKey: key)
-        if amount > 0 {
-            currentAmount = amount
-            lastTrackingDate = UserDefaults.standard.object(forKey: "\(key)_date") as? Date
-            calculateEstimatedFinishDate()
-        }
-    }
-    
-    private func calculateEstimatedFinishDate() {
-        guard let currentAmount = currentAmount,
-              currentAmount > 0,
-              let _ = lastTrackingDate else { return }
-        
-        // Calculate usage rate based on recent check-ins
-        let recentEntries = usageEntries.filter { entry in
-            entry.createdAt >= Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        }
-        
-        if !recentEntries.isEmpty {
-            let daysInPeriod = 30.0
-            let usageRate = Double(recentEntries.count) / daysInPeriod // uses per day
-            
-            if usageRate > 0 {
-                let estimatedDaysLeft = currentAmount / (usageRate * 2.0) // Assuming 2% per use
-                estimatedFinishDate = Calendar.current.date(byAdding: .day, value: Int(estimatedDaysLeft), to: Date())
-            }
-        }
-    }
-    
     private func calculateUsagePatterns() {
         let recentEntries = usageEntries.filter { entry in
             entry.createdAt >= Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
@@ -180,55 +126,6 @@ class UsageTrackingViewModel: ObservableObject {
         } else {
             usagePatternInsight = "You have a balanced usage pattern with this product"
         }
-    }
-    
-    private func scheduleAmountNotification() {
-        // Schedule local notification for low amount
-        let content = UNMutableNotificationContent()
-        content.title = "Running Low!"
-        content.body = "\(product.productName ?? "Your product") is running low. Consider restocking soon."
-        content.sound = .default
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: false) // 24 hours
-        let request = UNNotificationRequest(identifier: "low_amount_\(product.objectID)", content: content, trigger: trigger)
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Error scheduling amount notification: \(error)")
-            }
-        }
-    }
-    
-    // Helper to create notes with metadata (no rating)
-    private func createNotesWithMetadata(notes: String?, context: String) -> String? {
-        let metadata: [String: Any] = [
-            "context": context,
-            "notes": notes ?? ""
-        ]
-        
-        if let jsonData = try? JSONSerialization.data(withJSONObject: metadata),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            return jsonString
-        }
-        
-        // Fallback to simple format
-        return "Context: \(context)" + (notes?.isEmpty == false ? ", Notes: \(notes!)" : "")
-    }
-    
-    // Helper to parse metadata from notes (no rating)
-    private func parseMetadataFromNotes(_ notes: String?) -> (context: String, notes: String) {
-        guard let notes = notes else { return ("general", "") }
-        
-        // Try to parse JSON first
-        if let jsonData = notes.data(using: .utf8),
-           let metadata = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-            let context = metadata["context"] as? String ?? "general"
-            let userNotes = metadata["notes"] as? String ?? ""
-            return (context, userNotes)
-        }
-        
-        // Fallback parsing
-        return ("general", notes)
     }
     
     // Finish product
@@ -295,13 +192,8 @@ class UsageTrackingViewModel: ObservableObject {
         let usagePerWeek = Double(totalCheckIns) / Double(totalDays) * 7.0
         
         if usagePerWeek >= 5 {
-            // Updated logic: only suggest stocking up if running low or high usage + time since purchase
-            let daysSincePurchase = Calendar.current.dateComponents([.day], from: product.purchaseDate ?? Date(), to: Date()).day ?? 0
-            if daysSincePurchase > 90 || (currentAmount ?? 100) < 30 {
-                return "You use this daily - consider stocking up!"
-            } else {
-                return "You use this daily - great consistency!"
-            }
+            // Simplified logic - just focus on usage patterns, not stock advice
+            return "You use this daily - great consistency!"
         } else if usagePerWeek >= 3 {
             return "Regular use - great for your routine"
         } else if usagePerWeek >= 1 {
@@ -345,6 +237,35 @@ class UsageTrackingViewModel: ObservableObject {
                     notes: metadata.notes.isEmpty ? nil : metadata.notes
                 )
             }
+    }
+    
+    // Helper to create notes with metadata (no rating)
+    private func createNotesWithMetadata(notes: String?, context: String) -> String? {
+        let metadata: [String: Any] = [
+            "context": context,
+            "notes": notes ?? ""
+        ]
+        
+        guard let data = try? JSONSerialization.data(withJSONObject: metadata),
+              let jsonString = String(data: data, encoding: .utf8) else {
+            return notes
+        }
+        
+        return jsonString
+    }
+    
+    // Helper to parse metadata from notes
+    private func parseMetadataFromNotes(_ notes: String?) -> (context: String, notes: String) {
+        guard let notes = notes,
+              let data = notes.data(using: .utf8),
+              let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (context: "general", notes: notes ?? "")
+        }
+        
+        let context = metadata["context"] as? String ?? "general"
+        let userNotes = metadata["notes"] as? String ?? ""
+        
+        return (context: context, notes: userNotes)
     }
 }
 

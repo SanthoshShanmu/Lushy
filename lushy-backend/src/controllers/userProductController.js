@@ -572,3 +572,66 @@ exports.getPAOTaxonomy = async (req, res) => {
     });
   }
 };
+
+// Get all reviews for a product (from all users)
+exports.getAllReviewsForProduct = async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    
+    // First find the product in the catalog
+    const Product = require('../models/product');
+    const product = await Product.findOne({ barcode });
+    
+    if (!product) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found'
+      });
+    }
+    
+    // Find all user products that reference this product and have reviews
+    const userProducts = await UserProduct.find({ 
+      product: product._id,
+      'reviews.0': { $exists: true } // Only products that have at least one review
+    })
+    .populate('user', 'name username profileImage')
+    .lean();
+    
+    // Extract all reviews with user information
+    const allReviews = [];
+    userProducts.forEach(userProduct => {
+      if (userProduct.reviews && userProduct.reviews.length > 0) {
+        userProduct.reviews.forEach(review => {
+          allReviews.push({
+            id: review._id?.toString() || `${userProduct._id}_${review.date}`,
+            rating: review.rating,
+            title: review.title,
+            text: review.text,
+            createdAt: review.date,
+            user: userProduct.user ? {
+              id: userProduct.user._id,
+              name: userProduct.user.name,
+              username: userProduct.user.username,
+              profileImage: userProduct.user.profileImage
+            } : null
+          });
+        });
+      }
+    });
+    
+    // Sort reviews by date (newest first)
+    allReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.status(200).json({
+      status: 'success',
+      results: allReviews.length,
+      data: { reviews: allReviews }
+    });
+  } catch (error) {
+    console.error('getAllReviewsForProduct error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};

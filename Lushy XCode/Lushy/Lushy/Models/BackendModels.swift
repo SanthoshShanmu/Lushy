@@ -592,3 +592,53 @@ struct UsersWhoOwnProductResponse: Codable {
         }
     }
 }
+
+// Model for backend review responses
+struct BackendReview: Codable, Identifiable {
+    let id: String
+    let rating: Int
+    let title: String
+    let text: String
+    let createdAt: Date
+    let user: UserSummary?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case rating
+        case title
+        case text
+        case createdAt
+        case user
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        rating = try container.decode(Int.self, forKey: .rating)
+        title = try container.decode(String.self, forKey: .title)
+        text = try container.decode(String.self, forKey: .text)
+        user = try? container.decode(UserSummary.self, forKey: .user)
+        
+        // Handle date decoding
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let createdAtString = try? container.decode(String.self, forKey: .createdAt) {
+            createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+        } else {
+            createdAt = Date()
+        }
+    }
+}
+
+// Response model for all reviews for a product
+struct AllReviewsResponse: Codable {
+    let status: String
+    let results: Int
+    let data: AllReviewsData
+    
+    struct AllReviewsData: Codable {
+        let reviews: [BackendReview]
+    }
+}

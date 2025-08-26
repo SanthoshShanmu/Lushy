@@ -18,4 +18,7 @@ router
   .put(upload.single('image'), userProductController.updateUserProduct)
   .delete(userProductController.deleteUserProduct);
 
+// Get all reviews for a product by barcode
+router.get('/reviews/barcode/:barcode', userProductController.getAllReviewsForProduct);
+
 module.exports = router;

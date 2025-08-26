@@ -16,6 +16,10 @@ class ProductDetailViewModel: ObservableObject {
     // Flag to stop further network / observer work after deletion
     @Published private(set) var isDeleted: Bool = false
 
+    // All reviews from all users for this product
+    @Published var allReviewsForProduct: [BackendReview]? = nil
+    @Published var isLoadingReviews = false
+
     private var cancellables = Set<AnyCancellable>()
     private let productId: String
 
@@ -104,6 +108,8 @@ class ProductDetailViewModel: ObservableObject {
         refreshRemoteDetail()
         // Load latest product including relationships (tags, bags)
         refreshProduct()
+        // Load all reviews for this product from all users
+        loadAllReviews()
     }
     
     /// Fetch a single product from backend and update local Core Data relationships
@@ -529,5 +535,35 @@ class ProductDetailViewModel: ObservableObject {
             guard let self = self else { return }
             NotificationCenter.default.post(name: NSNotification.Name("ProductDeleted"), object: self.product.objectID)
         }
+    }
+
+    // Load all reviews for this product from all users
+    func loadAllReviews() {
+        // Get the barcode from the product to fetch reviews
+        guard let barcode = product.barcode, !barcode.isEmpty else {
+            print("❌ Cannot load reviews: Missing product barcode")
+            return
+        }
+        
+        isLoadingReviews = true
+        
+        APIService.shared.getAllReviewsForProduct(barcode: barcode)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoadingReviews = false
+                    switch completion {
+                    case .failure(let error):
+                        print("❌ Failed to load all reviews: \(error)")
+                    case .finished:
+                        break
+                    }
+                },
+                receiveValue: { [weak self] reviews in
+                    print("✅ Loaded \(reviews.count) reviews from all users")
+                    self?.allReviewsForProduct = reviews
+                }
+            )
+            .store(in: &cancellables)
     }
 }
