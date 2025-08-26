@@ -21,6 +21,8 @@ const ActivitySchema = new mongoose.Schema({
     {
       user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       text: { type: String, required: true },
+      likes: { type: Number, default: 0 },
+      likedBy: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
       createdAt: { type: Date, default: Date.now }
     }
   ],

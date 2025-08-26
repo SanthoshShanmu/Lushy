@@ -474,11 +474,13 @@ struct CommentSummary: Codable, Identifiable {
     let id: String
     let user: UserSummary
     let text: String
+    let likes: Int?
+    let liked: Bool?
     let createdAt: Date  // Changed from String to Date
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, text, createdAt
+        case user, text, likes, liked, createdAt
     }
     
     init(from decoder: Decoder) throws {
@@ -487,14 +489,26 @@ struct CommentSummary: Codable, Identifiable {
         id = try container.decode(String.self, forKey: .id)
         user = try container.decode(UserSummary.self, forKey: .user)
         text = try container.decode(String.self, forKey: .text)
+        likes = try? container.decode(Int.self, forKey: .likes)
+        liked = try? container.decode(Bool.self, forKey: .liked)
         
-        // Handle date decoding
+        // Handle date decoding with multiple fallback strategies
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         
         if let createdAtString = try? container.decode(String.self, forKey: .createdAt) {
-            createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+            if let parsedDate = dateFormatter.date(from: createdAtString) {
+                createdAt = parsedDate
+            } else {
+                // Try without fractional seconds
+                dateFormatter.formatOptions = [.withInternetDateTime]
+                createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+            }
+        } else if let createdAtDouble = try? container.decode(Double.self, forKey: .createdAt) {
+            // Handle timestamp format
+            createdAt = Date(timeIntervalSince1970: createdAtDouble / 1000)
         } else {
+            // Last resort fallback
             createdAt = Date()
         }
     }

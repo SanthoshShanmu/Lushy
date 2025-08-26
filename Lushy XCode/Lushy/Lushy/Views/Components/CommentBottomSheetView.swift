@@ -5,6 +5,7 @@ struct CommentBottomSheetView: View {
     @State var commentList: [CommentSummary]
     @State var commentsCount: Int
     @State private var newCommentText = ""
+    @State private var currentUserName: String = "User"
     @Environment(\.dismiss) private var dismiss
     
     let onCommentAdded: (([CommentSummary], Int) -> Void)?
@@ -58,7 +59,7 @@ struct CommentBottomSheetView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         ForEach(commentList) { comment in
-                            CommentRowView(comment: comment)
+                            CommentRowView(comment: comment, activityId: activityId)
                                 .padding(.horizontal, 20)
                         }
                     }
@@ -75,11 +76,14 @@ struct CommentBottomSheetView: View {
             Color.white
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         )
+        .onAppear {
+            loadCurrentUserProfile()
+        }
     }
     
     private var emptyCommentsView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "message.circle")
+            Image(systemName: "square.and.pencil")
                 .font(.system(size: 48))
                 .foregroundColor(.lushyPink.opacity(0.6))
             
@@ -101,22 +105,20 @@ struct CommentBottomSheetView: View {
             Divider()
             
             HStack(spacing: 12) {
-                // User avatar placeholder
+                // Current user avatar - use initials from fetched user name
                 Circle()
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.lushyPink.opacity(0.7),
-                                Color.lushyPurple.opacity(0.5)
-                            ]),
+                            colors: [.lushyPink, .lushyPurple],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 32, height: 32)
                     .overlay(
-                        Image(systemName: "person.fill")
+                        Text(currentUserName.prefix(1).uppercased())
                             .font(.caption)
+                            .fontWeight(.semibold)
                             .foregroundColor(.white)
                     )
                 
@@ -129,7 +131,7 @@ struct CommentBottomSheetView: View {
                     
                     if !newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button(action: submitComment) {
-                            Image(systemName: "paperplane.fill")
+                            Image(systemName: "square.and.pencil")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white)
                                 .padding(8)
@@ -162,6 +164,21 @@ struct CommentBottomSheetView: View {
         }
     }
     
+    private func loadCurrentUserProfile() {
+        guard let userId = AuthService.shared.userId else {
+            currentUserName = "User"
+            return
+        }
+        
+        APIService.shared.fetchUserProfile(userId: userId) { result in
+            DispatchQueue.main.async {
+                if case .success(let wrapper) = result {
+                    currentUserName = wrapper.user.name
+                }
+            }
+        }
+    }
+    
     private func submitComment() {
         let trimmedText = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
@@ -181,29 +198,64 @@ struct CommentBottomSheetView: View {
 
 struct CommentRowView: View {
     let comment: CommentSummary
+    let activityId: String
+    @State private var likesCount: Int = 0
+    @State private var isLiked: Bool = false
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            // User avatar
-            Circle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.lushyPink.opacity(0.7),
-                            Color.lushyPurple.opacity(0.5),
-                            Color.lushyMint.opacity(0.3)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Text(comment.user.name.prefix(1).uppercased())
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                )
+            // User avatar - show actual profile picture instead of just initials
+            Group {
+                if let profileImageUrl = comment.user.profileImage,
+                   !profileImageUrl.isEmpty {
+                    AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(profileImageUrl)")) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.lushyPink.opacity(0.7),
+                                        Color.lushyPurple.opacity(0.5),
+                                        Color.lushyMint.opacity(0.3)
+                                    ]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.7)
+                            )
+                    }
+                    .frame(width: 36, height: 36)
+                    .clipShape(Circle())
+                } else {
+                    // Fallback to initials if no profile image
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.lushyPink.opacity(0.7),
+                                    Color.lushyPurple.opacity(0.5),
+                                    Color.lushyMint.opacity(0.3)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Text(comment.user.name.prefix(1).uppercased())
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        )
+                }
+            }
             
             // Comment content
             VStack(alignment: .leading, spacing: 4) {
@@ -225,19 +277,28 @@ struct CommentRowView: View {
                     .foregroundColor(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                 
-                // Optional: Add like button for comments
+                // Comment interaction - like button with working functionality
                 HStack(spacing: 16) {
                     Button(action: {
-                        // TODO: Implement comment liking
+                        APIService.shared.likeComment(activityId: activityId, commentId: comment.id) { result in
+                            DispatchQueue.main.async {
+                                if case .success(let response) = result {
+                                    likesCount = response.likes
+                                    isLiked = response.liked
+                                }
+                            }
+                        }
                     }) {
                         HStack(spacing: 4) {
-                            Image(systemName: "heart")
+                            Image(systemName: isLiked ? "heart.fill" : "heart")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(isLiked ? .red : .secondary)
                             
-                            Text("Like")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            if likesCount > 0 {
+                                Text("\(likesCount)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                     
@@ -251,6 +312,10 @@ struct CommentRowView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.clear)
         )
+        .onAppear {
+            likesCount = comment.likes ?? 0
+            isLiked = comment.liked ?? false
+        }
     }
     
     private func timeAgoString(from date: Date) -> String {

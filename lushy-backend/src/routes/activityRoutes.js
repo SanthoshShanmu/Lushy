@@ -15,4 +15,7 @@ router.post('/:activityId/like', activityController.likeActivity);
 // Comment on an activity
 router.post('/:activityId/comment', activityController.commentOnActivity);
 
+// Like a comment on an activity
+router.post('/:activityId/comment/:commentId/like', activityController.likeComment);
+
 module.exports = router;

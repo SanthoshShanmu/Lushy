@@ -553,7 +553,7 @@ struct ReviewActivityCard: View {
                     showCommentSheet = true
                 }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "bubble.left")
+                        Image(systemName: "square.and.pencil")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                         if commentsCount > 0 {

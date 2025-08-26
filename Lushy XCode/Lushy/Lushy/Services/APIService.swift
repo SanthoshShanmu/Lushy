@@ -387,6 +387,28 @@ class APIService {
         }.resume()
     }
     
+    func likeComment(activityId: String, commentId: String, completion: @escaping (Result<(likes: Int, liked: Bool), Error>) -> Void) {
+        let url = baseURL
+            .appendingPathComponent("activities")
+            .appendingPathComponent(activityId)
+            .appendingPathComponent("comment")
+            .appendingPathComponent(commentId)
+            .appendingPathComponent("like")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if let token = AuthService.shared.token { request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), let data = data else {
+                completion(.failure(APIError.invalidResponse)); return }
+            struct LikeResp: Decodable { let likes: Int; let liked: Bool }
+            do {
+                let resp = try self.jsonDecoder.decode(LikeResp.self, from: data)
+                completion(.success((likes: resp.likes, liked: resp.liked)))
+            } catch { completion(.failure(error)) }
+        }.resume()
+    }
+    
     func fetchUserProfile(userId: String, completion: @escaping (Result<UserProfileWrapper, Error>) -> Void) {
         let url = baseURL.appendingPathComponent("users/\(userId)/profile")
         var request = URLRequest(url: url)

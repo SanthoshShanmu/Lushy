@@ -114,6 +114,15 @@ exports.getFeed = async (req, res) => {
       } else {
         const obj = act.toObject();
         obj.liked = (act.likedBy || []).some(id => id.toString() === currentUserId);
+        
+        // Also compute liked state for each comment
+        if (obj.comments && obj.comments.length > 0) {
+          obj.comments = obj.comments.map(comment => ({
+            ...comment,
+            liked: (comment.likedBy || []).some(id => id.toString() === currentUserId)
+          }));
+        }
+        
         return obj;
       }
     });
@@ -208,7 +217,51 @@ exports.commentOnActivity = async (req, res) => {
       { new: true }
     ).populate('comments.user', 'name');
     if (!activity) return res.status(404).json({ message: 'Activity not found' });
-    res.json({ comments: activity.comments });
+    
+    // Compute liked state for each comment for the current user
+    const currentUserId = req.user.id;
+    const commentsWithLikedState = activity.comments.map(comment => {
+      const commentObj = comment.toObject();
+      commentObj.liked = (comment.likedBy || []).some(id => id.toString() === currentUserId);
+      return commentObj;
+    });
+    
+    res.json({ comments: commentsWithLikedState });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// Like a comment on an activity
+exports.likeComment = async (req, res) => {
+  try {
+    const { activityId, commentId } = req.params;
+    const userId = req.user.id;
+    
+    const activity = await Activity.findById(activityId);
+    if (!activity) return res.status(404).json({ message: 'Activity not found' });
+    
+    const comment = activity.comments.id(commentId);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    
+    // Toggle like
+    const likedIndex = comment.likedBy.findIndex(id => id.toString() === userId);
+    let liked;
+    
+    if (likedIndex !== -1) {
+      // Unlike the comment
+      comment.likedBy.splice(likedIndex, 1);
+      comment.likes = Math.max(0, comment.likes - 1);
+      liked = false;
+    } else {
+      // Like the comment
+      comment.likedBy.push(userId);
+      comment.likes = (comment.likes || 0) + 1;
+      liked = true;
+    }
+    
+    await activity.save();
+    res.json({ likes: comment.likes, liked });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
