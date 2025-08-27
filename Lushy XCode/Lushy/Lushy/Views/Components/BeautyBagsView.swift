@@ -319,70 +319,82 @@ struct ModernBagCard: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top section with icon and product count
-            VStack(spacing: 12) {
-                ZStack {
-                    // Background circle for the icon - ALWAYS use bag color for theming
-                    Circle()
-                        .fill(Color(bag.color ?? "lushyPink").opacity(0.15))
-                        .frame(width: 70, height: 70)
-                    
-                    // Large view: show custom image if available, otherwise show icon
-                    if let imageData = bag.imageData, let customImage = UIImage(data: imageData) {
-                        // Custom image from camera/photo library
-                        Image(uiImage: customImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 60, height: 60)
-                            .clipShape(Circle())
-                    } else if let icon = bag.icon, icon.count == 1 {
-                        // Emoji icon
-                        Text(icon)
-                            .font(.system(size: 32))
-                    } else {
-                        // System icon with bag color
-                        Image(systemName: bag.icon ?? "bag.fill")
-                            .font(.system(size: 28, weight: .medium))
-                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+            // Large image/icon section - inspired by collection covers
+            ZStack {
+                // Background for the image area
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(bag.color ?? "lushyPink").opacity(0.2),
+                                Color(bag.color ?? "lushyPink").opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 120)
+                
+                // Image or icon content
+                if let imageData = bag.imageData, let customImage = UIImage(data: imageData) {
+                    // Custom image from camera/photo library - large and prominent
+                    Image(uiImage: customImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 120)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                } else {
+                    // Icon overlay when no custom image
+                    VStack(spacing: 8) {
+                        if let icon = bag.icon, icon.count == 1 {
+                            // Emoji icon - larger for prominence
+                            Text(icon)
+                                .font(.system(size: 40))
+                        } else {
+                            // System icon with bag color - larger and more prominent
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 36, weight: .medium))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        }
+                        
+                        // Product count badge
+                        let productCount = viewModel.products(in: bag).count
+                        if productCount > 0 {
+                            Text("\(productCount) item\(productCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(8)
+                        }
                     }
                 }
-                
-                // Product count badge - use bag color for theming
-                let productCount = viewModel.products(in: bag).count
-                Text("\(productCount) product\(productCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(Color(bag.color ?? "lushyPink"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(bag.color ?? "lushyPink").opacity(0.1))
-                    .cornerRadius(8)
             }
-            .padding(.top, 20)
-            .padding(.bottom, 12)
             
-            // Bottom section with name and optional description
+            // Bottom section with name and description - more compact
             VStack(spacing: 6) {
                 Text(bag.name ?? "Unnamed Bag")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 
-                // Show description if available
+                // Show description if available - smaller and more subtle
                 if let description = bag.bagDescription, !description.isEmpty {
                     Text(description)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .padding(.horizontal, 8)
                 }
                 
-                // Privacy indicator
+                // Privacy indicator - more subtle
                 if bag.isPrivate {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "lock.fill")
                             .font(.caption2)
                         Text("Private")
@@ -391,55 +403,20 @@ struct ModernBagCard: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 2)
                 }
-                
-                // Subtle accent line
-                Rectangle()
-                    .fill(Color(bag.color ?? "lushyPink").opacity(0.3))
-                    .frame(width: 24, height: 2)
-                    .cornerRadius(1)
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 20)
+            .padding(.vertical, 12)
         }
-        .frame(height: bag.bagDescription?.isEmpty == false || bag.isPrivate ? 200 : 180)
+        .frame(height: 180) // Consistent height for grid layout
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color.white, location: 0),
-                            .init(color: Color(bag.color ?? "lushyPink").opacity(0.04), location: 1)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
-                )
-        )
-        .shadow(
-            color: Color(bag.color ?? "lushyPink").opacity(0.1),
-            radius: 12,
-            x: 0,
-            y: 6
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color(bag.color ?? "lushyPink").opacity(0.1), radius: 8, x: 0, y: 4)
         )
         .overlay(
-            // Subtle highlight at the top
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.8),
-                            Color.clear
-                        ]),
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                )
-                .blendMode(.overlay)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
         )
         .onAppear {
             viewModel.fetchBags()

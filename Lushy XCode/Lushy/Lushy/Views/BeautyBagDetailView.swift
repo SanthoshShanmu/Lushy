@@ -260,27 +260,72 @@ struct BeautyBagDetailView: View {
         .padding(.horizontal, 20)
     }
     
-    // Extracted bag icon view
+    // Extracted bag icon view - updated to use large collection-cover style
     private func bagIconView(iconBackgroundColor: Color, iconForegroundColor: Color) -> some View {
-        ZStack {
-            Circle()
-                .fill(iconBackgroundColor)
-                .frame(width: 120, height: 120)
-            
-            if let imageData = bag.imageData, let customImage = UIImage(data: imageData) {
-                Image(uiImage: customImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 110, height: 110)
-                    .clipShape(Circle())
-            } else if let icon = bag.icon, icon.count == 1 {
-                Text(icon)
-                    .font(.system(size: 50))
-            } else {
-                Image(systemName: bag.icon ?? "bag.fill")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundColor(iconForegroundColor)
+        VStack(spacing: 0) {
+            // Large image/icon section - inspired by collection covers
+            ZStack {
+                // Background for the image area
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                iconBackgroundColor.opacity(0.3),
+                                iconBackgroundColor.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 200)
+                
+                // Image or icon content
+                if let imageData = bag.imageData, let customImage = UIImage(data: imageData) {
+                    // Custom image from camera/photo library - large and prominent
+                    Image(uiImage: customImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                } else {
+                    // Icon overlay when no custom image
+                    VStack(spacing: 12) {
+                        if let icon = bag.icon, icon.count == 1 {
+                            // Emoji icon - large for prominence
+                            Text(icon)
+                                .font(.system(size: 60))
+                        } else {
+                            // System icon with bag color - large and prominent
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 50, weight: .medium))
+                                .foregroundColor(iconForegroundColor)
+                        }
+                        
+                        // Product count badge
+                        let productCount = bagProducts.count
+                        if productCount > 0 {
+                            Text("\(productCount) item\(productCount == 1 ? "" : "s")")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(iconForegroundColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(12)
+                        }
+                    }
+                }
             }
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: iconBackgroundColor.opacity(0.2), radius: 12, x: 0, y: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(iconBackgroundColor.opacity(0.2), lineWidth: 1)
+            )
         }
     }
 }

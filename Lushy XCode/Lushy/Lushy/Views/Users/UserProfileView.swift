@@ -113,30 +113,47 @@ struct UserProfileView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 12) {
                                         ForEach(viewModel.bags, id: \.id) { bagSummary in
-                                            let bagView = Group {
-                                                if viewModel.isViewingOwnProfile,
-                                                   let cdBag = CoreDataManager.shared.fetchBeautyBags().first(where: {
-                                                       $0.backendId == bagSummary.id ||
-                                                       $0.objectID.uriRepresentation().absoluteString == bagSummary.id
-                                                   }) {
-                                                    NavigationLink(destination: BeautyBagDetailView(bag: cdBag)) {
+                                            // Use local Core Data bag with imageData instead of summary
+                                            if let cdBag = CoreDataManager.shared.fetchBeautyBags().first(where: {
+                                                $0.backendId == bagSummary.id ||
+                                                $0.objectID.uriRepresentation().absoluteString == bagSummary.id
+                                            }) {
+                                                let bagView = Group {
+                                                    if viewModel.isViewingOwnProfile {
+                                                        NavigationLink(destination: BeautyBagDetailView(bag: cdBag)) {
+                                                            LocalBagCard(bag: cdBag)
+                                                                .frame(width: 140)
+                                                        }
+                                                    } else {
+                                                        LocalBagCard(bag: cdBag)
+                                                            .frame(width: 140)
+                                                    }
+                                                }
+                                                .padding(.vertical, 8)
+                                                .contextMenu {
+                                                    if viewModel.isViewingOwnProfile {
+                                                        Button(role: .destructive) {
+                                                            viewModel.deleteBag(summary: bagSummary)
+                                                        } label: {
+                                                            Label("Delete Bag", systemImage: "trash")
+                                                        }
+                                                    }
+                                                }
+                                                bagView
+                                            } else {
+                                                // Fallback to summary if no local bag found
+                                                let bagView = Group {
+                                                    if viewModel.isViewingOwnProfile {
                                                         BagCard(bag: bagSummary)
-                                                    }
-                                                } else {
-                                                    BagCard(bag: bagSummary)
-                                                }
-                                            }
-                                            .padding(.vertical, 8)
-                                            .contextMenu {
-                                                if viewModel.isViewingOwnProfile {
-                                                    Button(role: .destructive) {
-                                                        viewModel.deleteBag(summary: bagSummary)
-                                                    } label: {
-                                                        Label("Delete Bag", systemImage: "trash")
+                                                            .frame(width: 140)
+                                                    } else {
+                                                        BagCard(bag: bagSummary)
+                                                            .frame(width: 140)
                                                     }
                                                 }
+                                                .padding(.vertical, 8)
+                                                bagView
                                             }
-                                            bagView
                                         }
                                     }
                                     .padding(.horizontal)
@@ -557,50 +574,60 @@ struct BagCard: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top section with icon - larger and more prominent
-            VStack(spacing: 8) {
-                ZStack {
-                    // Background circle for the icon - ALWAYS use bag color
-                    Circle()
-                        .fill(Color(bag.color ?? "lushyPink").opacity(0.15))
-                        .frame(width: 60, height: 60)
-                    
-                    // Large view: show custom image if available, otherwise show icon
-                    if let imageUrl = bag.image, !imageUrl.isEmpty {
-                        // Custom image from camera/photo library
-                        AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(imageUrl)")) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            // Fallback to icon while loading
-                            if let icon = bag.icon, icon.count == 1 {
-                                Text(icon)
-                                    .font(.system(size: 28))
-                            } else {
-                                Image(systemName: bag.icon ?? "bag.fill")
-                                    .font(.system(size: 24, weight: .medium))
-                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
-                            }
+            // Large image/icon section - inspired by collection covers (like ModernBagCard)
+            ZStack {
+                // Background for the image area
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(bag.color ?? "lushyPink").opacity(0.2),
+                                Color(bag.color ?? "lushyPink").opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 100)
+                
+                // Large view: show custom image if available, otherwise show icon
+                if let imageUrl = bag.image, !imageUrl.isEmpty {
+                    // Custom image from camera/photo library - large and prominent
+                    AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(imageUrl)")) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        // Fallback to icon while loading
+                        if let icon = bag.icon, icon.count == 1 {
+                            Text(icon)
+                                .font(.system(size: 32))
+                        } else {
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
                         }
-                        .frame(width: 50, height: 50)
-                        .clipShape(Circle())
-                    } else if let icon = bag.icon, icon.count == 1 {
-                        // Emoji icon
-                        Text(icon)
-                            .font(.system(size: 28))
-                    } else {
-                        // System icon
-                        Image(systemName: bag.icon ?? "bag.fill")
-                            .font(.system(size: 24, weight: .medium))
-                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+                    }
+                    .frame(height: 100)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                } else {
+                    // Icon overlay when no custom image
+                    VStack(spacing: 6) {
+                        if let icon = bag.icon, icon.count == 1 {
+                            // Emoji icon - larger for prominence
+                            Text(icon)
+                                .font(.system(size: 32))
+                        } else {
+                            // System icon with bag color - larger and more prominent
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        }
                     }
                 }
             }
-            .padding(.top, 16)
-            .padding(.bottom, 8)
             
-            // Bottom section with name and description
+            // Bottom section with name and description - more compact
             VStack(spacing: 4) {
                 Text(bag.name)
                     .font(.system(size: 14, weight: .semibold))
@@ -608,7 +635,7 @@ struct BagCard: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                 
-                // Show description if available
+                // Show description if available - smaller and more subtle
                 if let description = bag.description, !description.isEmpty {
                     Text(description)
                         .font(.caption2)
@@ -618,7 +645,7 @@ struct BagCard: View {
                         .padding(.horizontal, 4)
                 }
                 
-                // Privacy indicator
+                // Privacy indicator - more subtle
                 if bag.isPrivate == true {
                     HStack(spacing: 2) {
                         Image(systemName: "lock.fill")
@@ -640,30 +667,117 @@ struct BagCard: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 16)
         }
-        .frame(height: bag.description?.isEmpty == false || bag.isPrivate == true ? 140 : 120)
+        .frame(height: bag.description?.isEmpty == false || bag.isPrivate == true ? 160 : 140)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color.white, location: 0),
-                            .init(color: Color(bag.color ?? "lushyPink").opacity(0.04), location: 1)
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
-                )
+                .fill(Color.white)
+                .shadow(color: Color(bag.color ?? "lushyPink").opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .shadow(
-            color: Color(bag.color ?? "lushyPink").opacity(0.08),
-            radius: 8,
-            x: 0,
-            y: 4
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Local Bag Card for Core Data BeautyBag objects
+struct LocalBagCard: View {
+    let bag: BeautyBag
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Large image/icon section - inspired by collection covers (like ModernBagCard)
+            ZStack {
+                // Background for the image area
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(bag.color ?? "lushyPink").opacity(0.2),
+                                Color(bag.color ?? "lushyPink").opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 100)
+                
+                // Large view: show custom image if available, otherwise show icon
+                if let imageData = bag.imageData, let customImage = UIImage(data: imageData) {
+                    // Custom image from camera/photo library - large and prominent
+                    Image(uiImage: customImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 100)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                } else {
+                    // Icon overlay when no custom image
+                    VStack(spacing: 6) {
+                        if let icon = bag.icon, icon.count == 1 {
+                            // Emoji icon - larger for prominence
+                            Text(icon)
+                                .font(.system(size: 32))
+                        } else {
+                            // System icon with bag color - larger and more prominent
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        }
+                    }
+                }
+            }
+            
+            // Bottom section with name and description - more compact
+            VStack(spacing: 4) {
+                Text(bag.name ?? "Unnamed Bag")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                
+                // Show description if available - smaller and more subtle
+                if let description = bag.bagDescription, !description.isEmpty {
+                    Text(description)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .padding(.horizontal, 4)
+                }
+                
+                // Privacy indicator - more subtle
+                if bag.isPrivate {
+                    HStack(spacing: 2) {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                        Text("Private")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+                }
+                
+                // Subtle accent line
+                Rectangle()
+                    .fill(Color(bag.color ?? "lushyPink").opacity(0.3))
+                    .frame(width: 20, height: 2)
+                    .cornerRadius(1)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 16)
+        }
+        .frame(height: bag.bagDescription?.isEmpty == false || bag.isPrivate ? 160 : 140)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color(bag.color ?? "lushyPink").opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
         )
     }
 }
