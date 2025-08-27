@@ -586,15 +586,24 @@ class CoreDataManager {
     // MARK: - BeautyBag Operations
     
     // Create a new beauty bag locally, returns its objectID
-    func createBeautyBag(name: String, color: String, icon: String) -> NSManagedObjectID? {
+    func createBeautyBag(name: String, description: String = "", color: String, icon: String, image: String? = nil, isPrivate: Bool = false, imageData: Data? = nil) -> NSManagedObjectID? {
         // Use a private context to avoid validation on incomplete products
         let context = container.newBackgroundContext()
         let bag = BeautyBag(context: context)
         bag.name = name
+        bag.bagDescription = description
         bag.color = color
         bag.icon = icon
+        bag.image = image
+        bag.isPrivate = isPrivate
         bag.createdAt = Date()
         bag.userId = currentUserId()
+        
+        // Store image data if provided
+        if let imageData = imageData {
+            bag.imageData = imageData
+        }
+        
         do {
             try context.save()  // only saves bag
             return bag.objectID
@@ -686,6 +695,28 @@ class CoreDataManager {
     
     func products(inBag bag: BeautyBag) -> [UserProduct] {
         (bag.products as? Set<UserProduct>)?.sorted { ($0.productName ?? "") < ($1.productName ?? "") } ?? []
+    }
+
+    // Update an existing beauty bag
+    func updateBeautyBag(id: NSManagedObjectID, name: String, description: String, color: String, icon: String, image: String? = nil, isPrivate: Bool, imageData: Data? = nil) {
+        let context = container.newBackgroundContext()
+        context.performAndWait {
+            if let bag = try? context.existingObject(with: id) as? BeautyBag {
+                bag.name = name
+                bag.bagDescription = description
+                bag.color = color
+                bag.icon = icon
+                bag.image = image
+                bag.isPrivate = isPrivate
+                
+                // Update image data if provided
+                if let imageData = imageData {
+                    bag.imageData = imageData
+                }
+                
+                try? context.save()
+            }
+        }
     }
 
     // MARK: - ProductTag Operations

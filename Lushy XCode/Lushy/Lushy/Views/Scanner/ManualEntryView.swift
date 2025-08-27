@@ -583,8 +583,17 @@ struct ManualEntryView: View {
                     HStack(spacing: 12) {
                         ForEach(bagViewModel.bags.filter { selectedBagIDs.contains($0.objectID) }, id: \.objectID) { bag in
                             HStack(spacing: 6) {
-                                Image(systemName: bag.icon ?? "bag.fill")
-                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                // Compact view: ALWAYS show icon only, never custom images
+                                if let icon = bag.icon, icon.count == 1 {
+                                    // Emoji icon
+                                    Text(icon)
+                                        .font(.system(size: 14))
+                                } else {
+                                    // System icon with bag color
+                                    Image(systemName: bag.icon ?? "bag.fill")
+                                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                        .font(.system(size: 14))
+                                }
                                 Text(bag.name ?? "Unnamed Bag")
                                     .font(.caption)
                                     .lineLimit(1)

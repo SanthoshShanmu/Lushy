@@ -1,13 +1,24 @@
 import Foundation
 import Combine
 import SwiftUI
+import CoreData
 
 class BeautyBagViewModel: ObservableObject {
     @Published var bags: [BeautyBag] = []
     @Published var selectedBag: BeautyBag?
     @Published var newBagName: String = ""
+    @Published var newBagDescription: String = ""
     @Published var newBagIcon: String = "bag.fill"
     @Published var newBagColor: String = "lushyPink"
+    @Published var newBagImage: String? = nil
+    @Published var newBagIsPrivate: Bool = false
+    
+    // Edit properties for editing existing bags
+    @Published var editBagName: String = ""
+    @Published var editBagDescription: String = ""
+    @Published var editBagIcon: String = "bag.fill"
+    @Published var editBagColor: String = "lushyPink"
+    @Published var editBagIsPrivate: Bool = false
     
     var cancellables = Set<AnyCancellable>()
 
@@ -43,14 +54,24 @@ class BeautyBagViewModel: ObservableObject {
                     let remoteIds = Set(summaries.map { $0.id })
                     for summary in summaries {
                         if let _ = existingByBackend[summary.id] {
-                            // Update properties if needed - now including color and icon
+                            // Update properties if needed - now including all new fields
                             if let existingBag = existingByBackend[summary.id] {
                                 existingBag.name = summary.name
+                                existingBag.bagDescription = summary.description
                                 existingBag.color = summary.color ?? "lushyPink"
                                 existingBag.icon = summary.icon ?? "bag.fill"
+                                existingBag.image = summary.image
+                                existingBag.isPrivate = summary.isPrivate ?? false
                             }
                         } else {
-                            if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: summary.color ?? "lushyPink", icon: summary.icon ?? "bag.fill") {
+                            if let newID = CoreDataManager.shared.createBeautyBag(
+                                name: summary.name,
+                                description: summary.description ?? "",
+                                color: summary.color ?? "lushyPink",
+                                icon: summary.icon ?? "bag.fill",
+                                image: summary.image,
+                                isPrivate: summary.isPrivate ?? false
+                            ) {
                                 CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
                             }
                         }
@@ -70,20 +91,42 @@ class BeautyBagViewModel: ObservableObject {
         }
     }
 
-    func createBag() {
+    func createBag(with image: UIImage? = nil) {
         guard !newBagName.isEmpty else { return }
         guard let userId = AuthService.shared.userId else { return }
         
+        // Convert UIImage to Data if provided
+        var imageData: Data? = nil
+        if let image = image {
+            imageData = image.jpegData(compressionQuality: 0.8)
+        }
+        
         // Remote-first: create on backend, then persist locally using returned id
-        APIService.shared.createBag(userId: userId, name: newBagName, color: newBagColor, icon: newBagIcon)
+        APIService.shared.createBag(
+            userId: userId,
+            name: newBagName,
+            description: newBagDescription,
+            color: newBagColor,
+            icon: newBagIcon,
+            image: newBagImage,
+            isPrivate: newBagIsPrivate
+        )
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { completion in
                 if case .failure(let error) = completion {
                     print("Failed to create bag remotely: \(error)")
                 }
             }, receiveValue: { summary in
-                // Persist the bag locally with the backend ID, color, and icon
-                if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: self.newBagColor, icon: self.newBagIcon) {
+                // Persist the bag locally with all the new fields including image data
+                if let newID = CoreDataManager.shared.createBeautyBag(
+                    name: summary.name,
+                    description: summary.description ?? "",
+                    color: summary.color ?? self.newBagColor,
+                    icon: summary.icon ?? self.newBagIcon,
+                    image: summary.image,
+                    isPrivate: summary.isPrivate ?? self.newBagIsPrivate,
+                    imageData: imageData
+                ) {
                     CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
                 }
                 self.bags = CoreDataManager.shared.fetchBeautyBags()
@@ -94,38 +137,96 @@ class BeautyBagViewModel: ObservableObject {
 
         // Reset form
         newBagName = ""
+        newBagDescription = ""
         newBagIcon = "bag.fill"
         newBagColor = "lushyPink"
+        newBagImage = nil
+        newBagIsPrivate = false
     }
 
-    func updateBag(_ bag: BeautyBag, name: String, color: String, icon: String) {
+    func updateBag(_ bag: BeautyBag, name: String, description: String = "", color: String, icon: String, imageUrl: String? = nil, isPrivate: Bool = false, customImage: UIImage? = nil) {
         guard let userId = AuthService.shared.userId else { return }
-        guard let backendId = bag.backendId else {
-            // Handle local-only bags
-            print("Cannot update local-only bag; ignoring to enforce server-authoritative state")
-            return
+        
+        // Convert UIImage to Data if provided
+        var imageData: Data? = nil
+        if let customImage = customImage {
+            imageData = customImage.jpegData(compressionQuality: 0.8)
         }
         
         // Update locally first for instant UI feedback
         bag.name = name
+        bag.bagDescription = description
         bag.color = color
         bag.icon = icon
-        try? CoreDataManager.shared.viewContext.save()
+        bag.image = imageUrl
+        bag.isPrivate = isPrivate
         
-        // Update on backend
-        APIService.shared.updateBag(userId: userId, bagId: backendId, name: name, color: color, icon: icon)
-            .receive(on: RunLoop.main)
-            .sink(receiveCompletion: { completion in
-                if case .failure(let error) = completion {
-                    print("Failed to update bag remotely: \(error)")
-                    // Could revert changes here if needed
-                }
-            }, receiveValue: { _ in
-                // Refresh bags to ensure consistency
-                self.fetchBags()
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
-            })
-            .store(in: &cancellables)
+        // Update image data if provided
+        if let imageData = imageData {
+            bag.imageData = imageData
+        }
+        
+        do {
+            try CoreDataManager.shared.viewContext.save()
+            // Refresh the bags array to reflect changes in UI
+            DispatchQueue.main.async {
+                self.bags = CoreDataManager.shared.fetchBeautyBags()
+            }
+        } catch {
+            print("Failed to save bag locally: \(error)")
+            return
+        }
+        
+        // If bag has backendId, update on backend
+        if let backendId = bag.backendId {
+            APIService.shared.updateBag(
+                userId: userId,
+                bagId: backendId,
+                name: name,
+                description: description,
+                color: color,
+                icon: icon,
+                image: imageUrl,
+                isPrivate: isPrivate
+            )
+                .receive(on: RunLoop.main)
+                .sink(receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to update bag remotely: \(error)")
+                        // Could revert changes here if needed
+                    }
+                }, receiveValue: { _ in
+                    // Refresh bags to ensure consistency
+                    self.fetchBags()
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+                })
+                .store(in: &cancellables)
+        } else {
+            // For local-only bags, create them on the backend
+            print("Creating local bag on backend...")
+            APIService.shared.createBag(
+                userId: userId,
+                name: name,
+                description: description,
+                color: color,
+                icon: icon,
+                image: imageUrl,
+                isPrivate: isPrivate
+            )
+                .receive(on: RunLoop.main)
+                .sink(receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to create bag on backend: \(error)")
+                    }
+                }, receiveValue: { summary in
+                    // Update the local bag with the backend ID
+                    bag.backendId = summary.id
+                    try? CoreDataManager.shared.viewContext.save()
+                    self.fetchBags()
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
+                })
+                .store(in: &cancellables)
+        }
     }
 
     func deleteBag(_ bag: BeautyBag) {
@@ -178,5 +279,51 @@ class BeautyBagViewModel: ObservableObject {
         }
         
         return activeProducts.sorted { ($0.productName ?? "") < ($1.productName ?? "") }
+    }
+    
+    // Update an existing bag
+    func updateBag(
+        id: NSManagedObjectID,
+        name: String,
+        description: String,
+        color: String,
+        icon: String,
+        image: String? = nil,
+        isPrivate: Bool,
+        imageData: Data? = nil
+    ) {
+        CoreDataManager.shared.updateBeautyBag(
+            id: id,
+            name: name,
+            description: description,
+            color: color,
+            icon: icon,
+            image: image,
+            isPrivate: isPrivate,
+            imageData: imageData
+        )
+    }
+    
+    // Prepare edit properties when editing an existing bag
+    func prepareForEditing(bag: BeautyBag) {
+        editBagName = bag.name ?? ""
+        editBagDescription = bag.bagDescription ?? ""
+        editBagIcon = bag.icon ?? "bag.fill"
+        editBagColor = bag.color ?? "lushyPink"
+        editBagIsPrivate = bag.isPrivate
+    }
+    
+    // Update bag with image - method signature expected by BeautyBagsView
+    func updateBag(_ bag: BeautyBag, with image: UIImage? = nil) {
+        updateBag(
+            bag,
+            name: editBagName,
+            description: editBagDescription,
+            color: editBagColor,
+            icon: editBagIcon,
+            imageUrl: nil,
+            isPrivate: editBagIsPrivate,
+            customImage: image
+        )
     }
 }

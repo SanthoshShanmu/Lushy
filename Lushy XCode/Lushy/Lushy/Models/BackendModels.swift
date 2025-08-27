@@ -307,21 +307,30 @@ struct UserProfile: Identifiable, Codable {
 struct BeautyBagSummary: Identifiable, Codable {
     let id: String
     let name: String
+    let description: String?
     let color: String?
     let icon: String?
+    let image: String?
+    let isPrivate: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case name
+        case description
         case color
         case icon
+        case image
+        case isPrivate
     }
     
-    init(id: String, name: String, color: String? = "lushyPink", icon: String? = "bag.fill") {
+    init(id: String, name: String, description: String? = nil, color: String? = "lushyPink", icon: String? = "bag.fill", image: String? = nil, isPrivate: Bool? = false) {
         self.id = id
         self.name = name
+        self.description = description
         self.color = color
         self.icon = icon
+        self.image = image
+        self.isPrivate = isPrivate
     }
 }
 

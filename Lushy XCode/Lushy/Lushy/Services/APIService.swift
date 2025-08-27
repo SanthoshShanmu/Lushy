@@ -13,6 +13,7 @@ enum APIError: Error, Equatable {
     case customError(String)
     case encodingError
     case productNotFound
+    case serverError
     
     var localizedDescription: String {
         switch self {
@@ -36,6 +37,8 @@ enum APIError: Error, Equatable {
             return "Failed to encode request"
         case .productNotFound:
             return "Product not found"
+        case .serverError:
+            return "Server error occurred"
         }
     }
     
@@ -49,7 +52,8 @@ enum APIError: Error, Equatable {
              (.invalidResponse, .invalidResponse),
              (.authenticationRequired, .authenticationRequired),
              (.encodingError, .encodingError),
-             (.productNotFound, .productNotFound):
+             (.productNotFound, .productNotFound),
+             (.serverError, .serverError):
             return true
         case (.customError(let lhsMessage), .customError(let rhsMessage)):
             return lhsMessage == rhsMessage
@@ -1359,7 +1363,7 @@ class APIService {
     
     // MARK: - Beauty Bag Management API
     
-    func createBag(userId: String, name: String, color: String = "lushyPink", icon: String = "bag.fill") -> AnyPublisher<BeautyBagSummary, APIError> {
+    func createBag(userId: String, name: String, description: String = "", color: String = "lushyPink", icon: String = "bag.fill", image: String? = nil, isPrivate: Bool = false) -> AnyPublisher<BeautyBagSummary, APIError> {
         let url = baseURL
             .appendingPathComponent("users")
             .appendingPathComponent(userId)
@@ -1373,11 +1377,17 @@ class APIService {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let body = [
+        var body: [String: Any] = [
             "name": name,
+            "description": description,
             "color": color,
-            "icon": icon
+            "icon": icon,
+            "isPrivate": isPrivate
         ]
+        
+        if let image = image {
+            body["image"] = image
+        }
         
         return Future<BeautyBagSummary, APIError> { promise in
             do {
@@ -1390,43 +1400,44 @@ class APIService {
                     }
                     
                     guard let httpResponse = response as? HTTPURLResponse else {
-                        promise(.failure(.invalidResponse))
+                        promise(.failure(.networkError))
                         return
                     }
                     
-                    guard (200...299).contains(httpResponse.statusCode) else {
-                        if httpResponse.statusCode == 401 {
-                            promise(.failure(.authenticationRequired))
-                        } else {
-                            promise(.failure(.invalidResponse))
+                    if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
+                        do {
+                            let responseData = try JSONSerialization.jsonObject(with: data!) as? [String: Any]
+                            if let bagData = responseData?["bag"] as? [String: Any],
+                               let id = bagData["_id"] as? String,
+                               let name = bagData["name"] as? String {
+                                let summary = BeautyBagSummary(
+                                    id: id,
+                                    name: name,
+                                    description: bagData["description"] as? String,
+                                    color: bagData["color"] as? String ?? "lushyPink",
+                                    icon: bagData["icon"] as? String ?? "bag.fill",
+                                    image: bagData["image"] as? String,
+                                    isPrivate: bagData["isPrivate"] as? Bool ?? false
+                                )
+                                promise(.success(summary))
+                            } else {
+                                promise(.failure(.decodingError))
+                            }
+                        } catch {
+                            promise(.failure(.decodingError))
                         }
-                        return
-                    }
-                    
-                    guard let data = data else {
-                        promise(.failure(.noData))
-                        return
-                    }
-                    
-                    do {
-                        struct Response: Codable {
-                            let bag: BeautyBagSummary
-                        }
-                        
-                        let response = try self.jsonDecoder.decode(Response.self, from: data)
-                        promise(.success(response.bag))
-                    } catch {
-                        promise(.failure(.decodingError))
+                    } else {
+                        promise(.failure(.serverError))
                     }
                 }.resume()
             } catch {
-                promise(.failure(.encodingError))
+                promise(.failure(.networkError))
             }
         }
         .eraseToAnyPublisher()
     }
-    
-    func updateBag(userId: String, bagId: String, name: String, color: String, icon: String) -> AnyPublisher<Void, APIError> {
+
+    func updateBag(userId: String, bagId: String, name: String, description: String = "", color: String, icon: String, image: String? = nil, isPrivate: Bool = false) -> AnyPublisher<Void, APIError> {
         let url = baseURL
             .appendingPathComponent("users")
             .appendingPathComponent(userId)
@@ -1441,40 +1452,36 @@ class APIService {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let body = [
+        var body: [String: Any] = [
             "name": name,
+            "description": description,
             "color": color,
-            "icon": icon
+            "icon": icon,
+            "isPrivate": isPrivate
         ]
+        
+        if let image = image {
+            body["image"] = image
+        }
         
         return Future<Void, APIError> { promise in
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
                 
-                URLSession.shared.dataTask(with: request) { data, response, _ in
-                    if data == nil {
+                URLSession.shared.dataTask(with: request) { _, response, _ in
+                    guard let httpResponse = response as? HTTPURLResponse else {
                         promise(.failure(.networkError))
                         return
                     }
                     
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        promise(.failure(.invalidResponse))
-                        return
+                    if httpResponse.statusCode == 200 {
+                        promise(.success(()))
+                    } else {
+                        promise(.failure(.serverError))
                     }
-                    
-                    guard (200...299).contains(httpResponse.statusCode) else {
-                        if httpResponse.statusCode == 401 {
-                            promise(.failure(.authenticationRequired))
-                        } else {
-                            promise(.failure(.invalidResponse))
-                        }
-                        return
-                    }
-                    
-                    promise(.success(()))
                 }.resume()
             } catch {
-                promise(.failure(.encodingError))
+                promise(.failure(.networkError))
             }
         }
         .eraseToAnyPublisher()

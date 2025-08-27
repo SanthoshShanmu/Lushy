@@ -20,6 +20,10 @@ extension BeautyBag {
     @NSManaged public var createdAt: Date?
     @NSManaged public var icon: String?
     @NSManaged public var name: String?
+    @NSManaged public var bagDescription: String? // Renamed from description to avoid NSObject conflict
+    @NSManaged public var image: String? // New field for custom image
+    @NSManaged public var imageData: Data? // New field for storing image binary data
+    @NSManaged public var isPrivate: Bool // New field for privacy setting
     @NSManaged public var products: NSSet?
     @NSManaged public var userId: String
     @NSManaged public var backendId: String?

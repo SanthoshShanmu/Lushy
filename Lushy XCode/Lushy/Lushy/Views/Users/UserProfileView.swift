@@ -560,45 +560,95 @@ struct BagCard: View {
             // Top section with icon - larger and more prominent
             VStack(spacing: 8) {
                 ZStack {
-                    // Background circle for the icon
+                    // Background circle for the icon - ALWAYS use bag color
                     Circle()
                         .fill(Color(bag.color ?? "lushyPink").opacity(0.15))
                         .frame(width: 60, height: 60)
                     
-                    Image(systemName: bag.icon ?? "bag.fill")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                    // Large view: show custom image if available, otherwise show icon
+                    if let imageUrl = bag.image, !imageUrl.isEmpty {
+                        // Custom image from camera/photo library
+                        AsyncImage(url: URL(string: "\(APIService.shared.staticBaseURL)\(imageUrl)")) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            // Fallback to icon while loading
+                            if let icon = bag.icon, icon.count == 1 {
+                                Text(icon)
+                                    .font(.system(size: 28))
+                            } else {
+                                Image(systemName: bag.icon ?? "bag.fill")
+                                    .font(.system(size: 24, weight: .medium))
+                                    .foregroundColor(Color(bag.color ?? "lushyPink"))
+                            }
+                        }
+                        .frame(width: 50, height: 50)
+                        .clipShape(Circle())
+                    } else if let icon = bag.icon, icon.count == 1 {
+                        // Emoji icon
+                        Text(icon)
+                            .font(.system(size: 28))
+                    } else {
+                        // System icon
+                        Image(systemName: bag.icon ?? "bag.fill")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+                    }
                 }
-                .padding(.top, 16)
-                .padding(.bottom, 8)
             }
+            .padding(.top, 16)
+            .padding(.bottom, 8)
             
-            // Bottom section with name - clean typography
+            // Bottom section with name and description
             VStack(spacing: 4) {
                 Text(bag.name)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Optional: Add a subtle accent line
+                // Show description if available
+                if let description = bag.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .padding(.horizontal, 4)
+                }
+                
+                // Privacy indicator
+                if bag.isPrivate == true {
+                    HStack(spacing: 2) {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                        Text("Private")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+                }
+                
+                // Subtle accent line
                 Rectangle()
                     .fill(Color(bag.color ?? "lushyPink").opacity(0.3))
-                    .frame(width: 20, height: 1)
-                    .padding(.top, 2)
+                    .frame(width: 20, height: 2)
+                    .cornerRadius(1)
+                    .padding(.top, 4)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 16)
         }
-        .frame(width: 120, height: 140) // Fixed size for consistency
+        .frame(height: bag.description?.isEmpty == false || bag.isPrivate == true ? 140 : 120)
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     LinearGradient(
                         gradient: Gradient(stops: [
                             .init(color: Color.white, location: 0),
-                            .init(color: Color(bag.color ?? "lushyPink").opacity(0.03), location: 1)
+                            .init(color: Color(bag.color ?? "lushyPink").opacity(0.04), location: 1)
                         ]),
                         startPoint: .top,
                         endPoint: .bottom
@@ -606,7 +656,7 @@ struct BagCard: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(bag.color ?? "lushyPink").opacity(0.1), lineWidth: 1)
+                        .stroke(Color(bag.color ?? "lushyPink").opacity(0.15), lineWidth: 1)
                 )
         )
         .shadow(
@@ -614,21 +664,6 @@ struct BagCard: View {
             radius: 8,
             x: 0,
             y: 4
-        )
-        .overlay(
-            // Subtle highlight at the top
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.6),
-                            Color.clear
-                        ]),
-                        startPoint: .top,
-                        endPoint: .center
-                    )
-                )
-                .blendMode(.overlay)
         )
     }
 }

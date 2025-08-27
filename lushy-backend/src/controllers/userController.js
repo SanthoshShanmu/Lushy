@@ -145,7 +145,7 @@ exports.searchUsers = async (req, res) => {
 exports.createBag = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const { name, color = 'lushyPink', icon = 'bag.fill' } = req.body;
+    const { name, description = '', color = 'lushyPink', icon = 'bag.fill', image, isPrivate = false } = req.body;
     
     // Validate that userId is a valid ObjectId
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -167,8 +167,11 @@ exports.createBag = async (req, res) => {
     const newBag = await BeautyBag.create({ 
       user: userObjectId, 
       name, 
+      description,
       color, 
-      icon 
+      icon,
+      image,
+      isPrivate
     });
     
     console.log(`✅ Created beauty bag: ${name} for user ${userId}`);
@@ -194,7 +197,16 @@ exports.getUserBags = async (req, res) => {
     // Convert userId string to ObjectId for querying
     const userObjectId = new mongoose.Types.ObjectId(userId);
     
-    const bags = await BeautyBag.find({ user: userObjectId }).select('name color icon');
+    // Check if this is the owner or another user viewing
+    const isOwner = req.user && req.user._id.toString() === userId;
+    
+    // If not the owner, only return public bags
+    const query = { user: userObjectId };
+    if (!isOwner) {
+      query.isPrivate = { $ne: true };
+    }
+    
+    const bags = await BeautyBag.find(query).select('name description color icon image isPrivate');
     res.json({ bags });
   } catch (err) {
     console.error('❌ Error fetching bags:', err);
@@ -206,7 +218,7 @@ exports.getUserBags = async (req, res) => {
 exports.updateBag = async (req, res) => {
   try {
     const { userId, bagId } = req.params;
-    const { name, color, icon } = req.body;
+    const { name, description, color, icon, image, isPrivate } = req.body;
     
     // Validate that userId and bagId are valid ObjectIds
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -222,9 +234,18 @@ exports.updateBag = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const bagObjectId = new mongoose.Types.ObjectId(bagId);
     
+    // Build update object with only provided fields
+    const updateFields = {};
+    if (name !== undefined) updateFields.name = name;
+    if (description !== undefined) updateFields.description = description;
+    if (color !== undefined) updateFields.color = color;
+    if (icon !== undefined) updateFields.icon = icon;
+    if (image !== undefined) updateFields.image = image;
+    if (isPrivate !== undefined) updateFields.isPrivate = isPrivate;
+    
     const updatedBag = await BeautyBag.findOneAndUpdate(
       { _id: bagObjectId, user: userObjectId },
-      { name, color, icon },
+      updateFields,
       { new: true }
     );
     
@@ -232,7 +253,7 @@ exports.updateBag = async (req, res) => {
       return res.status(404).json({ message: 'Bag not found.' });
     }
     
-    console.log(`✅ Updated beauty bag: ${name} for user ${userId}`);
+    console.log(`✅ Updated beauty bag: ${name || updatedBag.name} for user ${userId}`);
     res.json({ message: 'Bag updated successfully.', bag: updatedBag });
   } catch (err) {
     console.error('❌ Error updating bag:', err);

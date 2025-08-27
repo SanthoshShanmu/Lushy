@@ -163,6 +163,8 @@ class ScannerViewModel: ObservableObject {
                         self?.errorMessage = message
                     case .encodingError:
                         self?.errorMessage = "Failed to encode request data."
+                    case .serverError:
+                        self?.errorMessage = "Server error occurred. Please try again later."
                     }
                 }
             }, receiveValue: { [weak self] product in

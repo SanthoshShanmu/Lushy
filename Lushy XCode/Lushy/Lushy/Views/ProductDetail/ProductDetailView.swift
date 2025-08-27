@@ -1048,8 +1048,16 @@ private struct _PrettyBagsSection: View {
             } else {
                 ForEach(viewModel.bagsForProduct(), id: \.self) { bag in
                     HStack {
-                        Image(systemName: bag.icon ?? "bag.fill")
-                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        // Small/compact view: ALWAYS show icon only, never custom images
+                        if let icon = bag.icon, icon.count == 1 {
+                            // Emoji icon
+                            Text(icon)
+                                .font(.system(size: 16))
+                        } else {
+                            // System icon with bag color
+                            Image(systemName: bag.icon ?? "bag.fill")
+                                .foregroundColor(Color(bag.color ?? "lushyPink"))
+                        }
                         Text(bag.name ?? "Unnamed Bag")
                         Spacer()
                         // Only show remove button if product is not finished
