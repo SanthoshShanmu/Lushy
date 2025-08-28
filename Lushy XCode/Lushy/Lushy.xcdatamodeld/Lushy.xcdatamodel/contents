@@ -54,6 +54,7 @@
         <attribute name="barcode" optional="YES" attributeType="String"/>
         <attribute name="brand" optional="YES" attributeType="String"/>
         <attribute name="crueltyFree" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="currency" optional="YES" attributeType="String" defaultValueString="USD"/>
         <attribute name="currentAmount" optional="YES" attributeType="Double" defaultValueString="100.0" usesScalarValueType="YES"/>
         <attribute name="expireDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="favorite" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
@@ -63,6 +64,7 @@
         <attribute name="isFinished" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="openDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="periodsAfterOpening" optional="YES" attributeType="String"/>
+        <attribute name="price" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="productName" attributeType="String"/>
         <attribute name="purchaseDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="quantity" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>

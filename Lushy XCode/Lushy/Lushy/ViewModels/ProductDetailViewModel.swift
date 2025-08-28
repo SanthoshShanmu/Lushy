@@ -1,6 +1,7 @@
 import Foundation
 import CoreData
 import Combine
+import UIKit
 
 class ProductDetailViewModel: ObservableObject {
     @Published var product: UserProduct
@@ -443,11 +444,34 @@ class ProductDetailViewModel: ObservableObject {
         shade: String?,
         sizeInMl: Double?,
         spf: Int?,
+        price: Double?,
+        currency: String,
         purchaseDate: Date,
         isOpened: Bool,
         openDate: Date?,
-        periodsAfterOpening: String?
+        periodsAfterOpening: String?,
+        vegan: Bool,
+        crueltyFree: Bool,
+        newImage: UIImage?
     ) {
+        // Handle image update if provided
+        var imageUrlString: String? = nil
+        if let image = newImage {
+            if let data = image.jpegData(compressionQuality: 0.8) {
+                let filename = UUID().uuidString + ".jpg"
+                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(filename)
+                try? data.write(to: url)
+                imageUrlString = url.path
+                
+                // Remove old image file if it exists
+                if let oldImageUrl = product.imageUrl,
+                   let oldUrl = URL(string: oldImageUrl),
+                   oldUrl.isFileURL {
+                    try? FileManager.default.removeItem(at: oldUrl)
+                }
+            }
+        }
+        
         CoreDataManager.shared.updateProductDetails(
             id: product.objectID,
             productName: productName,
@@ -455,14 +479,17 @@ class ProductDetailViewModel: ObservableObject {
             shade: shade,
             sizeInMl: sizeInMl,
             spf: spf,
+            price: price,
+            currency: currency,
             purchaseDate: purchaseDate,
             isOpened: isOpened,
             openDate: openDate,
-            periodsAfterOpening: periodsAfterOpening
+            periodsAfterOpening: periodsAfterOpening,
+            vegan: vegan,
+            crueltyFree: crueltyFree,
+            imageUrl: imageUrlString
         )
         refreshProduct()
-        // Removed automatic refreshRemoteDetail() call to prevent infinite loops
-        // Remote details will be refreshed when explicitly needed (onAppear, manual refresh, etc.)
     }
     
     // New: bulk update helpers so UI can edit tags/bags in one sheet

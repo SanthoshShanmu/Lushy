@@ -11,6 +11,7 @@ extension UserProduct {
     @NSManaged public var barcode: String?
     @NSManaged public var brand: String?
     @NSManaged public var crueltyFree: Bool
+    @NSManaged public var currency: String?
     @NSManaged public var currentAmount: Double
     @NSManaged public var expireDate: Date?
     @NSManaged public var favorite: Bool
@@ -20,6 +21,7 @@ extension UserProduct {
     @NSManaged public var isFinished: Bool
     @NSManaged public var openDate: Date?
     @NSManaged public var periodsAfterOpening: String?
+    @NSManaged public var price: Double
     @NSManaged public var productName: String?
     @NSManaged public var shade: String?
     @NSManaged public var sizeInMl: Double

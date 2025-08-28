@@ -894,10 +894,15 @@ class CoreDataManager {
         shade: String?,
         sizeInMl: Double?,
         spf: Int?,
+        price: Double?,
+        currency: String,
         purchaseDate: Date,
         isOpened: Bool,
         openDate: Date?,
-        periodsAfterOpening: String?
+        periodsAfterOpening: String?,
+        vegan: Bool,
+        crueltyFree: Bool,
+        imageUrl: String?
     ) {
         let context = container.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
@@ -911,7 +916,16 @@ class CoreDataManager {
             product.shade = shade
             product.sizeInMl = sizeInMl ?? 0.0
             product.spf = Int16(spf ?? 0)
+            product.price = price ?? 0.0
+            product.currency = currency
             product.purchaseDate = purchaseDate
+            product.vegan = vegan
+            product.crueltyFree = crueltyFree
+
+            // Update image if provided
+            if let imageUrl = imageUrl {
+                product.imageUrl = imageUrl
+            }
 
             if isOpened {
                 product.openDate = openDate ?? product.openDate ?? Date()
@@ -959,7 +973,11 @@ class CoreDataManager {
                 var body: [String: Any] = [
                     "productName": productName,
                     "brand": brand ?? "",
-                    "purchaseDate": purchaseDate.msSinceEpoch
+                    "purchaseDate": purchaseDate.msSinceEpoch,
+                    "vegan": vegan,
+                    "crueltyFree": crueltyFree,
+                    "price": price ?? 0.0,
+                    "currency": currency
                 ]
                 if let shade = shade { body["shade"] = shade }
                 if let sizeInMl = sizeInMl { body["sizeInMl"] = sizeInMl }

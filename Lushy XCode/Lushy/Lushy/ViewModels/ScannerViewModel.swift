@@ -16,12 +16,19 @@ class ScannerViewModel: ObservableObject {
     // Properties for manual entry
     @Published var manualBarcode = ""
     @Published var manualProductName = ""
-    @Published var manualBrand = ""
+    @Published var manualBrand = "" {
+        didSet {
+            // Always convert brand names to uppercase
+            manualBrand = manualBrand.uppercased()
+        }
+    }
     
     // Add metadata published properties
     @Published var manualShade = ""
     @Published var manualSizeInMl = ""
     @Published var manualSpf = ""
+    @Published var manualPrice = ""
+    @Published var manualCurrency = "USD"
     
     // Ethics properties for UI binding
     @Published var isVegan = false
@@ -373,6 +380,8 @@ class ScannerViewModel: ObservableObject {
         manualShade = ""
         manualSizeInMl = ""
         manualSpf = ""
+        manualPrice = ""
+        manualCurrency = "USD"
         isVegan = false
         isCrueltyFree = false
         isProductOpen = false

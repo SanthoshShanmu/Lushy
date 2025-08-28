@@ -50,6 +50,7 @@ struct ManualEntryView: View {
 
     // Add state for bag assign sheet
     @State private var showBagAssignSheet = false
+    @State private var showTagAssignSheet = false
 
     // Consider there are unsaved changes if any input is filled/selected or an image chosen
     private var hasUnsavedChanges: Bool {
@@ -245,36 +246,18 @@ struct ManualEntryView: View {
             }
         }
         .onDisappear {
-            // Reset manual entry state for next presentation
-            viewModel.manualBarcode = ""
-            viewModel.manualProductName = ""
-            viewModel.manualBrand = ""
-            viewModel.manualShade = ""
-            viewModel.manualSizeInMl = ""
-            viewModel.manualSpf = ""
-            viewModel.isProductOpen = false
-            viewModel.openDate = nil
-            viewModel.purchaseDate = Date()
-            productImage = nil
-            periodsAfterOpening = ""
-            paoOptions = []
-            paoLabels = [:]
-            selectedBagIDs.removeAll()
-            selectedTagIDs.removeAll()
-            newTagName = ""
-            newTagColor = "lushyPink"
-            isSaving = false
-            showingErrorAlert = false
-            errorMessage = ""
-            // Reset local manual lookup state
-            manualFetchedProduct = nil
-            manualProductNotFound = false
-            manualLookupError = ""
-            showManualLookupError = false
-            // Cancel subscriptions to avoid leaks
-            paoCancellable?.cancel(); paoCancellable = nil
-            lookupCancellable?.cancel(); lookupCancellable = nil
-            syncCancellable?.cancel(); syncCancellable = nil
+            // Only cancel ongoing operations - don't reset all state
+            paoCancellable?.cancel()
+            paoCancellable = nil
+            lookupCancellable?.cancel()
+            lookupCancellable = nil
+            syncCancellable?.cancel()
+            syncCancellable = nil
+            
+            // Cancel tag subscriptions safely
+            for cancellable in tagCancellables {
+                cancellable.cancel()
+            }
             tagCancellables.removeAll()
         }
     }
@@ -378,6 +361,21 @@ struct ManualEntryView: View {
                 .focused($focusField, equals: .productName)
             TextField("Brand (Optional)", text: $viewModel.manualBrand)
                 .textFieldStyle(.roundedBorder)
+            
+            // Add price field
+            HStack {
+                TextField("Price (Optional)", text: $viewModel.manualPrice)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Currency", selection: $viewModel.manualCurrency) {
+                    Text("USD").tag("USD")
+                    Text("EUR").tag("EUR") 
+                    Text("GBP").tag("GBP")
+                    Text("NOK").tag("NOK")
+                }
+                .pickerStyle(.menu)
+                .frame(width: 80)
+            }
             
             // Ethics toggles in a nice card layout
             VStack(alignment: .leading, spacing: 8) {
@@ -506,42 +504,49 @@ struct ManualEntryView: View {
                            displayedComponents: .date)
             }
             // PAO now independent of opened state
-            Text("Period After Opening (PAO)").font(.subheadline).foregroundColor(.secondary)
-            HStack {
-                ForEach(["3M","6M","12M","24M"], id: \.self) { code in
-                    Button(action: { periodsAfterOpening = code }) {
-                        Text(code)
-                            .font(.caption)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background((periodsAfterOpening == code ? Color.lushyPurple : Color.gray.opacity(0.2)))
-                            .foregroundColor(periodsAfterOpening == code ? .white : .primary)
-                            .cornerRadius(8)
-                    }
-                }
-                Button("Clear") { periodsAfterOpening = "" }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Period After Opening (PAO)").font(.subheadline).foregroundColor(.secondary)
+                Text("How many months is this product good for after opening?")
                     .font(.caption)
-            }
-            Picker("PAO", selection: $periodsAfterOpening) {
-                ForEach(paoOptions, id: \.self) { code in
-                    Text(paoLabels[code] ?? code).tag(code)
-                }
-            }
-            .pickerStyle(MenuPickerStyle())
-            // Expiry / advisory
-            if !periodsAfterOpening.isEmpty {
-                if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening), viewModel.isProductOpen {
-                    HStack {
-                        Image(systemName: "calendar").foregroundColor(.mossGreen)
-                        Text("Will set expiry to \(preview)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    .foregroundColor(.secondary)
+                
+                // Clean dropdown for PAO selection
+                Picker("Select PAO", selection: $periodsAfterOpening) {
+                    Text("Don't know / Not specified").tag("")
+                    ForEach(["3M", "6M", "9M", "12M", "18M", "24M", "36M"], id: \.self) { months in
+                        let monthNumber = months.replacingOccurrences(of: "M", with: "")
+                        Text("\(monthNumber) months").tag(months)
                     }
-                } else if !viewModel.isProductOpen {
-                    HStack {
-                        Image(systemName: "info.circle").foregroundColor(.secondary)
-                        Text("PAO will apply once you mark the product as opened.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    // Add any additional options from backend
+                    ForEach(paoOptions.filter { !["3M", "6M", "9M", "12M", "18M", "24M", "36M"].contains($0) }, id: \.self) { code in
+                        Text(paoLabels[code] ?? code).tag(code)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                // Helper text
+                if periodsAfterOpening.isEmpty {
+                    Text("💡 Most makeup products are good for 6-12 months after opening")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .italic()
+                } else {
+                    // Expiry preview / advisory
+                    if let preview = expiryPreview(openDate: viewModel.openDate, pao: periodsAfterOpening), viewModel.isProductOpen {
+                        HStack {
+                            Image(systemName: "calendar").foregroundColor(.mossGreen)
+                            Text("Will set expiry to \(preview)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } else if !viewModel.isProductOpen {
+                        HStack {
+                            Image(systemName: "info.circle").foregroundColor(.secondary)
+                            Text("PAO will apply once you mark the product as opened.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
@@ -623,43 +628,51 @@ struct ManualEntryView: View {
 
     @ViewBuilder private func tagSelectionSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add Tags").font(.headline)
-            if tagViewModel.tags.isEmpty {
-                Text("No tags yet. Create one below.")
+            HStack {
+                Text("Add Tags").font(.headline)
+                Spacer()
+                Button(action: { showTagAssignSheet = true }) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(.lushyPink)
+                }
+            }
+            .padding(.bottom, 4)
+            
+            // Display selected tags
+            if selectedTagIDs.isEmpty {
+                Text("No tags selected")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
-                ForEach(tagViewModel.tags, id: \.objectID) { tag in
-                    MultipleSelectionRow(title: tag.name ?? "Unnamed Tag",
-                                         isSelected: selectedTagIDs.contains(tag.objectID),
-                                         icon: "tag",
-                                         color: tag.color) {
-                        selectedTagIDs.toggleMembership(of: tag.objectID)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(tagViewModel.tags.filter { selectedTagIDs.contains($0.objectID) }, id: \.objectID) { tag in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color(tag.color ?? "lushyPink"))
+                                    .frame(width: 10, height: 10)
+                                Text(tag.name ?? "Unnamed Tag")
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(tag.color ?? "lushyPink").opacity(0.15))
+                            .cornerRadius(14)
+                        }
                     }
+                    .padding(.horizontal, 4)
                 }
-            }
-            HStack {
-                TextField("New Tag", text: $newTagName)
-                    .textFieldStyle(.roundedBorder)
-                Picker("Color", selection: $newTagColor) {
-                    ForEach(["lushyPink","lushyPurple","mossGreen","lushyPeach"], id: \.self) {
-                        Text($0.capitalized)
-                    }
-                }
-                Button("Add") {
-                    guard !newTagName.isEmpty else { return }
-                    // Delegate creation to TagViewModel (handles remote & local sync)
-                    tagViewModel.newTagName = newTagName
-                    tagViewModel.newTagColor = newTagColor
-                    tagViewModel.createTag()
-                    // Clear local form
-                    newTagName = ""
-                    newTagColor = "lushyPink"
-                }
-                .disabled(newTagName.isEmpty)
             }
         }
         .glassCard(cornerRadius: 20)
+        .sheet(isPresented: $showTagAssignSheet) {
+            ManualEntryTagAssignSheet(
+                tagViewModel: tagViewModel,
+                selectedTagIDs: $selectedTagIDs,
+                isPresented: $showTagAssignSheet
+            )
+        }
     }
 
     @ViewBuilder private func saveButtonsSection() -> some View {
@@ -1031,5 +1044,142 @@ struct ManualEntryBagAssignSheet: View {
 struct ManualEntryView_Previews: PreviewProvider {
     static var previews: some View {
         ManualEntryView(viewModel: ScannerViewModel())
+    }
+}
+
+// MARK: - Manual Entry Tag Assign Sheet
+struct ManualEntryTagAssignSheet: View {
+    @ObservedObject var tagViewModel: TagViewModel
+    @Binding var selectedTagIDs: Set<NSManagedObjectID>
+    @Binding var isPresented: Bool
+    @State private var newTagName = ""
+    @State private var newTagColor = "lushyPink"
+    
+    private let colorOptions = ["lushyPink","lushyPurple","mossGreen","lushyPeach"]
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Select Tags")
+                        .font(.title3).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    if tagViewModel.tags.isEmpty {
+                        Text("You have no tags yet. Create one below.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Use grid layout like beauty bags for consistency
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 12)], spacing: 12) {
+                        ForEach(tagViewModel.tags, id: \.self) { tag in
+                            let selected = selectedTagIDs.contains(tag.objectID)
+                            Button(action: { toggle(tag) }) {
+                                VStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Color(tag.color ?? "lushyPink"))
+                                        .frame(width: 32, height: 32)
+                                    Text(tag.name ?? "Tag")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color(tag.color ?? "lushyPink").opacity(selected ? 0.18 : 0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(selected ? Color(tag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
+                                        )
+                                )
+                                .overlay(
+                                    Group { if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(Color(tag.color ?? "lushyPink")).offset(x: 45, y: -45) } }
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .animation(.spring(), value: selectedTagIDs)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Create New Tag")
+                            .font(.headline)
+                        TextField("Tag Name", text: $newTagName)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        // Color selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Color").font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 12) {
+                                ForEach(colorOptions, id: \.self) { colorName in
+                                    let selected = (colorName == newTagColor)
+                                    Button(action: { newTagColor = colorName }) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color(colorName))
+                                                .frame(width: 34, height: 34)
+                                            if selected {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.white)
+                                                    .shadow(radius: 2)
+                                            }
+                                        }
+                                        .overlay(Circle().stroke(selected ? Color.white : Color.clear, lineWidth: 2))
+                                        .shadow(color: Color(colorName).opacity(0.4), radius: 4, x: 0, y: 2)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        Button(action: createTag) {
+                            Label("Add Tag", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPurple.opacity(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.3 : 0.9)))
+                                .foregroundColor(.white)
+                        }
+                        .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
+                }
+                .padding([.horizontal, .bottom])
+            }
+            .navigationTitle("Assign Tags")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { isPresented = false } }
+                ToolbarItem(placement: .navigationBarTrailing) { Button("Save") { isPresented = false } }
+            }
+        }
+    }
+
+    private func toggle(_ tag: ProductTag) {
+        if selectedTagIDs.contains(tag.objectID) {
+            selectedTagIDs.remove(tag.objectID)
+        } else {
+            selectedTagIDs.insert(tag.objectID)
+        }
+    }
+    
+    private func createTag() {
+        // Create tag using the TagViewModel
+        tagViewModel.newTagName = newTagName
+        tagViewModel.newTagColor = newTagColor
+        tagViewModel.createTag()
+        
+        // Auto-select the newly created tag
+        if let newTag = tagViewModel.tags.first(where: { ($0.name ?? "") == newTagName }) {
+            selectedTagIDs.insert(newTag.objectID)
+        }
+        
+        // Clear form
+        newTagName = ""
+        newTagColor = "lushyPink"
     }
 }

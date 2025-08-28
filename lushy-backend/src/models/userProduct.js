@@ -76,6 +76,18 @@ const UserProductSchema = new Schema({
     type: Date,
     required: true
   },
+  // Add price field for user-specific pricing
+  price: {
+    type: Number,
+    required: false,
+    min: 0
+  },
+  currency: {
+    type: String,
+    required: false,
+    default: 'USD',
+    maxlength: 3
+  },
   openDate: Date,
   expireDate: Date,
   favorite: {

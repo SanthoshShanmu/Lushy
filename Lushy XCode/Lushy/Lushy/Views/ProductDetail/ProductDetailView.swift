@@ -159,7 +159,7 @@ struct ProductDetailView: View {
             }
             
             // Only show edit button if product is not finished
-            if !viewModel.isEditingDisabled {
+            if (!viewModel.isEditingDisabled) {
                 Button {
                     prepareEditSheet()
                     showEditSheet = true
@@ -180,23 +180,8 @@ struct ProductDetailView: View {
     
     // Helper to prepare edit sheet values (single source of truth)
     private func prepareEditSheet() {
-        let p = viewModel.product
-        editName = p.productName ?? ""
-        editBrand = p.brand ?? ""
-        editShade = p.shade ?? ""
-        editSizeText = p.sizeInMl > 0 ? String(format: "%.0f", p.sizeInMl) : ""
-        editSpfText = p.spf > 0 ? String(p.spf) : ""
-        editPurchaseDate = p.purchaseDate ?? Date()
-        editIsOpened = p.openDate != nil
-        editOpenDate = p.openDate ?? Date()
-        editPAO = (p.periodsAfterOpening ?? "").replacingOccurrences(of: " ", with: "")
-        userEditedShade = false
-        userEditedSize = false
-        userEditedSpf = false
-        userEditedPAO = false
-        if paoOptions.isEmpty { paoLabels = Dictionary(uniqueKeysWithValues: fallbackPAOOptions.map { ($0, $0) }); paoOptions = fallbackPAOOptions }
-        if !editPAO.isEmpty && !paoOptions.contains(editPAO) { paoOptions.append(editPAO) }
-        fetchPAOTaxonomy()
+        // Do minimal work here - just show the sheet immediately
+        // All data preparation will happen in ProductEditView.onAppear
     }
     
     // Sync current product fields into edit form unless user already modified them
@@ -247,79 +232,10 @@ struct ProductDetailView: View {
             ReviewFormView(viewModel: viewModel)
         }
         .sheet(isPresented: $showEditSheet) {
-            NavigationView {
-                Form {
-                    Section(header: Text("Details")) {
-                        TextField("Name", text: $editName)
-                        TextField("Brand", text: $editBrand)
-                        TextField("Shade", text: Binding(get: { editShade }, set: { editShade = $0; userEditedShade = true }))
-                        TextField("Size (ml)", text: Binding(get: { editSizeText }, set: { editSizeText = $0; userEditedSize = true }))
-                            .keyboardType(.decimalPad)
-                        TextField("SPF", text: Binding(get: { editSpfText }, set: { editSpfText = $0; userEditedSpf = true }))
-                            .keyboardType(.numberPad)
-                    }
-                    Section(header: Text("Dates")) {
-                        DatePicker("Purchase Date", selection: $editPurchaseDate, displayedComponents: .date)
-                        Toggle("Opened", isOn: $editIsOpened)
-                        if editIsOpened {
-                            DatePicker("Open Date", selection: $editOpenDate, displayedComponents: .date)
-                        }
-                    }
-                    // Simplified PAO selection UX (chips only)
-                    Section(header: Text("Shelf Life (PAO)")) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            FlexibleChips(data: ["None"] + allPAOCodes, selection: $editPAO, labels: paoLabels)
-                            HStack(spacing: 12) {
-                                if !editPAO.isEmpty { Button("Clear") { editPAO = "" }.font(.caption) }
-                                if paoOptions.isEmpty { Button("Retry Load") { fetchPAOTaxonomy() }.font(.caption) }
-                                Spacer()
-                            }
-                            // Expiry preview / advisory
-                            if !editPAO.isEmpty {
-                                if editIsOpened, let preview = expiryPreview(openDate: editOpenDate, pao: editPAO) {
-                                    HStack { Image(systemName: "calendar").foregroundColor(.mossGreen); Text("Will set expiry to \(preview)").font(.caption).foregroundColor(.secondary) }
-                                } else if !editIsOpened {
-                                    HStack { Image(systemName: "info.circle").foregroundColor(.secondary); Text("PAO applies once product is marked opened.").font(.caption).foregroundColor(.secondary) }
-                                }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Edit Product")
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Cancel") {
-                            if editHasChanges { showEditDiscardConfirm = true } else { showEditSheet = false }
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Save") {
-                            let sizeVal = Double(editSizeText)
-                            let spfVal = Int(editSpfText)
-                            viewModel.updateDetails(
-                                productName: editName,
-                                brand: editBrand.isEmpty ? nil : editBrand,
-                                shade: editShade.isEmpty ? nil : editShade,
-                                sizeInMl: sizeVal,
-                                spf: spfVal,
-                                purchaseDate: editPurchaseDate,
-                                isOpened: editIsOpened,
-                                openDate: editIsOpened ? editOpenDate : nil,
-                                periodsAfterOpening: editPAO.isEmpty ? nil : editPAO
-                            )
-                            showEditSheet = false
-                        }
-                        .disabled(editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-                .interactiveDismissDisabled(editHasChanges)
-                .alert("Discard changes?", isPresented: $showEditDiscardConfirm) {
-                    Button("Keep Editing", role: .cancel) {}
-                    Button("Discard", role: .destructive) { showEditSheet = false }
-                } message: { Text("You have unsaved edits. Do you want to discard them?") }
-                .onAppear { syncEditFieldsFromProduct(force: true) }
-                .onReceive(viewModel.$product) { _ in syncEditFieldsFromProduct(force: false) }
-            }
+            SimpleProductEditView(
+                viewModel: viewModel,
+                isPresented: $showEditSheet
+            )
         }
         // Separate Bag Assign Sheet
         .sheet(isPresented: $showBagAssignSheet) {
@@ -1295,43 +1211,16 @@ private struct BagAssignSheet: View {
     private func toggle(_ bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
     
     private func createBag() {
-        guard !newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard let userId = AuthService.shared.userId else { return }
-        
-        isCreatingBag = true
-        
-        // Use the same pattern as BeautyBagViewModel - create on backend first, then locally
-        APIService.shared.createBag(userId: userId, name: newBagName, color: newBagColor, icon: newBagIcon)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                self.isCreatingBag = false
-                if case .failure(let error) = completion {
-                    print("Failed to create bag remotely: \(error)")
-                }
-            }, receiveValue: { summary in
-                self.isCreatingBag = false
-                // Persist the bag locally with the backend ID
-                if let newID = CoreDataManager.shared.createBeautyBag(name: summary.name, color: self.newBagColor, icon: self.newBagIcon) {
-                    CoreDataManager.shared.updateBeautyBagBackendId(id: newID, backendId: summary.id)
-                    
-                    // Auto-select the newly created bag
-                    if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: newID) as? BeautyBag {
-                        self.selectedBagIDs.insert(bag.objectID)
-                    }
-                }
-                
-                // Refresh the bags in the view model
-                self.viewModel.fetchBagsAndTags()
-                
-                // Clear the form
-                self.newBagName = ""
-                self.newBagIcon = "bag.fill"
-                self.newBagColor = "lushyPink"
-                
-                // Trigger a refresh to ensure relationships and purges
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshBags"), object: nil)
-            })
-            .store(in: &cancellables)
+        // Similar implementation to manual entry
+        if let newID = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) {
+            viewModel.fetchBagsAndTags()
+            if let newBag = try? CoreDataManager.shared.viewContext.existingObject(with: newID) as? BeautyBag {
+                selectedBagIDs.insert(newBag.objectID)
+            }
+        }
+        newBagName = ""
+        newBagIcon = "bag.fill"
+        newBagColor = "lushyPink"
     }
     
     private func applyChanges() {
@@ -1506,5 +1395,165 @@ private struct FlexibleChips: View {
             }
         }
         .animation(.default, value: selection)
+    }
+}
+
+// MARK: - Simple Product Edit View (No Freezing)
+struct SimpleProductEditView: View {
+    @ObservedObject var viewModel: ProductDetailViewModel
+    @Binding var isPresented: Bool
+    
+    // Basic edit fields
+    @State private var editName: String = ""
+    @State private var editBrand: String = ""
+    @State private var editShade: String = ""
+    @State private var editSize: String = ""
+    @State private var editSpf: String = ""
+    @State private var editPrice: String = ""
+    @State private var editCurrency: String = "USD"
+    @State private var editPurchaseDate: Date = Date()
+    @State private var editIsOpened: Bool = false
+    @State private var editOpenDate: Date = Date()
+    @State private var editPAO: String = ""
+    @State private var editIsVegan: Bool = false
+    @State private var editIsCrueltyFree: Bool = false
+    
+    @State private var isSaving = false
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Product Information") {
+                    TextField("Product Name", text: $editName)
+                    TextField("Brand", text: $editBrand)
+                    TextField("Shade", text: $editShade)
+                    TextField("Size (ml)", text: $editSize)
+                        .keyboardType(.decimalPad)
+                    TextField("SPF", text: $editSpf)
+                        .keyboardType(.numberPad)
+                    
+                    HStack {
+                        TextField("Price", text: $editPrice)
+                            .keyboardType(.decimalPad)
+                        Picker("Currency", selection: $editCurrency) {
+                            Text("USD").tag("USD")
+                            Text("EUR").tag("EUR") 
+                            Text("GBP").tag("GBP")
+                            Text("NOK").tag("NOK")
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+                
+                Section("Ethics") {
+                    Toggle("Vegan", isOn: $editIsVegan)
+                    Toggle("Cruelty-Free", isOn: $editIsCrueltyFree)
+                }
+                
+                Section("Usage Information") {
+                    DatePicker("Purchase Date", selection: $editPurchaseDate, displayedComponents: .date)
+                    Toggle("Product is opened", isOn: $editIsOpened)
+                    
+                    if editIsOpened {
+                        DatePicker("Open Date", selection: $editOpenDate, displayedComponents: .date)
+                    }
+                    
+                    Picker("Period After Opening", selection: $editPAO) {
+                        Text("Not specified").tag("")
+                        Text("3 months").tag("3M")
+                        Text("6 months").tag("6M")
+                        Text("12 months").tag("12M")
+                        Text("18 months").tag("18M")
+                        Text("24 months").tag("24M")
+                        Text("36 months").tag("36M")
+                    }
+                }
+            }
+            .navigationTitle("Edit Product")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveChanges()
+                    }
+                    .disabled(editName.isEmpty || isSaving)
+                }
+            }
+            .onAppear {
+                loadCurrentData()
+            }
+            .alert("Error", isPresented: $showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
+            }
+            .overlay {
+                if isSaving {
+                    ProgressView("Saving...")
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(radius: 5)
+                }
+            }
+        }
+    }
+    
+    private func loadCurrentData() {
+        let product = viewModel.product
+        editName = product.productName ?? ""
+        editBrand = product.brand ?? ""
+        editShade = product.shade ?? ""
+        editSize = product.sizeInMl > 0 ? String(format: "%.0f", product.sizeInMl) : ""
+        editSpf = product.spf > 0 ? String(product.spf) : ""
+        editPrice = product.price > 0 ? String(format: "%.2f", product.price) : ""
+        editCurrency = product.currency ?? "USD"
+        editPurchaseDate = product.purchaseDate ?? Date()
+        editIsOpened = product.openDate != nil
+        editOpenDate = product.openDate ?? Date()
+        editPAO = product.periodsAfterOpening ?? ""
+        editIsVegan = product.vegan
+        editIsCrueltyFree = product.crueltyFree
+    }
+    
+    private func saveChanges() {
+        guard !editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            alertMessage = "Product name is required"
+            showingAlert = true
+            return
+        }
+        
+        isSaving = true
+        
+        let sizeValue = Double(editSize) ?? 0
+        let spfValue = Int(editSpf) ?? 0
+        let priceValue = Double(editPrice) ?? 0
+        
+        viewModel.updateDetails(
+            productName: editName,
+            brand: editBrand.isEmpty ? nil : editBrand,
+            shade: editShade.isEmpty ? nil : editShade,
+            sizeInMl: sizeValue > 0 ? sizeValue : nil,
+            spf: spfValue,
+            price: priceValue > 0 ? priceValue : nil,
+            currency: editCurrency,
+            purchaseDate: editPurchaseDate,
+            isOpened: editIsOpened,
+            openDate: editIsOpened ? editOpenDate : nil,
+            periodsAfterOpening: editPAO.isEmpty ? nil : editPAO,
+            vegan: editIsVegan,
+            crueltyFree: editIsCrueltyFree,
+            newImage: nil
+        )
+        
+        isSaving = false
+        isPresented = false
     }
 }
