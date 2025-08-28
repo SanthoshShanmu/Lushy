@@ -1062,173 +1062,368 @@ private struct _PrettyTagsSection: View {
 private struct BagAssignSheet: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     @Binding var isPresented: Bool
-    @State private var selectedBagIDs: Set<NSManagedObjectID> = []
-    @State private var newBagName = ""
-    @State private var newBagIcon = "bag.fill"
-    @State private var newBagColor = "lushyPink"
-    @State private var isCreatingBag = false
-    @State private var cancellables = Set<AnyCancellable>()
+    @StateObject private var bagViewModel = BeautyBagViewModel()
+    @Environment(\.presentationMode) var presentationMode
     
-    // Added predefined options instead of free text fields - updated with sparkles
-    private let iconOptions = ["bag.fill","sparkles","case.fill","suitcase.fill","heart.fill","star.fill"]
-    private let colorOptions = ["lushyPink","lushyPurple","mossGreen","lushyPeach"]
+    @State private var selectedBagIDs: Set<NSManagedObjectID> = []
+    @State private var showingIconSelector = false
+    @State private var showingImagePicker = false
+    @State private var bagImage: UIImage? = nil
+    @State private var imageSource: ImageSourceType = .none
+    
+    enum ImageSourceType {
+        case none, camera, library
+    }
+    
+    private let colorOptions = ["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"]
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+        ZStack {
+            // Beautiful gradient background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.lushyPink.opacity(0.06),
+                    Color.lushyPurple.opacity(0.03),
+                    Color.lushyCream.opacity(0.2),
+                    Color.white
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Custom header
+                HStack {
+                    Button("Cancel") { 
+                        presentationMode.wrappedValue.dismiss() 
+                    }
+                    .foregroundColor(.lushyPink)
+                    .font(.body)
+                    
+                    Spacer()
+                    
                     Text("Select Beauty Bags")
-                        .font(.title3).bold()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
-
-                    if viewModel.allBags.isEmpty {
-                        Text("You have no bags yet. Create one below.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    Button("Save") {
+                        applyChanges()
+                        presentationMode.wrappedValue.dismiss()
                     }
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 14)], spacing: 14) {
-                        ForEach(viewModel.allBags, id: \.self) { bag in
-                            let selected = selectedBagIDs.contains(bag.objectID)
-                            Button(action: { toggle(bag) }) {
-                                VStack(spacing: 10) {
-                                    Image(systemName: bag.icon ?? "bag.fill")
-                                        .font(.system(size: 28, weight: .semibold))
-                                        .foregroundColor(Color(bag.color ?? "lushyPink"))
-                                    Text(bag.name ?? "Bag")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .multilineTextAlignment(.center)
-                                        .lineLimit(2)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18)
-                                        .fill(Color(bag.color ?? "lushyPink").opacity(selected ? 0.18 : 0.08))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18)
-                                                .stroke(selected ? Color(bag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
-                                        )
-                                )
-                                .overlay(
-                                    Group { if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(Color(bag.color ?? "lushyPink")).offset(x: 50, y: -50) } }
-                                )
-                            }
-                            .buttonStyle(.plain)
+                    .foregroundColor(.lushyPink)
+                    .font(.body)
+                    .fontWeight(.medium)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(Color.white.opacity(0.95))
+                
+                ScrollView {
+                    VStack(spacing: 32) {
+                        // Header with live preview
+                        VStack(spacing: 20) {
+                            Text("Choose which bags to add your product to")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
                         }
-                    }
-                    .animation(.spring(), value: selectedBagIDs)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Create New Bag")
-                            .font(.headline)
-                        TextField("Bag Name", text: $newBagName)
-                            .textFieldStyle(.roundedBorder)
-                        // Icon selection
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Icon").font(.caption).foregroundColor(.secondary)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
-                                    ForEach(iconOptions, id: \.self) { icon in
-                                        let selected = (icon == newBagIcon)
-                                        Button(action: { newBagIcon = icon }) {
-                                            Image(systemName: icon)
-                                                .font(.system(size: 24))
-                                                .foregroundColor(selected ? .white : .lushyPurple)
-                                                .padding(12)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 14)
-                                                        .fill(selected ? Color.lushyPurple : Color.lushyPurple.opacity(0.12))
-                                                )
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 14)
-                                                        .stroke(selected ? Color.lushyPurple : Color.clear, lineWidth: 2)
-                                                )
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
+                        
+                        VStack(spacing: 24) {
+                            // Existing bags selection
+                            if bagViewModel.bags.isEmpty {
+                                VStack(spacing: 16) {
+                                    Image(systemName: "bag.badge.plus")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("No bags yet")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("Create your first beauty bag below")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 40)
+                            } else {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 14)], spacing: 14) {
+                                    ForEach(bagViewModel.bags, id: \.self) { bag in
+                                        let selected = selectedBagIDs.contains(bag.objectID)
+                                        Button(action: { toggle(bag) }) {
+                                            VStack(spacing: 10) {
+                                                // Show icon only, never custom images in assignment view
+                                                if let icon = bag.icon, icon.count == 1 {
+                                                    // Emoji icon
+                                                    Text(icon)
+                                                        .font(.system(size: 28))
+                                                } else {
+                                                    // System icon with bag color
+                                                    Image(systemName: bag.icon ?? "bag.fill")
+                                                        .font(.system(size: 28, weight: .semibold))
+                                                        .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                                }
+                                                
+                                                Text(bag.name ?? "Bag")
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                                    .multilineTextAlignment(.center)
+                                                    .lineLimit(2)
+                                            }
+                                            .padding()
+                                            .frame(maxWidth: .infinity)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 18)
+                                                    .fill(Color(bag.color ?? "lushyPink").opacity(selected ? 0.18 : 0.08))
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 18)
+                                                            .stroke(selected ? Color(bag.color ?? "lushyPink") : Color.clear, lineWidth: 2)
+                                                    )
+                                            )
+                                            .overlay(
+                                                Group { 
+                                                    if selected { 
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .foregroundColor(Color(bag.color ?? "lushyPink"))
+                                                            .offset(x: 50, y: -50) 
+                                                    } 
+                                                }
+                                            )
                                         }
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(.vertical, 4)
+                                .animation(.spring(), value: selectedBagIDs)
+                                .padding(.horizontal, 24)
                             }
-                        }
-                        // Color selection
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Color").font(.caption).foregroundColor(.secondary)
-                            HStack(spacing: 12) {
-                                ForEach(colorOptions, id: \.self) { colorName in
-                                    let selected = (colorName == newBagColor)
-                                    Button(action: { newBagColor = colorName }) {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color(colorName))
-                                                .frame(width: 34, height: 34)
-                                            if selected {
-                                                Image(systemName: "checkmark.circle.fill")
-                                                    .foregroundColor(.white)
-                                                    .shadow(radius: 2)
-                                            }
+                            
+                            // Create new bag section
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("Create New Bag")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.primary)
+                                
+                                // Live preview
+                                VStack(spacing: 12) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(bagViewModel.newBagColor).opacity(0.15))
+                                            .frame(width: 80, height: 80)
+                                        
+                                        // Show custom image if available, otherwise show icon
+                                        if let bagImage = bagImage {
+                                            Image(uiImage: bagImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 70, height: 70)
+                                                .clipShape(Circle())
+                                        } else if bagViewModel.newBagIcon.count == 1 {
+                                            // Emoji icon
+                                            Text(bagViewModel.newBagIcon)
+                                                .font(.system(size: 36))
+                                        } else {
+                                            // System icon
+                                            Image(systemName: bagViewModel.newBagIcon)
+                                                .font(.system(size: 36, weight: .medium))
+                                                .foregroundColor(Color(bagViewModel.newBagColor))
                                         }
-                                        .overlay(Circle().stroke(selected ? Color.white : Color.clear, lineWidth: 2))
-                                        .shadow(color: Color(colorName).opacity(0.4), radius: 4, x: 0, y: 2)
+                                    }
+                                    .shadow(color: Color(bagViewModel.newBagColor).opacity(0.1), radius: 8, x: 0, y: 4)
+                                    
+                                    if !bagViewModel.newBagName.isEmpty {
+                                        Text(bagViewModel.newBagName)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.primary)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.center)
+                                    }
+                                }
+                                .padding(24)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color.white.opacity(0.9))
+                                        .shadow(color: Color(bagViewModel.newBagColor).opacity(0.1), radius: 8, x: 0, y: 4)
+                                )
+                                
+                                // Name input
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Bag Name")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    TextField("Enter bag name...", text: $bagViewModel.newBagName)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.body)
+                                }
+                                
+                                // Description input
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Description (Optional)")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    TextField("Add a description for your bag...", text: $bagViewModel.newBagDescription, axis: .vertical)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .lineLimit(2...4)
+                                        .font(.body)
+                                }
+                                
+                                // Icon selection
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Choose Icon")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Button(action: { showingIconSelector = true }) {
+                                        HStack {
+                                            if bagViewModel.newBagIcon.count == 1 {
+                                                Text(bagViewModel.newBagIcon)
+                                                    .font(.system(size: 20))
+                                            } else {
+                                                Image(systemName: bagViewModel.newBagIcon)
+                                                    .font(.system(size: 20))
+                                                    .foregroundColor(Color(bagViewModel.newBagColor))
+                                            }
+                                            
+                                            Text("Choose Icon")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            
+                                            Spacer()
+                                            
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .padding()
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.white)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                )
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                 }
-                            }
-                        }
-                        Button(action: createBag) {
-                            HStack {
-                                if isCreatingBag {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                        .foregroundColor(.white)
-                                } else {
-                                    Label("Add Bag", systemImage: "plus.circle.fill")
+                                
+                                // Color selection
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Choose Color")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    HStack(spacing: 16) {
+                                        ForEach(colorOptions, id: \.self) { colorName in
+                                            let isSelected = colorName == bagViewModel.newBagColor
+                                            Button(action: { bagViewModel.newBagColor = colorName }) {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(Color(colorName))
+                                                        .frame(width: 50, height: 50)
+                                                    
+                                                    if isSelected {
+                                                        Image(systemName: "checkmark")
+                                                            .font(.system(size: 20, weight: .bold))
+                                                            .foregroundColor(.white)
+                                                    }
+                                                }
+                                                .overlay(
+                                                    Circle()
+                                                        .stroke(isSelected ? Color.white : Color.clear, lineWidth: 3)
+                                                )
+                                                .shadow(color: Color(colorName).opacity(0.4), radius: isSelected ? 8 : 4, x: 0, y: 2)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        Spacer()
+                                    }
                                 }
+                                
+                                // Create button
+                                Button(action: {
+                                    bagViewModel.createBag(with: bagImage)
+                                    // Auto-select the newly created bag
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        if let newBag = bagViewModel.bags.first(where: { $0.name == bagViewModel.newBagName }) {
+                                            selectedBagIDs.insert(newBag.objectID)
+                                        }
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 18))
+                                        Text("Create Bag")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Color.lushyPink, Color.lushyPurple],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(16)
+                                    .shadow(color: Color.lushyPink.opacity(0.4), radius: 8, x: 0, y: 4)
+                                }
+                                .disabled(bagViewModel.newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(10)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Color.lushyPink.opacity(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingBag ? 0.3 : 0.9)))
-                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
                         }
-                        .disabled(newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingBag)
+                        .padding(.bottom, 20)
                     }
-                    .padding()
-                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
                 }
-                .padding([.horizontal, .bottom])
             }
-            .navigationTitle("Assign Bags")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { isPresented = false } }
-                ToolbarItem(placement: .navigationBarTrailing) { Button("Save") { applyChanges(); isPresented = false } }
-            }
-            .onAppear { selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID }) }
+        }
+        .onAppear {
+            selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID })
+            bagViewModel.fetchBags()
+        }
+        .sheet(isPresented: $showingIconSelector) {
+            IconSelectorView(selectedIcon: $bagViewModel.newBagIcon, icons: [
+                "bag.fill", "case.fill", "suitcase.fill", "backpack.fill",
+                "sparkles", "star.fill", "heart.fill", "leaf.fill",
+                "💄", "✨", "🌸", "💅", "🎀", "💖", "🌺", "🦋"
+            ], onIconSelected: { _ in })
+        }
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(selectedImage: $bagImage, sourceType: imageSource == .camera ? .camera : .photoLibrary)
         }
     }
-
-    private func toggle(_ bag: BeautyBag) { if selectedBagIDs.contains(bag.objectID) { selectedBagIDs.remove(bag.objectID) } else { selectedBagIDs.insert(bag.objectID) } }
     
-    private func createBag() {
-        // Similar implementation to manual entry
-        if let newID = CoreDataManager.shared.createBeautyBag(name: newBagName, color: newBagColor, icon: newBagIcon) {
-            viewModel.fetchBagsAndTags()
-            if let newBag = try? CoreDataManager.shared.viewContext.existingObject(with: newID) as? BeautyBag {
-                selectedBagIDs.insert(newBag.objectID)
-            }
+    private func toggle(_ bag: BeautyBag) {
+        if selectedBagIDs.contains(bag.objectID) {
+            selectedBagIDs.remove(bag.objectID)
+        } else {
+            selectedBagIDs.insert(bag.objectID)
         }
-        newBagName = ""
-        newBagIcon = "bag.fill"
-        newBagColor = "lushyPink"
     }
     
     private func applyChanges() {
         let current = Set(viewModel.bagsForProduct().map { $0.objectID })
         let toAdd = selectedBagIDs.subtracting(current)
         let toRemove = current.subtracting(selectedBagIDs)
-        for id in toAdd { if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { viewModel.addProductToBag(bag) } }
-        for id in toRemove { if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { viewModel.removeProductFromBag(bag) } }
+        for id in toAdd { 
+            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { 
+                viewModel.addProductToBag(bag) 
+            } 
+        }
+        for id in toRemove { 
+            if let bag = try? CoreDataManager.shared.viewContext.existingObject(with: id) as? BeautyBag { 
+                viewModel.removeProductFromBag(bag) 
+            } 
+        }
     }
 }
 

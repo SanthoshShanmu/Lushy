@@ -333,8 +333,9 @@ class ScannerViewModel: ObservableObject {
         let shadeValue = manualShade.isEmpty ? nil : manualShade
         let sizeValue = Double(manualSizeInMl)
         let spfValue = Int16(manualSpf) ?? 0
+        let priceValue = Double(manualPrice) // Convert price from string to double
         
-        // Call CoreDataManager with new parameters
+        // Call CoreDataManager with new parameters including price and currency
         let objectID = CoreDataManager.shared.saveUserProduct(
             barcode: manualBarcode,
             productName: manualProductName,
@@ -348,7 +349,9 @@ class ScannerViewModel: ObservableObject {
             expiryOverride: nil,
             shade: shadeValue,
             sizeInMl: sizeValue,
-            spf: spfValue
+            spf: spfValue,
+            price: priceValue, // Add price parameter
+            currency: manualCurrency // Add currency parameter
         )
         
         // Let the caller handle navigation and associations

@@ -91,7 +91,9 @@ class CoreDataManager {
         expiryOverride: Date? = nil,
         shade: String? = nil,
         sizeInMl: Double? = nil,
-        spf: Int16? = nil
+        spf: Int16? = nil,
+        price: Double? = nil,
+        currency: String? = nil
     ) -> NSManagedObjectID? {
         // Save in main viewContext for consistent updates
         let context = viewContext
@@ -134,6 +136,9 @@ class CoreDataManager {
             product.shade = shade
             product.sizeInMl = sizeInMl ?? 0.0
             product.spf = spf ?? 0
+            // Add price and currency
+            product.price = price ?? 0.0
+            product.currency = currency ?? "USD"
             product.userId = currentUserId()
             product.quantity = 1
             // Set expiry date - either from override or calculate from PAO
