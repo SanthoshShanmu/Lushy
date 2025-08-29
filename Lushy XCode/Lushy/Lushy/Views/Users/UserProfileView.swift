@@ -879,71 +879,108 @@ struct ProductCard: View {
     }
     
     var body: some View {
-        VStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+        VStack(spacing: 0) {
+            // Product image section
+            ZStack {
+                // Background gradient for image area
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.lushyPink.opacity(0.1),
+                        Color.lushyPurple.opacity(0.05)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
                 
-                if let brand = product.brand {
-                    Text(brand)
-                        .font(.caption)
+                // UserProductSummary doesn't have imageUrl property, so show placeholder
+                VStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24))
+                        .foregroundColor(.lushyPink.opacity(0.6))
+                    
+                    Text("No Image")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
                 }
+                .frame(height: 80)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 80)
+            .cornerRadius(12, corners: [.topLeft, .topRight])
             
-            if !viewModel.isViewingOwnProfile {
-                Button(action: {
-                    guard !isAdded else { return }
-                    viewModel.addProductToWishlist(productId: product.id) { result in
-                        switch result {
-                        case .success:
-                            wishlistMessage = "Added to wishlist! 💕"
-                        case .failure(let error):
-                            wishlistMessage = error.localizedDescription
-                        }
-                        showingWishlistAlert = true
+            // Product info section
+            VStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(product.name)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .foregroundColor(.primary)
+                    
+                    if let brand = product.brand {
+                        Text(brand.uppercased())
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.lushyPurple)
+                            .tracking(0.3)
+                            .lineLimit(1)
                     }
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                        Text(isAdded ? "Added" : "Add to Wishlist")
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(12)
                 }
-                .disabled(isAdded)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                // Wishlist button for other users' profiles
+                if !viewModel.isViewingOwnProfile {
+                    Button(action: {
+                        guard !isAdded else { return }
+                        viewModel.addProductToWishlist(productId: product.id) { result in
+                            switch result {
+                            case .success:
+                                wishlistMessage = "Added to wishlist! 💕"
+                            case .failure(let error):
+                                wishlistMessage = error.localizedDescription
+                            }
+                            showingWishlistAlert = true
+                        }
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "heart.fill")
+                                .font(.caption2)
+                            Text(isAdded ? "Added" : "Add to Wishlist")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                    }
+                    .disabled(isAdded)
+                }
             }
+            .padding(8)
         }
-        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
                     LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.lushyMint.opacity(0.1),
-                            Color.lushyCream.opacity(0.2)
-                        ]),
+                        colors: [Color.lushyPink.opacity(0.15), Color.lushyPurple.opacity(0.08)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    )
+                    ),
+                    lineWidth: 1
                 )
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
         )
     }
 }

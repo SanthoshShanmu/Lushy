@@ -3,7 +3,7 @@ import SwiftUI
 struct AllProductsView: View {
     @ObservedObject var viewModel: UserProfileViewModel
     @StateObject private var allProductsViewModel = AllProductsViewModel()
-    @State private var selectedTag: ProductTag?
+    @State private var selectedTags: Set<ProductTag> = []
     @State private var wishlistMessage: String?
     @State private var showingWishlistAlert = false
     
@@ -70,19 +70,29 @@ struct AllProductsView: View {
                 .padding(.bottom, 20)
             }
         }
-        .navigationTitle("All Products")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Section("Filter by Tag") {
-                        Button("All Tags", action: { selectedTag = nil; allProductsViewModel.setTagFilter(nil) })
+                    Section("Filter by Tags") {
+                        Button("Clear All Filters", action: {
+                            selectedTags.removeAll()
+                            allProductsViewModel.setTagFilters([])
+                        })
+                        .disabled(selectedTags.isEmpty)
+                        
                         ForEach(allProductsViewModel.allTags, id: \.self) { tag in
-                            Button(action: { 
-                                selectedTag = tag
-                                allProductsViewModel.setTagFilter(tag) 
+                            Button(action: {
+                                if selectedTags.contains(tag) {
+                                    selectedTags.remove(tag)
+                                } else {
+                                    selectedTags.insert(tag)
+                                }
+                                allProductsViewModel.setTagFilters(Array(selectedTags))
                             }) {
                                 HStack {
+                                    Image(systemName: selectedTags.contains(tag) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(selectedTags.contains(tag) ? .lushyPink : .secondary)
                                     Circle()
                                         .fill(Color(tag.color ?? "lushyPink"))
                                         .frame(width: 12, height: 12)
@@ -92,9 +102,21 @@ struct AllProductsView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.title2)
-                        .foregroundColor(.lushyPink)
+                    HStack(spacing: 4) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.title2)
+                        if !selectedTags.isEmpty {
+                            Text("\(selectedTags.count)")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.lushyPink)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .foregroundColor(.lushyPink)
                 }
             }
         }
@@ -116,7 +138,7 @@ struct AllProductsView: View {
         VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("💄 All Products")
+                    Text("All Products")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(
@@ -136,33 +158,36 @@ struct AllProductsView: View {
             }
             .padding(.horizontal)
             
-            // Active filter indicator
-            if let selectedTag = selectedTag {
-                HStack {
+            // Active filters indicator
+            if !selectedTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color(selectedTag.color ?? "lushyPink"))
-                            .frame(width: 12, height: 12)
-                        Text("Filtered by: \(selectedTag.name ?? "Tag")")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        Button(action: {
-                            self.selectedTag = nil
-                            allProductsViewModel.setTagFilter(nil)
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
+                        ForEach(Array(selectedTags), id: \.self) { tag in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color(tag.color ?? "lushyPink"))
+                                    .frame(width: 10, height: 10)
+                                Text(tag.name ?? "Tag")
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                                
+                                Button(action: {
+                                    selectedTags.remove(tag)
+                                    allProductsViewModel.setTagFilters(Array(selectedTags))
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(tag.color ?? "lushyPink").opacity(0.1))
+                            .cornerRadius(16)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color(selectedTag.color ?? "lushyPink").opacity(0.1))
-                    .cornerRadius(16)
-                    
-                    Spacer()
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
         }
     }
@@ -179,8 +204,8 @@ struct AllProductsView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.lushyPink)
                 
-                if selectedTag != nil {
-                    Text("Try removing the filter or select a different tag")
+                if !selectedTags.isEmpty {
+                    Text("Try removing some filters or select different tags")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -210,71 +235,108 @@ struct AllProductCard: View {
     }
     
     var body: some View {
-        VStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+        VStack(spacing: 0) {
+            // Product image section
+            ZStack {
+                // Background gradient for image area
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.lushyPink.opacity(0.1),
+                        Color.lushyPurple.opacity(0.05)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
                 
-                if let brand = product.brand {
-                    Text(brand)
-                        .font(.caption)
+                // UserProductSummary doesn't have imageUrl property, so show placeholder
+                VStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 28))
+                        .foregroundColor(.lushyPink.opacity(0.6))
+                    
+                    Text("No Image")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
                 }
+                .frame(height: 100)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 100)
+            .cornerRadius(12, corners: [.topLeft, .topRight])
             
-            if !viewModel.isViewingOwnProfile {
-                Button(action: {
-                    guard !isAdded else { return }
-                    viewModel.addProductToWishlist(productId: product.id) { result in
-                        switch result {
-                        case .success:
-                            wishlistMessage = "Added to wishlist! 💕"
-                        case .failure(let error):
-                            wishlistMessage = error.localizedDescription
-                        }
-                        showingWishlistAlert = true
-                    }
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
+            // Product info section
+            VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(product.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .foregroundColor(.primary)
+                    
+                    if let brand = product.brand {
+                        Text(brand.uppercased())
                             .font(.caption)
-                        Text(isAdded ? "Added" : "Add to Wishlist")
+                            .fontWeight(.medium)
+                            .foregroundColor(.lushyPurple)
+                            .tracking(0.5)
+                            .lineLimit(1)
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(12)
                 }
-                .disabled(isAdded)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                // Wishlist button for other users' profiles
+                if !viewModel.isViewingOwnProfile {
+                    Button(action: {
+                        guard !isAdded else { return }
+                        viewModel.addProductToWishlist(productId: product.id) { result in
+                            switch result {
+                            case .success:
+                                wishlistMessage = "Added to wishlist! 💕"
+                            case .failure(let error):
+                                wishlistMessage = error.localizedDescription
+                            }
+                            showingWishlistAlert = true
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "heart.fill")
+                                .font(.caption)
+                            Text(isAdded ? "Added" : "Add to Wishlist")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                    }
+                    .disabled(isAdded)
+                }
             }
+            .padding(12)
         }
-        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
                     LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.lushyMint.opacity(0.1),
-                            Color.lushyCream.opacity(0.2)
-                        ]),
+                        colors: [Color.lushyPink.opacity(0.2), Color.lushyPurple.opacity(0.1)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    )
+                    ),
+                    lineWidth: 1
                 )
-                .cornerRadius(12)
-                .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
         )
     }
 }
@@ -284,7 +346,7 @@ class AllProductsViewModel: ObservableObject {
     @Published var allProducts: [UserProductSummary] = []
     @Published var filteredProducts: [UserProductSummary] = []
     @Published var allTags: [ProductTag] = []
-    @Published var selectedTag: ProductTag?
+    @Published var selectedTags: [ProductTag] = []
     
     func setProducts(_ products: [UserProductSummary]) {
         // Filter out finished products
@@ -297,19 +359,24 @@ class AllProductsViewModel: ObservableObject {
         allTags = CoreDataManager.shared.fetchProductTags()
     }
     
-    func setTagFilter(_ tag: ProductTag?) {
-        selectedTag = tag
+    func setTagFilters(_ tags: [ProductTag]) {
+        selectedTags = tags
         filterProducts()
     }
     
     private func filterProducts() {
-        if let tag = selectedTag {
-            // For tag filtering, we need to check which products have this tag
-            // Since we're working with UserProductSummary, we'll need to cross-reference with local data
-            let localTaggedProductIds = CoreDataManager.shared.products(withTag: tag).compactMap { $0.backendId }
-            filteredProducts = allProducts.filter { localTaggedProductIds.contains($0.id) }
-        } else {
+        if selectedTags.isEmpty {
             filteredProducts = allProducts
+        } else {
+            // Filter products that have ANY of the selected tags (OR logic)
+            var taggedProductIds: Set<String> = []
+            
+            for tag in selectedTags {
+                let localTaggedProductIds = CoreDataManager.shared.products(withTag: tag).compactMap { $0.backendId }
+                taggedProductIds.formUnion(localTaggedProductIds)
+            }
+            
+            filteredProducts = allProducts.filter { taggedProductIds.contains($0.id) }
         }
     }
 }
