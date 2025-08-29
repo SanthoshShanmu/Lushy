@@ -14,7 +14,6 @@ struct ProductRow: View {
     let sampleProduct = UserProduct(context: context)
     sampleProduct.productName = "Sample Product"
     sampleProduct.brand = "Sample Brand"
-    sampleProduct.favorite = true
     
     return ProductRow(product: sampleProduct)
 }

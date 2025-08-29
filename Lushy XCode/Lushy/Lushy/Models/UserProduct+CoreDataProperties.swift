@@ -14,7 +14,6 @@ extension UserProduct {
     @NSManaged public var currency: String?
     @NSManaged public var currentAmount: Double
     @NSManaged public var expireDate: Date?
-    @NSManaged public var favorite: Bool
     @NSManaged public var finishDate: Date?
     @NSManaged public var imageUrl: String?
     @NSManaged public var inWishlist: Bool

@@ -12,6 +12,11 @@ router
   .get(userProductController.getUserProducts)
   .post(upload.single('image'), userProductController.createUserProduct);
 
+// NEW: Route to get user product by barcode instead of ObjectId
+router
+  .route('/barcode/:barcode')
+  .get(userProductController.getUserProductByBarcode);
+
 router
   .route('/:id')
   .get(userProductController.getUserProduct)

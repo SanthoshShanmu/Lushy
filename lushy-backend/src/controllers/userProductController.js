@@ -82,7 +82,7 @@ exports.getUserProducts = async (req, res) => {
       purchaseDate: product.purchaseDate,
       openDate: product.openDate,
       expireDate: product.expireDate,
-      favorite: product.favorite || false,
+      // REMOVED: favorite field - now handled at Product level
       isFinished: product.isFinished || false,
       finishDate: product.finishDate,
       currentAmount: product.currentAmount || 100.0,
@@ -154,7 +154,7 @@ exports.getUserProduct = async (req, res) => {
       purchaseDate: product.purchaseDate ? product.purchaseDate.toISOString() : new Date().toISOString(),
       openDate: product.openDate ? product.openDate.toISOString() : null,
       expireDate: product.expireDate ? product.expireDate.toISOString() : null,
-      favorite: product.favorite || false,
+      // REMOVED: favorite field - now handled at Product level
       isFinished: product.isFinished || false,
       finishDate: product.finishDate ? product.finishDate.toISOString() : null,
       currentAmount: product.currentAmount || 100.0,
@@ -629,6 +629,93 @@ exports.getAllReviewsForProduct = async (req, res) => {
     });
   } catch (error) {
     console.error('getAllReviewsForProduct error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Get user product by barcode (for GeneralProductDetailView)
+exports.getUserProductByBarcode = async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    const userId = req.params.userId;
+
+    // First find the product in the catalog by barcode
+    const Product = require('../models/product');
+    const product = await Product.findOne({ barcode });
+    
+    if (!product) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found in catalog'
+      });
+    }
+
+    // Then find the user's instance of this product
+    const userProduct = await UserProduct.findOne({
+      user: new mongoose.Types.ObjectId(userId),
+      product: product._id
+    })
+      .populate('product') // Populate the product catalog reference
+      .populate('tags', 'name color')
+      .populate('bags', 'name')
+      .lean(); // Use lean for better performance
+
+    if (!userProduct) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User does not own this product'
+      });
+    }
+
+    // Format the response to match the iOS app's expected BackendUserProduct structure
+    const responseProduct = {
+      _id: userProduct._id,
+      // Nested product catalog structure that matches BackendProductCatalog
+      product: {
+        _id: userProduct.product._id,
+        barcode: userProduct.product.barcode,
+        productName: userProduct.product.productName,
+        brand: userProduct.product.brand || null,
+        imageUrl: userProduct.product.imageData && userProduct.product.imageMimeType 
+          ? `data:${userProduct.product.imageMimeType};base64,${userProduct.product.imageData}`
+          : userProduct.product.imageUrl || '/uploads/defaults/default-placeholder.jpg',
+        imageData: userProduct.product.imageData || null,
+        imageMimeType: userProduct.product.imageMimeType || null,
+        periodsAfterOpening: userProduct.product.periodsAfterOpening || null,
+        vegan: userProduct.product.vegan || false,
+        crueltyFree: userProduct.product.crueltyFree || false,
+        category: userProduct.product.category || null,
+        shade: userProduct.product.shade || null,
+        sizeInMl: userProduct.product.sizeInMl || null,
+        spf: userProduct.product.spf || null
+      },
+      // User-specific fields with proper date formatting
+      purchaseDate: userProduct.purchaseDate ? userProduct.purchaseDate.toISOString() : new Date().toISOString(),
+      openDate: userProduct.openDate ? userProduct.openDate.toISOString() : null,
+      expireDate: userProduct.expireDate ? userProduct.expireDate.toISOString() : null,
+      isFinished: userProduct.isFinished || false,
+      finishDate: userProduct.finishDate ? userProduct.finishDate.toISOString() : null,
+      currentAmount: userProduct.currentAmount || 100.0,
+      timesUsed: userProduct.timesUsed || 0,
+      tags: userProduct.tags || [],
+      bags: userProduct.bags || [],
+      quantity: userProduct.quantity || 1,
+      comments: userProduct.comments || [],
+      reviews: userProduct.reviews || [],
+      usageEntries: userProduct.usageEntries || []
+    };
+
+    res.status(200).json({
+      status: 'success',
+      data: { 
+        product: responseProduct
+      }
+    });
+  } catch (error) {
+    console.error('getUserProductByBarcode error:', error);
     res.status(500).json({
       status: 'error',
       message: error.message

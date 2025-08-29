@@ -90,10 +90,6 @@ const UserProductSchema = new Schema({
   },
   openDate: Date,
   expireDate: Date,
-  favorite: {
-    type: Boolean,
-    default: false
-  },
   // Enhanced usage tracking
   currentAmount: {
     type: Number,
@@ -281,6 +277,5 @@ UserProductSchema.statics.updateSimilarProductsQuantity = async function(userId,
 UserProductSchema.index({ user: 1 });
 UserProductSchema.index({ product: 1 });
 UserProductSchema.index({ user: 1, isFinished: 1 });
-UserProductSchema.index({ user: 1, favorite: 1 });
 
 module.exports = mongoose.model('UserProduct', UserProductSchema);

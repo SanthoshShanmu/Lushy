@@ -316,44 +316,6 @@ class CoreDataManager {
         }
     }
     
-    // Toggle favorite status
-    func toggleFavorite(id: NSManagedObjectID) {
-        let context = viewContext
-        
-        context.performAndWait {
-            guard let product = try? context.existingObject(with: id) as? UserProduct else {
-                return
-            }
-            
-            // Toggle the favorite status
-            let newFavoriteStatus = !product.favorite
-            product.favorite = newFavoriteStatus
-            
-            // Save the context immediately
-            try? context.save()
-            
-            // Sync favorite status to backend to create activity - but don't post UI notifications
-            if let userId = AuthService.shared.userId, let backendId = product.backendId {
-                let url = APIService.shared.baseURL.appendingPathComponent("users/")
-                    .appendingPathComponent(userId)
-                    .appendingPathComponent("products/")
-                    .appendingPathComponent(backendId)
-                var request = URLRequest(url: url)
-                request.httpMethod = "PUT"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                if let token = AuthService.shared.token {
-                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-                let body: [String: Any] = ["favorite": newFavoriteStatus]
-                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                URLSession.shared.dataTask(with: request) { _, _, _ in
-                    // Remove the RefreshFeed notification to prevent loops
-                    // The Core Data context save will already notify any observers
-                }.resume()
-            }
-        }
-    }
-    
     // Delete a product (now also deletes remotely if synced)
     func deleteProduct(id: NSManagedObjectID) {
         let context = container.newBackgroundContext()

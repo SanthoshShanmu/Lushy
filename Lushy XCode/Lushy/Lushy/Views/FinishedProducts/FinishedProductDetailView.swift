@@ -162,17 +162,6 @@ struct FinishedProductDetailView: View {
                 if product.timesUsed > 0 {
                     detailRow(label: "Times Used", value: "\(product.timesUsed)")
                 }
-                
-                // Favorite status
-                if product.favorite {
-                    HStack {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.lushyPink)
-                        Text("This was one of your favorites")
-                            .font(.subheadline)
-                            .foregroundColor(.lushyPink)
-                    }
-                }
             }
         }
         .padding()

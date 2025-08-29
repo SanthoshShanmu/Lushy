@@ -289,7 +289,6 @@ class SyncService {
         localProduct.purchaseDate = backendProduct.purchaseDate
         localProduct.openDate = backendProduct.openDate
         localProduct.expireDate = backendProduct.expireDate
-        localProduct.favorite = backendProduct.favorite
         localProduct.isFinished = backendProduct.isFinished
         localProduct.finishDate = backendProduct.finishDate
         localProduct.currentAmount = backendProduct.currentAmount
@@ -350,7 +349,6 @@ class SyncService {
         product.purchaseDate = backendProduct.purchaseDate
         product.openDate = backendProduct.openDate
         product.expireDate = backendProduct.expireDate
-        product.favorite = backendProduct.favorite
         product.isFinished = backendProduct.isFinished
         product.finishDate = backendProduct.finishDate
         product.currentAmount = backendProduct.currentAmount

@@ -66,19 +66,7 @@ struct PrettyProductRow: View {
                     }
                 }
             }
-            // Heart icon overlay positioned outside the main ZStack to avoid alignment issues
-            .overlay(
-                Image(systemName: product.favorite ? "heart.fill" : "heart")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(product.favorite ? .lushyPink : .gray)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.9))
-                            .frame(width: 18, height: 18)
-                    )
-                    .offset(x: -25, y: -25),
-                alignment: .topLeading
-            )
+            // REMOVED: Heart icon overlay since favorites are now handled at product level
             
             // Product information - properly aligned
             VStack(alignment: .leading, spacing: 6) {
@@ -231,7 +219,6 @@ struct PrettyProductRow: View {
     let sampleProduct = UserProduct(context: context)
     sampleProduct.productName = "Sample Product"
     sampleProduct.brand = "Sample Brand"
-    sampleProduct.favorite = true
     
     return PrettyProductRow(product: sampleProduct)
 }

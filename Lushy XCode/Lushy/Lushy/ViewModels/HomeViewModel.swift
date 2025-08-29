@@ -39,6 +39,15 @@ class HomeViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
+        // Subscribe to the new specific favorites change notification
+        NotificationCenter.default.publisher(for: NSNotification.Name("FavoritesChanged"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                print("🔄 HomeViewModel: Received FavoritesChanged notification")
+                self?.fetchProductsThrottled()
+            }
+            .store(in: &cancellables)
+        
         print("HomeViewModel: initialization complete")
     }
     
@@ -146,16 +155,26 @@ class HomeViewModel: ObservableObject {
         NotificationService.shared.scheduleExpiryNotification(for: product)
     }
 
-    // Toggle favorite status
+    // Toggle favorite status using the new ProductFavoriteService
     func toggleFavorite(product: UserProduct) {
-        let productID = product.objectID
-        CoreDataManager.shared.toggleFavorite(id: productID)
-        // Remove backend sync - CoreDataManager handles this
-        DispatchQueue.main.async {
-            if let updatedProduct = try? self.managedObjectContext.existingObject(with: productID) as? UserProduct {
-                self.updateProductInArrays(updatedProduct)
-            }
+        guard let userId = AuthService.shared.userId,
+              let barcode = product.barcode else {
+            print("❌ Missing user ID or barcode for favorite toggle")
+            return
         }
+        
+        print("🔄 HomeViewModel: Toggling favorite for '\(product.productName ?? "")'")
+        
+        ProductFavoriteService.shared.toggleFavorite(barcode: barcode, userId: userId)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to toggle favorite: \(error)")
+                }
+            } receiveValue: { response in
+                print("✅ Favorite toggled successfully")
+                // The UI will update when the user navigates or the view refreshes
+            }
+            .store(in: &cancellables)
     }
     
     // Add this helper method to update a product in all arrays

@@ -536,15 +536,23 @@ struct _PrettyProductHeader: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     viewModel.toggleFavorite()
                 }) {
-                    Image(systemName: viewModel.product.favorite ? "heart.fill" : "heart")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(viewModel.product.favorite ? .lushyPink : .gray)
-                        .background(
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 44, height: 44)
-                        )
-                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    ZStack {
+                        if viewModel.isFavoriteLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                                .scaleEffect(0.6)
+                        } else {
+                            Image(systemName: viewModel.isFavorited ? "heart.fill" : "heart")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundColor(viewModel.isFavorited ? .lushyPink : .gray)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                    )
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                 }
                 .padding(.top, 16)
                 .padding(.trailing, 16)

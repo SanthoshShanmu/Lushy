@@ -3,49 +3,68 @@ import CoreData
 import Combine
 
 class FavoritesViewModel: ObservableObject {
-    @Published var favoriteProducts: [UserProduct] = []
+    @Published var favoriteProducts: [UserFavoritesResponse.FavoriteProductSummary] = []
     @Published var selectedBag: BeautyBag? = nil
     @Published var selectedTag: ProductTag? = nil
     @Published var allBags: [BeautyBag] = []
     @Published var allTags: [ProductTag] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
 
     private var cancellables = Set<AnyCancellable>()
-    private let managedObjectContext = CoreDataManager.shared.viewContext
+    private let productFavoriteService = ProductFavoriteService.shared
     
     init() {
         fetchFavorites()
-        
-        // Subscribe to context changes to keep the UI updated
-        NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.fetchFavorites()
-            }
-            .store(in: &cancellables)
     }
     
-    // Fetch favorite products from Core Data
+    // Fetch favorite products from backend
     func fetchFavorites() {
+        guard let userId = AuthService.shared.userId else {
+            print("❌ No user ID available for fetching favorites")
+            return
+        }
+        
+        print("📋 FavoritesViewModel: Fetching favorites from backend...")
+        isLoading = true
+        errorMessage = nil
+        
         fetchAllBagsAndTags()
-        let allProducts = CoreDataManager.shared.fetchUserProducts()
         
-        let favorites = allProducts.filter { $0.favorite }
-        
-        // Filter out finished products from main favorites display
-        var products = favorites.filter { product in
-            guard product.value(forKey: "isFinished") as? Bool != true else {
-                return false
+        productFavoriteService.getUserFavorites(userId: userId)
+            .sink { [weak self] completion in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to fetch favorites: \(error)")
+                        self?.errorMessage = "Failed to load favorites"
+                    }
+                }
+            } receiveValue: { [weak self] response in
+                DispatchQueue.main.async {
+                    print("✅ Received \(response.results) favorite products from backend")
+                    var products = response.data.favorites
+                    
+                    // Apply bag and tag filters
+                    if let bag = self?.selectedBag {
+                        products = products.filter { product in
+                            product.bags.contains { $0.id == bag.backendId }
+                        }
+                        print("   After bag filter: \(products.count) products")
+                    }
+                    
+                    if let tag = self?.selectedTag {
+                        products = products.filter { product in
+                            product.tags.contains { $0.id == tag.backendId }
+                        }
+                        print("   After tag filter: \(products.count) products")
+                    }
+                    
+                    self?.favoriteProducts = products
+                    print("   Final favorites count: \(products.count)")
+                }
             }
-            return true
-        }
-        
-        if let bag = selectedBag {
-            products = products.filter { ($0.bags as? Set<BeautyBag>)?.contains(bag) == true }
-        }
-        if let tag = selectedTag {
-            products = products.filter { ($0.tags as? Set<ProductTag>)?.contains(tag) == true }
-        }
-        favoriteProducts = products
+            .store(in: &cancellables)
     }
 
     func fetchAllBagsAndTags() {
@@ -62,24 +81,26 @@ class FavoritesViewModel: ObservableObject {
         selectedTag = tag
         fetchFavorites()
     }
-    
-    // Toggle favorite status
-    func toggleFavorite(product: UserProduct) {
-        // Store the ID
-        let productID = product.objectID
-        
-        // Toggle in CoreData
-        CoreDataManager.shared.toggleFavorite(id: productID)
-        
-        // Immediately update UI without waiting for notification
-        DispatchQueue.main.async {
-            // If we're removing from favorites, remove from our array
-            if !product.favorite {
-                self.favoriteProducts.removeAll { $0.objectID == productID }
-            } else {
-                // Re-fetch all favorites to ensure proper sorting/filtering
-                self.fetchFavorites()
-            }
+
+    // Toggle favorite status using the new backend service
+    func toggleFavorite(product: UserFavoritesResponse.FavoriteProductSummary) {
+        guard let userId = AuthService.shared.userId else {
+            print("❌ No user ID available for toggling favorite")
+            return
         }
+        
+        print("🔄 FavoritesViewModel: Toggling favorite for '\(product.product.productName)'")
+        
+        productFavoriteService.toggleFavorite(barcode: product.product.barcode, userId: userId)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to toggle favorite: \(error)")
+                }
+            } receiveValue: { [weak self] response in
+                print("✅ Favorite toggled successfully")
+                // Refresh the favorites list to reflect the change
+                self?.fetchFavorites()
+            }
+            .store(in: &cancellables)
     }
 }

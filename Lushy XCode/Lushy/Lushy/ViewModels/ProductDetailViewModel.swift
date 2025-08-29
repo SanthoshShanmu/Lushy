@@ -21,8 +21,30 @@ class ProductDetailViewModel: ObservableObject {
     @Published var allReviewsForProduct: [BackendReview]? = nil
     @Published var isLoadingReviews = false
 
+    @Published var showingActionSheet = false
+    @Published var showingFinishAlert = false
+    @Published var showingDeleteAlert = false
+    @Published var showingEditSheet = false
+    @Published var showingUsageSheet = false
+    @Published var showingUsageHistorySheet = false
+    @Published var showingUsageJourneySheet = false
+    @Published var showingReviewSheet = false
+    @Published var showingCommentSheet = false
+    @Published var showingBagSelectionSheet = false
+    @Published var showingTagSelectionSheet = false
+    
+    // NEW: Favorite status tracking
+    @Published var isFavorited = false
+    @Published var favoriteCount = 0
+    @Published var isFavoriteLoading = false
+    
+    // Enhanced usage tracking
+    @Published var usageEntries: [UsageEntry] = []
+    @Published var journeyEvents: [UsageJourneyEvent] = []
+
     private var cancellables = Set<AnyCancellable>()
     private let productId: String
+    private let productFavoriteService = ProductFavoriteService.shared
 
     // Computed property to check if editing should be disabled (for finished products)
     var isEditingDisabled: Bool {
@@ -111,6 +133,63 @@ class ProductDetailViewModel: ObservableObject {
         refreshProduct()
         // Load all reviews for this product from all users
         loadAllReviews()
+        loadUsageData()
+        loadFavoriteStatus()
+    }
+    
+    private func loadUsageData() {
+        usageEntries = CoreDataManager.shared.fetchUsageEntries(for: product.objectID)
+        journeyEvents = CoreDataManager.shared.fetchUsageJourneyEvents(for: product.objectID)
+    }
+    
+    // NEW: Load favorite status from backend
+    private func loadFavoriteStatus() {
+        guard let userId = AuthService.shared.userId,
+              let barcode = product.barcode else {
+            print("❌ Missing user ID or barcode for favorite status check")
+            return
+        }
+        
+        productFavoriteService.getFavoriteStatus(barcode: barcode, userId: userId)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to load favorite status: \(error)")
+                }
+            } receiveValue: { [weak self] response in
+                DispatchQueue.main.async {
+                    self?.isFavorited = response.data.isFavorited
+                    self?.favoriteCount = response.data.favoriteCount
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    // Toggle favorite status using the new ProductFavoriteService
+    func toggleFavorite() {
+        guard let userId = AuthService.shared.userId,
+              let barcode = product.barcode else {
+            print("❌ Missing user ID or barcode for favorite toggle")
+            return
+        }
+        
+        isFavoriteLoading = true
+        
+        productFavoriteService.toggleFavorite(barcode: barcode, userId: userId)
+            .sink { [weak self] completion in
+                DispatchQueue.main.async {
+                    self?.isFavoriteLoading = false
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to toggle favorite: \(error)")
+                    }
+                }
+            } receiveValue: { [weak self] response in
+                DispatchQueue.main.async {
+                    self?.isFavorited = response.data.product.isFavorited
+                    self?.favoriteCount = response.data.product.favoriteCount
+                    print("✅ Favorite toggled: \(response.data.product.isFavorited)")
+                }
+            }
+            .store(in: &cancellables)
     }
     
     /// Fetch a single product from backend and update local Core Data relationships
@@ -153,7 +232,7 @@ class ProductDetailViewModel: ObservableObject {
                         if let fetchedBags = backendProd.bags {
                             let localBags = CoreDataManager.shared.fetchBeautyBags()
                             for summary in fetchedBags {
-                                if !localBags.contains(where: { $0.backendId == summary.id }) {
+                                if (!localBags.contains(where: { $0.backendId == summary.id })) {
                                     if let newBagId = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
                                         CoreDataManager.shared.updateBeautyBagBackendId(id: newBagId, backendId: summary.id)
                                     }
@@ -191,7 +270,7 @@ class ProductDetailViewModel: ObservableObject {
                         self.product.purchaseDate = backendProd.purchaseDate
                         self.product.openDate = backendProd.openDate
                         self.product.expireDate = backendProd.expireDate
-                        self.product.favorite = backendProd.favorite
+                        // REMOVED: self.product.favorite = backendProd.favorite - now handled at product level
                         self.product.isFinished = backendProd.isFinished
                         self.product.finishDate = backendProd.finishDate
                         self.product.currentAmount = backendProd.currentAmount
@@ -298,13 +377,6 @@ class ProductDetailViewModel: ObservableObject {
         // Force review writing for finished products
         // Don't check if user has already reviewed - just show the form
         showReviewForm = true
-    }
-    
-    // Toggle favorite status
-    func toggleFavorite() {
-        CoreDataManager.shared.toggleFavorite(id: product.objectID)
-        // Remove the refreshProduct() call to prevent infinite loop
-        // The Core Data observer will handle the refresh automatically
     }
     
     // Make sure refreshProduct() handles errors properly:

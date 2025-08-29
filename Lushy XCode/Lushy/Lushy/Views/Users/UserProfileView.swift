@@ -487,7 +487,6 @@ struct FavoritesSection: View {
                             stub.backendId = product.id
                             stub.productName = product.name
                             stub.brand = product.brand
-                            stub.favorite = true
                             return stub
                         }
                     }()
@@ -841,8 +840,6 @@ struct ProductsSection: View {
                                 stub.backendId = summary.id
                                 stub.productName = summary.name
                                 stub.brand = summary.brand
-                                stub.userId = viewModel.currentUserId
-                                try? context.save()
                                 return stub
                             }
                         }()

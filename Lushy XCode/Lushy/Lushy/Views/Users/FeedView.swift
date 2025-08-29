@@ -846,8 +846,13 @@ struct GeneralProductDetailView: View {
     @State private var wishlistMessage: String?
     @State private var alertTitle: String = "Success"
     
+    private let currentUserId: String
+    private let productOwnerId: String
+    
     init(userId: String, productId: String) {
-        _viewModel = StateObject(wrappedValue: GeneralProductDetailViewModel(userId: userId, productId: productId))
+        self.currentUserId = AuthService.shared.userId ?? ""
+        self.productOwnerId = userId
+        self._viewModel = StateObject(wrappedValue: GeneralProductDetailViewModel(userId: userId, productId: productId))
     }
     
     var body: some View {
@@ -897,7 +902,7 @@ struct GeneralProductDetailView: View {
                         GeneralProductHeader(product: product)
                         
                         // Product Details
-                        GeneralProductDetails(product: product)
+                        GeneralProductDetails(product: product, isCurrentUser: currentUserId == productOwnerId)
                         
                         // Ethics Information
                         if product.product.vegan || product.product.crueltyFree {
@@ -1019,6 +1024,7 @@ private struct GeneralProductHeader: View {
 // MARK: - General Product Details
 private struct GeneralProductDetails: View {
     let product: BackendUserProduct
+    let isCurrentUser: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1042,16 +1048,6 @@ private struct GeneralProductDetails: View {
                 
                 // Fix: Remove optional binding since purchaseDate is not optional
                 detailRow(label: "Owner purchased", value: DateFormatter.medium.string(from: product.purchaseDate))
-                
-                if product.favorite {
-                    HStack {
-                        Text("This is one of their favorites")
-                            .font(.subheadline)
-                            .foregroundColor(.lushyPink)
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.lushyPink)
-                    }
-                }
             }
         }
         .padding()

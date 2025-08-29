@@ -141,7 +141,7 @@ struct BackendUserProduct: Codable, Identifiable {
     var spf: Int? { product.spf }
 
     // Custom initializer for backward compatibility
-    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, favorite: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?, quantity: Int = 1) {
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?, quantity: Int = 1) {
         self.id = id
         self.product = BackendProductCatalog(
             id: "",
@@ -162,7 +162,7 @@ struct BackendUserProduct: Codable, Identifiable {
         self.purchaseDate = purchaseDate
         self.openDate = openDate
         self.expireDate = nil
-        self.favorite = favorite
+        self.favorite = false  // Default to false since favorites are now handled centrally
         self.isFinished = false
         self.finishDate = nil
         self.currentAmount = 100.0

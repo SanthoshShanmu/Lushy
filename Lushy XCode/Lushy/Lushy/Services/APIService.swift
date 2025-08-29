@@ -883,7 +883,7 @@ class APIService {
             "purchaseDate": Int64(product.purchaseDate?.timeIntervalSince1970 ?? 0) * 1000,
             "vegan": product.vegan,
             "crueltyFree": product.crueltyFree,
-            "favorite": product.favorite,
+            // REMOVED: "favorite": product.favorite - now handled at product level
             "shade": product.shade ?? "",
             "sizeInMl": product.sizeInMl,
             "spf": Int(product.spf),
@@ -1127,6 +1127,68 @@ class APIService {
                 decoder.dateDecodingStrategy = .iso8601
                 
                 let response = try decoder.decode(Response.self, from: data)
+                completion(.success(response.data.product))
+            } catch {
+                print("JSONDecoder error: \(error)")
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+    
+    // NEW: Fetch user product by barcode (for GeneralProductDetailView)
+    func fetchUserProductByBarcode(userId: String, barcode: String, completion: @escaping (Result<BackendUserProduct, APIError>) -> Void) {
+        let url = baseURL
+            .appendingPathComponent("users")
+            .appendingPathComponent(userId)
+            .appendingPathComponent("products")
+            .appendingPathComponent("barcode")
+            .appendingPathComponent(barcode)
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            if data == nil {
+                completion(.failure(.networkError))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401 {
+                    completion(.failure(.authenticationRequired))
+                } else if httpResponse.statusCode == 404 {
+                    completion(.failure(.customError("Product not found or user does not own this product")))
+                } else {
+                    completion(.failure(.invalidResponse))
+                }
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.noData))
+                return
+            }
+            
+            do {
+                struct Response: Codable {
+                    let status: String
+                    let data: DataWrapper
+                    
+                    struct DataWrapper: Codable {
+                        let product: BackendUserProduct
+                    }
+                }
+                
+                let response = try self.jsonDecoder.decode(Response.self, from: data)
                 completion(.success(response.data.product))
             } catch {
                 print("JSONDecoder error: \(error)")

@@ -3,7 +3,7 @@ import SwiftUI
 struct FavoritesView: View {
     @ObservedObject var viewModel: FavoritesViewModel
     @State private var showProductDetail = false
-    @State private var selectedProduct: UserProduct? = nil
+    @State private var selectedProductBarcode: String? = nil
 
     var body: some View {
         ZStack {
@@ -22,7 +22,33 @@ struct FavoritesView: View {
 
             NavigationView {
                 ScrollView {
-                    if viewModel.favoriteProducts.isEmpty {
+                    if viewModel.isLoading {
+                        VStack(spacing: 20) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                                .scaleEffect(1.5)
+                            Text("Loading your favorites...")
+                                .font(.subheadline)
+                                .foregroundColor(.lushyPink)
+                        }
+                        .padding(.top, 60)
+                    } else if let errorMessage = viewModel.errorMessage {
+                        VStack(spacing: 16) {
+                            Image(systemName: "heart.slash.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.lushyPink.opacity(0.6))
+                            Text("Failed to Load Favorites")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.lushyPurple)
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        .padding(.top, 60)
+                    } else if viewModel.favoriteProducts.isEmpty {
                         VStack(spacing: 24) {
                             // Beautiful empty state
                             VStack(spacing: 16) {
@@ -99,9 +125,9 @@ struct FavoritesView: View {
                                 GridItem(.flexible(), spacing: 16)
                             ], spacing: 20) {
                                 ForEach(viewModel.favoriteProducts) { product in
-                                    EnhancedFavoriteCard(product: product)
+                                    BackendFavoriteCard(product: product)
                                         .onTapGesture {
-                                            selectedProduct = product
+                                            selectedProductBarcode = product.product.barcode
                                             showProductDetail = true
                                         }
                                 }
@@ -151,9 +177,9 @@ struct FavoritesView: View {
                 .onAppear {
                     viewModel.fetchFavorites()
                 }
-                .sheet(isPresented: $showProductDetail) {
-                    if let product = selectedProduct {
-                        ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                .navigationDestination(isPresented: $showProductDetail) {
+                    if let barcode = selectedProductBarcode {
+                        GeneralProductDetailView(userId: AuthService.shared.userId ?? "", productId: barcode)
                     }
                 }
             }
@@ -300,7 +326,196 @@ struct EnhancedFavoriteCard: View {
         )
         .shadow(color: .lushyPink.opacity(0.08), radius: 12, x: 0, y: 6)
         .scaleEffect(1.0)
-        .animation(.easeInOut(duration: 0.2), value: product.favorite)
+    }
+    
+    private var productPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(
+                LinearGradient(
+                    colors: [.lushyPink.opacity(0.1), .lushyPurple.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(height: 120)
+            .overlay(
+                VStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24))
+                        .foregroundColor(.lushyPink.opacity(0.5))
+                    Text("No Image")
+                        .font(.caption2)
+                        .foregroundColor(.lushyPink.opacity(0.7))
+                }
+            )
+    }
+}
+
+// MARK: - Backend Favorite Card for new favorites system
+struct BackendFavoriteCard: View {
+    let product: UserFavoritesResponse.FavoriteProductSummary
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Product Image with heart overlay and favorite count
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: URL(string: product.product.imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    productPlaceholder
+                }
+                .frame(height: 120)
+                .clipped()
+                
+                // Favorite heart indicator with count
+                VStack(spacing: 4) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(.lushyPink)
+                                .shadow(color: .lushyPink.opacity(0.4), radius: 4, x: 0, y: 2)
+                        )
+                    
+                    if product.product.favoriteCount > 1 {
+                        Text("\(product.product.favoriteCount)")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.lushyPink)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(.white.opacity(0.9))
+                            )
+                    }
+                }
+                .padding(12)
+            }
+            
+            // Product Info
+            VStack(alignment: .leading, spacing: 8) {
+                // Brand
+                if let brand = product.product.brand, !brand.isEmpty {
+                    Text(brand.uppercased())
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.lushyPurple)
+                        .tracking(0.5)
+                }
+                
+                // Product Name
+                Text(product.product.productName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                // Instance count and tags
+                HStack(spacing: 6) {
+                    if product.totalInstances > 1 {
+                        Text("\(product.totalInstances) owned")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.lushyMint.opacity(0.15))
+                            .foregroundColor(.lushyMint)
+                            .cornerRadius(6)
+                    }
+                    
+                    // Show first tag if available
+                    if let firstTag = product.tags.first {
+                        let tagColor = Color.fromHex(firstTag.color)
+                        let backgroundColor = tagColor.opacity(0.15)
+                        
+                        Text(firstTag.name)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(backgroundColor)
+                            .foregroundColor(tagColor)
+                            .cornerRadius(6)
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Status indicators
+                HStack(spacing: 8) {
+                    if product.openDate != nil {
+                        HStack(spacing: 3) {
+                            Image(systemName: "circle.dotted")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                            Text("Opened")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    if product.isFinished {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                            Text("Finished")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Ethics badges
+                HStack(spacing: 6) {
+                    if product.product.vegan {
+                        HStack(spacing: 2) {
+                            Image(systemName: "leaf.fill")
+                                .font(.caption2)
+                            Text("Vegan")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.green)
+                    }
+                    
+                    if product.product.crueltyFree {
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
+                                .font(.caption2)
+                            Text("CF")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.blue)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.lushyPink.opacity(0.2), .lushyPurple.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .shadow(color: .lushyPink.opacity(0.08), radius: 12, x: 0, y: 6)
     }
     
     private var productPlaceholder: some View {

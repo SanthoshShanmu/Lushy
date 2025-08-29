@@ -101,7 +101,6 @@ exports.getUserProfile = async (req, res) => {
         vegan: userProduct.product?.vegan || false,
         crueltyFree: userProduct.product?.crueltyFree || false,
         // User-specific fields
-        favorite: userProduct.favorite || false,
         isFinished: userProduct.isFinished || false,
         purchaseDate: userProduct.purchaseDate,
         openDate: userProduct.openDate,

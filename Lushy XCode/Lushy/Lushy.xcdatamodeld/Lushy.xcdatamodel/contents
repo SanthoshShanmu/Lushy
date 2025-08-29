@@ -57,7 +57,6 @@
         <attribute name="currency" optional="YES" attributeType="String" defaultValueString="USD"/>
         <attribute name="currentAmount" optional="YES" attributeType="Double" defaultValueString="100.0" usesScalarValueType="YES"/>
         <attribute name="expireDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="favorite" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="finishDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="imageUrl" optional="YES" attributeType="String"/>
         <attribute name="inWishlist" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>

@@ -32,6 +32,11 @@ const ProductSchema = new Schema({
   spf: Number, // e.g., 15, 30, 50 for different SPF levels
   // Additional metadata
   category: String, // e.g., "skincare", "makeup", "haircare"
+  // NEW: Product-level favorites system
+  favoritedBy: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   // Contribution tracking
   contributedBy: [{
     source: String, // "user_submission", "manual_entry", etc.
@@ -55,6 +60,32 @@ ProductSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
+
+// Method to toggle favorite status for a user
+ProductSchema.methods.toggleFavorite = function(userId) {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const index = this.favoritedBy.indexOf(userObjectId);
+  
+  if (index > -1) {
+    // User has already favorited, remove them
+    this.favoritedBy.splice(index, 1);
+    return false; // Not favorited anymore
+  } else {
+    // User hasn't favorited, add them
+    this.favoritedBy.push(userObjectId);
+    return true; // Now favorited
+  }
+};
+
+// Method to check if a user has favorited this product
+ProductSchema.methods.isFavoritedBy = function(userId) {
+  return this.favoritedBy.some(id => id.toString() === userId.toString());
+};
+
+// Method to get favorite count
+ProductSchema.methods.getFavoriteCount = function() {
+  return this.favoritedBy.length;
+};
 
 // Static method to find or create product by barcode with better race condition handling
 ProductSchema.statics.findOrCreateByBarcode = async function(barcodeData) {
