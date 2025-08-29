@@ -16,12 +16,7 @@ class ScannerViewModel: ObservableObject {
     // Properties for manual entry
     @Published var manualBarcode = ""
     @Published var manualProductName = ""
-    @Published var manualBrand = "" {
-        didSet {
-            // Always convert brand names to uppercase
-            manualBrand = manualBrand.uppercased()
-        }
-    }
+    @Published var manualBrand = ""
     
     // Add metadata published properties
     @Published var manualShade = ""

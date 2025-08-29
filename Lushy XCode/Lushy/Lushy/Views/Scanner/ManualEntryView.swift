@@ -55,19 +55,13 @@ struct ManualEntryView: View {
     // Consider there are unsaved changes if any input is filled/selected or an image chosen
     private var hasUnsavedChanges: Bool {
         if isSaving { return false }
-        return !(viewModel.manualBarcode.isEmpty &&
-                 viewModel.manualProductName.isEmpty &&
-                 viewModel.manualBrand.isEmpty &&
-                 viewModel.manualShade.isEmpty &&
-                 viewModel.manualSizeInMl.isEmpty &&
-                 viewModel.manualSpf.isEmpty &&
-                 productImage == nil &&
-                 periodsAfterOpening.isEmpty &&
-                 selectedBagIDs.isEmpty &&
-                 selectedTagIDs.isEmpty &&
-                 manualFetchedProduct == nil &&
-                 !viewModel.isProductOpen &&
-                 viewModel.openDate == nil)
+        
+        // Simplified check - only check if essential fields have content
+        return !viewModel.manualProductName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+               !viewModel.manualBrand.isEmpty ||
+               !selectedBagIDs.isEmpty ||
+               !selectedTagIDs.isEmpty ||
+               productImage != nil
     }
 
     // Simple local barcode validation: 8-13 digits
@@ -179,35 +173,42 @@ struct ManualEntryView: View {
                     viewModel.productNotFound = false
                 }
                 
-                // Load bags and tags for selection
-                bagViewModel.fetchBags()
-                tagViewModel.fetchTags()
+                // Load bags and tags asynchronously to avoid blocking UI
+                DispatchQueue.main.async {
+                    bagViewModel.fetchBags()
+                    tagViewModel.fetchTags()
+                }
 
-               // Fetch PAO taxonomy for period-after-opening options
-               paoCancellable = APIService.shared.fetchPAOTaxonomy()
-                   .receive(on: DispatchQueue.main)
-                   .sink(receiveCompletion: { _ in }, receiveValue: { dict in
-                       paoLabels = dict
-                       // Sort by numeric month value
-                       let sortedKeys = dict.keys.sorted { lhs, rhs in
-                           let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
-                           let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
-                           return lhsNum < rhsNum
-                       }
-                       paoOptions = sortedKeys
-                       if periodsAfterOpening.isEmpty, let first = sortedKeys.first {
-                           periodsAfterOpening = first
-                       }
-                   })
-                // Subscribe to refresh notifications to handle remote sync and DB clears
-                NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTags"))
-                    .receive(on: RunLoop.main)
-                    .sink { _ in tagViewModel.fetchTags() }
-                    .store(in: &tagCancellables)
-                NotificationCenter.default.publisher(for: NSNotification.Name("RefreshBags"))
-                    .receive(on: RunLoop.main)
-                    .sink { _ in bagViewModel.fetchBags() }
-                    .store(in: &tagCancellables)
+               // Fetch PAO taxonomy asynchronously
+               DispatchQueue.main.async {
+                   paoCancellable = APIService.shared.fetchPAOTaxonomy()
+                       .receive(on: DispatchQueue.main)
+                       .sink(receiveCompletion: { _ in }, receiveValue: { dict in
+                           paoLabels = dict
+                           // Sort by numeric month value
+                           let sortedKeys = dict.keys.sorted { lhs, rhs in
+                               let lhsNum = Int(lhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                               let rhsNum = Int(rhs.trimmingCharacters(in: CharacterSet.letters)) ?? 0
+                               return lhsNum < rhsNum
+                           }
+                           paoOptions = sortedKeys
+                           if periodsAfterOpening.isEmpty, let first = sortedKeys.first {
+                               periodsAfterOpening = first
+                           }
+                       })
+               }
+                
+                // Subscribe to refresh notifications asynchronously
+                DispatchQueue.main.async {
+                    NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTags"))
+                        .receive(on: RunLoop.main)
+                        .sink { _ in tagViewModel.fetchTags() }
+                        .store(in: &tagCancellables)
+                    NotificationCenter.default.publisher(for: NSNotification.Name("RefreshBags"))
+                        .receive(on: RunLoop.main)
+                        .sink { _ in bagViewModel.fetchBags() }
+                        .store(in: &tagCancellables)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
