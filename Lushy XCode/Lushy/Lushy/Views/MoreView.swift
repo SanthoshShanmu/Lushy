@@ -31,7 +31,7 @@ struct MoreView: View {
                     
                     NavigationLink(destination: FinishedProductsView()) {
                         Label("Finished Products", systemImage: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(.mossGreen)
                     }
                 }
                 
@@ -39,18 +39,18 @@ struct MoreView: View {
                 Section("Account") {
                     NavigationLink(destination: SettingsView()) {
                         Label("Settings", systemImage: "gearshape.fill")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.lushyPurple)
                     }
                     
                     NavigationLink(destination: NotificationsSettingsView()) {
                         Label("Notifications", systemImage: "bell.fill")
-                            .foregroundColor(.orange)
+                            .foregroundColor(.lushyPeach)
                     }
                     
                     if authManager.isAuthenticated {
                         Button(action: { showingLogoutAlert = true }) {
                             Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(.red)
+                                .foregroundColor(.lushyPink.opacity(0.8))
                         }
                     }
                 }
@@ -59,12 +59,12 @@ struct MoreView: View {
                 Section("About") {
                     NavigationLink(destination: AboutView()) {
                         Label("About Lushy", systemImage: "info.circle")
-                            .foregroundColor(.blue)
+                            .foregroundColor(.lushyPurple)
                     }
                     
                     NavigationLink(destination: HelpView()) {
                         Label("Help & Support", systemImage: "questionmark.circle")
-                            .foregroundColor(.green)
+                            .foregroundColor(.mossGreen)
                     }
                 }
             }
