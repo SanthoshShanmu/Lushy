@@ -4,7 +4,7 @@ import Charts
 struct StatsView: View {
     @StateObject private var viewModel = StatsViewModel()
     @State private var selectedTimeRange: TimeRange = .sixMonths
-    @State private var selectedChart: ChartType = .usageTime
+    @State private var selectedInsightTab: InsightTab = .overview
     
     enum TimeRange: String, CaseIterable {
         case threeMonths = "3 Months"
@@ -13,701 +13,1044 @@ struct StatsView: View {
         case allTime = "All Time"
     }
     
-    enum ChartType: String, CaseIterable {
-        case usageTime = "Usage Time"
-        case byBrand = "By Brand"
-        case byCategory = "By Category"
+    enum InsightTab: String, CaseIterable {
+        case overview = "Overview"
+        case performance = "Performance"
+        case goals = "Goals"
+        case insights = "Insights"
     }
     
     var body: some View {
-        ZStack {
-            Color.clear
-                .pastelBackground()
-
-            NavigationView {
+        NavigationView {
+            ZStack {
+                // Beautiful gradient background
+                backgroundGradient
+                
                 ScrollView {
-                    VStack(spacing: 20) {
-                        // Summary Cards
-                        summaryCardsView
-                            .glassCard(cornerRadius: 22)
+                    VStack(spacing: 24) {
+                        // Header with insights tab picker
+                        headerSection
                         
-                        // Chart Section
-                        chartSectionView
-                            .glassCard(cornerRadius: 22)
-                        
-                        // Finished Products Section
-                        finishedProductsSection
-                            .glassCard(cornerRadius: 22)
+                        // Content based on selected tab
+                        tabContentView
                     }
                     .padding(.top, 10)
-                }
-                .navigationTitle("Beauty Stats")
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Menu {
-                            ForEach(TimeRange.allCases, id: \.self) { range in
-                                Button(range.rawValue) {
-                                    selectedTimeRange = range
-                                }
-                            }
-                            Divider()
-                            // Bag filter
-                            Menu {
-                                Button("All Bags", action: { viewModel.setBagFilter(nil) })
-                                ForEach(viewModel.allBags, id: \.self) { bag in
-                                    Button(action: { viewModel.setBagFilter(bag) }) {
-                                        Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
-                                    }
-                                }
-                            } label: {
-                                Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
-                            }
-                            // Tag filter
-                            Menu {
-                                Button("All Tags", action: { viewModel.setTagFilter(nil) })
-                                ForEach(viewModel.allTags, id: \.self) { tag in
-                                    Button(action: { viewModel.setTagFilter(tag) }) {
-                                        Label(tag.name ?? "Unnamed Tag", systemImage: "tag")
-                                    }
-                                }
-                            } label: {
-                                Label(viewModel.selectedTag?.name ?? "All Tags", systemImage: "tag")
-                            }
-                        } label: {
-                            HStack {
-                                Text(selectedTimeRange.rawValue)
-                                Image(systemName: "chevron.down")
-                            }
-                            .foregroundColor(LushyPalette.purple)
-                        }
-                    }
-                }
-                .onAppear {
-                    viewModel.fetchFinishedProducts()
+                    .padding(.bottom, 30)
                 }
             }
+        }
+        .navigationTitle("Beauty Analytics")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    timeRangeSection
+                    Divider()
+                    bagFilterSection
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundColor(.lushyPink)
+                }
+            }
+        }
+        .onAppear {
+            viewModel.fetchAllData()
         }
     }
     
-    // Summary Cards
-    private var summaryCardsView: some View {
-        VStack(spacing: 10) {
-            Text("Product Summary")
-                .font(.title2)
-                .fontWeight(.bold)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
-            
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                statsCard(title: "Products Used",
-                          value: "\(viewModel.finishedProducts.count)",
-                          icon: "checkmark.circle.fill",
-                          color: .lushyPink)
-                
-                statsCard(title: "Avg. Usage Time",
-                          value: viewModel.averageUsageTime(),
-                          icon: "clock.fill",
-                          color: .lushyPurple)
-                
-                statsCard(title: "Most Used Brand",
-                          value: viewModel.mostUsedBrand() ?? "N/A",
-                          icon: "star.fill",
-                          color: .yellow)
-                
-                statsCard(title: "Product Savings",
-                          value: viewModel.calculateProductSavings(),
-                          icon: "dollarsign.circle.fill",
-                          color: .green)
-                
-                // New Shades Used card
-                statsCard(title: "Shades Used",
-                          value: "\(viewModel.uniqueShades())",
-                          icon: "paintpalette.fill",
-                          color: .lushyPeach)
-            }
-        }
-        .padding()
-        .background(
-            BlurView(style: .systemUltraThinMaterial)
-                .background(Color.white.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    // Break down complex expressions into separate computed properties
+    private var backgroundGradient: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color.lushyPink.opacity(0.06),
+                Color.lushyPurple.opacity(0.04),
+                Color.lushyCream.opacity(0.2),
+                Color.white
+            ]),
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: Color.lushyPink.opacity(0.08), radius: 10, x: 0, y: 4)
+        .ignoresSafeArea()
     }
     
-    // Individual Stat Card
-    private func statsCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var tabContentView: some View {
+        Group {
+            switch selectedInsightTab {
+            case .overview:
+                collectionOverviewSection
+            case .performance:
+                performanceSection
+            case .goals:
+                goalsSection
+            case .insights:
+                insightsSection
+            }
+        }
+        .transition(.opacity.combined(with: .slide))
+    }
+    
+    private var timeRangeSection: some View {
+        ForEach(TimeRange.allCases, id: \.self) { range in
+            Button(range.rawValue) {
+                selectedTimeRange = range
+            }
+        }
+    }
+    
+    private var bagFilterSection: some View {
+        Menu {
+            Button("All Bags", action: { viewModel.setBagFilter(nil) })
+            ForEach(viewModel.allBags, id: \.self) { bag in
+                Button(action: { viewModel.setBagFilter(bag) }) {
+                    Label(bag.name ?? "Unnamed Bag", systemImage: bag.icon ?? "bag.fill")
+                }
+            }
+        } label: {
+            Label(viewModel.selectedBag?.name ?? "All Bags", systemImage: "bag")
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 16) {
+            // Welcome message with personal touch
+            welcomeMessageSection
+            
+            // Tab picker with beautiful design
+            tabPickerSection
+        }
+    }
+    
+    private var welcomeMessageSection: some View {
+        VStack(spacing: 8) {
             HStack {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                Text(title)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your Beauty Journey ✨")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(beautyJourneyGradient)
+                    
+                    Text("Discover insights about your collection")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+    
+    private var beautyJourneyGradient: LinearGradient {
+        LinearGradient(
+            colors: [.lushyPink, .lushyPurple],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+    
+    private var tabPickerSection: some View {
+        HStack(spacing: 0) {
+            ForEach(InsightTab.allCases, id: \.self) { tab in
+                tabButton(for: tab)
+            }
+        }
+        .padding(4)
+        .background(tabPickerBackground)
+        .padding(.horizontal, 24)
+    }
+    
+    private func tabButton(for tab: InsightTab) -> some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                selectedInsightTab = tab
+            }
+        }) {
+            VStack(spacing: 6) {
+                Text(tab.rawValue)
+                    .font(.subheadline)
+                    .fontWeight(selectedInsightTab == tab ? .semibold : .medium)
+                    .foregroundColor(selectedInsightTab == tab ? .white : .secondary)
+                
+                if selectedInsightTab == tab {
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: 20, height: 3)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(tabButtonBackground(for: tab))
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func tabButtonBackground(for tab: InsightTab) -> some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(selectedInsightTab == tab ? 
+                  LinearGradient(colors: [.lushyPink, .lushyPurple], startPoint: .leading, endPoint: .trailing) : 
+                  LinearGradient(colors: [Color.clear], startPoint: .leading, endPoint: .trailing))
+    }
+    
+    private var tabPickerBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(Color.white.opacity(0.7))
+            .shadow(color: .lushyPink.opacity(0.1), radius: 8, x: 0, y: 4)
+    }
+    
+    // MARK: - Collection Overview Section
+    private var collectionOverviewSection: some View {
+        VStack(spacing: 20) {
+            // Collection value cards
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                beautyStatCard(
+                    title: "Collection Value",
+                    value: formatCurrency(viewModel.totalCollectionValue),
+                    subtitle: "Total investment",
+                    icon: "dollarsign.circle.fill",
+                    color: .green,
+                    gradientColors: [.green.opacity(0.2), .green.opacity(0.1)]
+                )
+                
+                beautyStatCard(
+                    title: "Value Used",
+                    value: formatCurrency(viewModel.valueUsedUp),
+                    subtitle: "Products finished",
+                    icon: "checkmark.circle.fill",
+                    color: .lushyPink,
+                    gradientColors: [.lushyPink.opacity(0.2), .lushyPink.opacity(0.1)]
+                )
+                
+                beautyStatCard(
+                    title: "Efficiency Rate",
+                    value: "\(Int(viewModel.collectionEfficiencyRate))%",
+                    subtitle: "Money well spent",
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: .lushyPurple,
+                    gradientColors: [.lushyPurple.opacity(0.2), .lushyPurple.opacity(0.1)]
+                )
+                
+                beautyStatCard(
+                    title: "Avg. Product Value",
+                    value: formatCurrency(viewModel.averageProductValue),
+                    subtitle: "Per item",
+                    icon: "tag.fill",
+                    color: .lushyMint,
+                    gradientColors: [.lushyMint.opacity(0.2), .lushyMint.opacity(0.1)]
+                )
+            }
+            .padding(.horizontal, 24)
+            
+            // Collection health summary
+            collectionHealthCard
+            
+            // Category breakdown
+            categoryBreakdownCard
+        }
+    }
+    
+    // MARK: - Performance Section
+    private var performanceSection: some View {
+        VStack(spacing: 20) {
+            // Top performers
+            topPerformersCard
+            
+            // Best value products (cost per use)
+            bestValueCard
+            
+            // Underperforming products
+            underperformingCard
+        }
+    }
+    
+    // MARK: - Goals Section
+    private var goalsSection: some View {
+        VStack(spacing: 20) {
+            // Waste reduction progress
+            wasteReductionCard
+            
+            // Expiry alerts
+            expiryAlertsCard
+            
+            // Unopened products
+            unopenedProductsCard
+        }
+    }
+    
+    // MARK: - Insights Section
+    private var insightsSection: some View {
+        VStack(spacing: 20) {
+            // Routine consistency
+            routineConsistencyCard
+            
+            // Repurchase recommendations
+            repurchaseRecommendationsCard
+            
+            // Seasonal patterns (if available)
+            if !viewModel.seasonalUsagePatterns().isEmpty {
+                seasonalPatternsCard
+            }
+        }
+    }
+    
+    // MARK: - Collection Health Card
+    private var collectionHealthCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "heart.text.square.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyPink)
+                Text("Collection Health")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            HStack(spacing: 20) {
+                VStack(spacing: 4) {
+                    Text("\(viewModel.allProducts.count)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    Text("Total Products")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("\(viewModel.finishedProducts.count)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.lushyPink)
+                    Text("Finished")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("\(viewModel.unopenedProducts().count)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                    Text("Unopened")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("\(viewModel.expiryAlerts().count)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.red)
+                    Text("Expiring Soon")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyPink.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Category Breakdown Card
+    private var categoryBreakdownCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "chart.pie.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyPurple)
+                Text("Collection Breakdown")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            VStack(spacing: 12) {
+                ForEach(viewModel.categoryBalance(), id: \.category) { item in
+                    HStack {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(colorForCategory(item.category))
+                                .frame(width: 12, height: 12)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.category)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Text(item.recommended)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Text("\(item.count)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(colorForCategory(item.category))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorForCategory(item.category).opacity(0.1))
+                    )
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyPurple.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Top Performers Card
+    private var topPerformersCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "star.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.yellow)
+                Text("Top Performers")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            let topProducts = viewModel.topPerformingProducts().prefix(3)
+            
+            if topProducts.isEmpty {
+                Text("No rated products yet. Add reviews to see your top performers!")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-            }
-            
-            Text(value)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.1))
-        .cornerRadius(12)
-    }
-    
-    // Chart Section
-    private var chartSectionView: some View {
-        VStack(spacing: 15) {
-            HStack {
-                Text("Usage Analytics")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Picker("Chart Type", selection: $selectedChart) {
-                    ForEach(ChartType.allCases, id: \.self) { type in
-                        Text(type.rawValue).tag(type)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 200)
-            }
-            
-            chartContent
-                .frame(height: 250)
-                .padding()
-                .background(
-                    BlurView(style: .systemUltraThinMaterial)
-                        .background(Color.white.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .shadow(color: Color.lushyPurple.opacity(0.08), radius: 10, x: 0, y: 4)
-        }
-        .padding()
-        .background(
-            BlurView(style: .systemUltraThinMaterial)
-                .background(Color.white.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: Color.lushyPurple.opacity(0.08), radius: 10, x: 0, y: 4)
-    }
-    
-    @ViewBuilder
-    private var chartContent: some View {
-        if #available(iOS 16.0, *) {
-            Group {
-                switch selectedChart {
-                case .usageTime:
-                    averageUsageTimeChart
-                case .byBrand:
-                    brandDistributionChart
-                case .byCategory:
-                    categoryUsageChart
-                }
-            }
-        } else {
-            // Fallback for iOS 15 and earlier
-            legacyChartView
-        }
-    }
-    
-    // Finished Products Section
-    private var finishedProductsSection: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            Text("Finished Products")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            if viewModel.finishedProducts.isEmpty {
-                emptyStateView
+                    .padding(.vertical, 20)
             } else {
-                ForEach(viewModel.finishedProducts.prefix(5)) { product in
-                    finishedProductRow(product: product)
-                }
-                
-                if viewModel.finishedProducts.count > 5 {
-                    Button(action: {
-                        // Show all finished products
-                    }) {
-                        Text("See All (\(viewModel.finishedProducts.count))")
-                            .font(.subheadline)
-                            .foregroundColor(.lushyPink)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.lushyPink.opacity(0.1))
-                            .cornerRadius(8)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(
-            BlurView(style: .systemUltraThinMaterial)
-                .background(Color.white.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: Color.lushyPink.opacity(0.08), radius: 10, x: 0, y: 4)
-    }
-    
-    private func finishedProductRow(product: UserProduct) -> some View {
-        NavigationLink(destination: FinishedProductDetailView(product: product)) {
-            HStack(spacing: 15) {
-                // Product image
-                productImageView(urlString: product.imageUrl)
-                    .frame(width: 60, height: 60)
-                    .background(Color.lushyCream)
-                    .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(product.productName ?? "Unknown Product")
-                        .font(.headline)
-                        .lineLimit(1)
-                    
-                    if let brand = product.brand {
-                        Text(brand)
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                    
-                    // Show tags with small chips
-                    if let tags = product.tags as? Set<ProductTag>, !tags.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(Array(tags.prefix(2)), id: \.self) { tag in
-                                HStack(spacing: 3) {
-                                    Circle()
-                                        .fill(Color(tag.color ?? "lushyPink"))
-                                        .frame(width: 8, height: 8)
-                                    Text(tag.name ?? "")
-                                        .font(.system(size: 10))
+                VStack(spacing: 12) {
+                    ForEach(Array(topProducts.enumerated()), id: \.offset) { index, product in
+                        HStack {
+                            // Medal for top 3
+                            Image(systemName: index == 0 ? "medal.fill" : index == 1 ? "medal" : "3.circle.fill")
+                                .foregroundColor(index == 0 ? .yellow : index == 1 ? .gray : .orange)
+                                .font(.title3)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(product.productName ?? "Unknown Product")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                
+                                if let brand = product.brand {
+                                    Text(brand)
+                                        .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color(tag.color ?? "lushyPink").opacity(0.10))
-                                .cornerRadius(8)
+                            }
+                            
+                            Spacer()
+                            
+                            // Rating stars
+                            if let reviews = product.reviews as? Set<Review>,
+                               let review = reviews.first {
+                                HStack(spacing: 2) {
+                                    ForEach(1...5, id: \.self) { star in
+                                        Image(systemName: star <= review.rating ? "star.fill" : "star")
+                                            .foregroundColor(.yellow)
+                                            .font(.caption)
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    HStack {
-                        Text(usageDurationText(product: product))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        if let openDate = product.openDate,
-                           let finishDate = product.value(forKey: "finishDate") as? Date {
-                            Spacer()
-                            Text(formattedDateRange(from: openDate, to: finishDate))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.yellow.opacity(0.1))
+                        )
                     }
                 }
-                
-                Spacer()
-                
-                // Display rating if available
-                if let reviews = product.reviews as? Set<Review>, let review = reviews.first {
-                    HStack {
-                        ForEach(1...5, id: \.self) { index in
-                            Image(systemName: index <= review.rating ? "star.fill" : "star")
-                                .foregroundColor(.yellow)
-                                .font(.caption2)
-                        }
-                    }
-                }
-                
-                // Finished indicator
-                Image(systemName: "checkmark.circle.fill")
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .yellow.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Best Value Card
+    private var bestValueCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "dollarsign.circle.fill")
+                    .font(.title2)
                     .foregroundColor(.green)
-                    .font(.title3)
+                Text("Best Value Products")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.8))
-                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private func productImageView(urlString: String?) -> some View {
-        Group {
-            if let imageUrlString = urlString, let imageUrl = URL(string: imageUrlString) {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    case .failure:
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    @unknown default:
-                        EmptyView()
+            
+            let costPerUseData = viewModel.costPerUse().prefix(3)
+            
+            if costPerUseData.isEmpty {
+                Text("Finish some products with price data to see your best value items!")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 20)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(costPerUseData.enumerated()), id: \.offset) { index, item in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.product.productName ?? "Unknown Product")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                
+                                if let brand = item.product.brand {
+                                    Text(brand)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(formatCurrency(item.costPerUse))
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.green)
+                                Text("per use")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.green.opacity(0.1))
+                        )
                     }
                 }
-            } else {
-                Image(systemName: "photo")
-                    .foregroundColor(.gray)
             }
         }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .green.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
     }
     
-    private func usageDurationText(product: UserProduct) -> String {
-        guard let openDate = product.openDate,
-              let finishDate = product.value(forKey: "finishDate") as? Date else {
-            return "Duration unknown"
-        }
-        
-        let days = Calendar.current.dateComponents([.day], from: openDate, to: finishDate).day ?? 0
-        
-        if days < 30 {
-            return "\(days) days of use"
-        } else {
-            let months = Double(days) / 30.0
-            return String(format: "%.1f months of use", months)
-        }
-    }
-    
-    private func formattedDateRange(from startDate: Date, to endDate: Date) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d"
-        return "\(dateFormatter.string(from: startDate)) - \(dateFormatter.string(from: endDate))"
-    }
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 15) {
-            Image(systemName: "chart.bar.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.lushyPink.opacity(0.6))
-                .padding()
+    // MARK: - Underperforming Card
+    private var underperformingCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title2)
+                    .foregroundColor(.orange)
+                Text("Needs Attention")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
             
-            Text("No Finished Products Yet")
+            let underperforming = viewModel.underperformingProducts().prefix(3)
+            
+            if underperforming.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                    Text("Great job! No products need attention right now.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 20)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(underperforming.enumerated()), id: \.offset) { index, product in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(product.productName ?? "Unknown Product")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                
+                                Text(product.openDate == nil ? "Never opened" : "Low usage")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundColor(.orange)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.orange.opacity(0.1))
+                        )
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .orange.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Waste Reduction Card
+    private var wasteReductionCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "leaf.fill")
+                    .font(.title2)
+                    .foregroundColor(.green)
+                Text("Waste Reduction Goal")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            let wasteScore = viewModel.wasteReductionScore()
+            
+            VStack(spacing: 12) {
+                // Progress ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                        .frame(width: 80, height: 80)
+                    
+                    Circle()
+                        .trim(from: 0, to: wasteScore / 100)
+                        .stroke(
+                            LinearGradient(colors: [.green, .lushyMint], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(-90))
+                    
+                    Text("\(Int(wasteScore))%")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("Products Finished")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("\(viewModel.finishedProducts.count) of \(viewModel.allProducts.count) products used up")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .green.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Expiry Alerts Card
+    private var expiryAlertsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            expiryAlertsHeader
+            
+            let expiringProducts = viewModel.expiryAlerts().prefix(3)
+            
+            if expiringProducts.isEmpty {
+                expiryAlertsEmptyState
+            } else {
+                expiryAlertsContent(expiringProducts: Array(expiringProducts))
+            }
+        }
+        .padding(20)
+        .background(expiryAlertsBackground)
+        .padding(.horizontal, 24)
+    }
+    
+    private var expiryAlertsHeader: some View {
+        HStack {
+            Image(systemName: "clock.badge.exclamationmark.fill")
+                .font(.title2)
+                .foregroundColor(.red)
+            Text("Expiry Alerts")
                 .font(.headline)
-            
-            Text("Track your beauty products usage by marking products as empty when you finish them.")
+                .fontWeight(.semibold)
+            Spacer()
+        }
+    }
+    
+    private var expiryAlertsEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.shield.fill")
+                .font(.title2)
+                .foregroundColor(.green)
+            Text("All products are fresh! No expiry concerns.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal)
         }
-        .padding()
-        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
     }
     
-    // iOS 16+ Chart implementations
-    @available(iOS 16.0, *)
-    private var averageUsageTimeChart: some View {
-        Chart {
-            ForEach(viewModel.getMonthlyUsageData(), id: \.month) { data in
-                BarMark(
-                    x: .value("Month", data.month),
-                    y: .value("Days", data.averageDays)
-                )
-                .foregroundStyle(Color.lushyPink.gradient)
-                .cornerRadius(6)
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading)
-        }
-        .chartXAxis {
-            AxisMarks { value in
-                AxisGridLine()
-                AxisValueLabel()
+    private func expiryAlertsContent(expiringProducts: [UserProduct]) -> some View {
+        VStack(spacing: 12) {
+            ForEach(Array(expiringProducts.enumerated()), id: \.offset) { index, product in
+                expiryAlertRow(product: product)
             }
         }
     }
     
-    @available(iOS 16.0, *)
-    private var brandDistributionChart: some View {
-        Chart {
-            ForEach(viewModel.getBrandDistribution(), id: \.brand) { data in
-                SectorMark(
-                    angle: .value("Count", data.count),
-                    innerRadius: .ratio(0.6),
-                    angularInset: 1.5
-                )
-                .cornerRadius(5)
-                .foregroundStyle(by: .value("Brand", data.brand))
-            }
-        }
-        .frame(height: 240)
-    }
-    
-    @available(iOS 16.0, *)
-    private var categoryUsageChart: some View {
-        Chart {
-            ForEach(viewModel.getCategoryData(), id: \.category) { data in
-                BarMark(
-                    x: .value("Count", data.count),
-                    y: .value("Category", data.category)
-                )
-                .foregroundStyle(Color.lushyPurple.gradient)
-                .cornerRadius(6)
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel()
-            }
-        }
-    }
-    
-    // Fallback for iOS 15 and earlier
-    private var legacyChartView: some View {
-        VStack(spacing: 10) {
-            Text("Chart visualization available on iOS 16 and above")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            switch selectedChart {
-            case .usageTime:
-                simpleBarChartView(data: viewModel.getMonthlyUsageData())
-            case .byBrand:
-                simplePieChartView(data: viewModel.getBrandDistribution())
-            case .byCategory:
-                simpleHorizontalBarView(data: viewModel.getCategoryData())
-            }
-        }
-    }
-    
-    private func simpleBarChartView(data: [(month: String, averageDays: Double)]) -> some View {
-        VStack(alignment: .leading) {
-            HStack(alignment: .bottom, spacing: 8) {
-                ForEach(data, id: \.month) { item in
-                    VStack {
-                        Text("\(Int(item.averageDays))")
-                            .font(.caption)
-                            .foregroundColor(.lushyPink)
-                        
-                        Rectangle()
-                            .fill(Color.lushyPink)
-                            .frame(width: 30, height: max(20, item.averageDays * 2))
-                            .cornerRadius(4)
-                        
-                        Text(item.month)
-                            .font(.caption)
-                            .frame(width: 30)
-                    }
+    private func expiryAlertRow(product: UserProduct) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.productName ?? "Unknown Product")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                
+                if let expireDate = product.expireDate {
+                    let daysLeft = daysUntilExpiry(from: expireDate)
+                    Text("\(daysLeft) days left")
+                        .font(.caption)
+                        .foregroundColor(.red)
                 }
             }
-            .frame(height: 200)
-            .padding(.top, 20)
+            
+            Spacer()
+            
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.red)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(expiryAlertRowBackground)
     }
     
-    private func simplePieChartView(data: [(brand: String, count: Int)]) -> some View {
-        VStack {
+    private var expiryAlertsBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(Color.white.opacity(0.9))
+            .shadow(color: .red.opacity(0.1), radius: 10, x: 0, y: 4)
+    }
+    
+    private var expiryAlertRowBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.red.opacity(0.1))
+    }
+    
+    private func daysUntilExpiry(from expiryDate: Date) -> Int {
+        return Calendar.current.dateComponents([.day], from: Date(), to: expiryDate).day ?? 0
+    }
+    
+    // MARK: - Unopened Products Card
+    private var unopenedProductsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                ForEach(data.prefix(5), id: \.brand) { item in
-                    Circle()
-                        .fill(randomColor(for: item.brand))
-                        .frame(width: 15, height: 15)
-                    
-                    Text(item.brand)
-                        .font(.caption)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Text("\(item.count)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Divider()
-                        .frame(height: 20)
-                }
+                Image(systemName: "gift.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyPurple)
+                Text("Unopened Products")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
             }
-            .padding(.horizontal)
             
-            ZStack {
-                // Simple pie chart visualization
-                GeometryReader { geo in
-                    ForEach(data.enumerated().map({ i, item in
-                        (index: i, item: item, color: randomColor(for: item.brand))
-                    }), id: \.index) { item in
-                        Path { path in
-                            let center = CGPoint(x: geo.size.width/2, y: geo.size.height/2)
-                            let radius = min(geo.size.width, geo.size.height) / 2 * 0.8
-                            
-                            let totalValue = data.reduce(0) { $0 + $1.count }
-                            let startAngle = item.index == 0 ? 0.0 :
-                                data[0..<item.index].reduce(0.0) { $0 + (Double($1.count) / Double(totalValue)) * 2 * .pi }
-                            let endAngle = startAngle + (Double(item.item.count) / Double(totalValue)) * 2 * .pi
-                            
-                            path.move(to: center)
-                            path.addArc(center: center, radius: radius, startAngle: .radians(startAngle - .pi/2),
-                                        endAngle: .radians(endAngle - .pi/2), clockwise: false)
-                            path.closeSubpath()
-                        }
-                        .fill(item.color)
-                    }
-                }
-            }
-            .frame(height: 120)
-        }
-    }
-    
-    private func simpleHorizontalBarView(data: [(category: String, count: Int)]) -> some View {
-        VStack {
-            ForEach(data, id: \.category) { item in
-                HStack {
-                    Text(item.category)
-                        .font(.caption)
-                        .frame(width: 80, alignment: .leading)
-                    
-                    GeometryReader { geo in
-                        let maxCount = data.map { $0.count }.max() ?? 1
-                        let width = (CGFloat(item.count) / CGFloat(maxCount)) * geo.size.width
-                        
-                        Rectangle()
-                            .fill(Color.lushyPurple)
-                            .frame(width: width)
-                            .cornerRadius(4)
-                    }
-                    
-                    Text("\(item.count)")
-                        .font(.caption)
+            let unopened = viewModel.unopenedProducts().prefix(3)
+            
+            if unopened.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                    Text("Great! You're using your products well.")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .frame(width: 30, alignment: .trailing)
+                        .multilineTextAlignment(.center)
                 }
-                .frame(height: 25)
+                .padding(.vertical, 20)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(unopened.enumerated()), id: \.offset) { index, product in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(product.productName ?? "Unknown Product")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                
+                                if let purchaseDate = product.purchaseDate {
+                                    let monthsOld = Calendar.current.dateComponents([.month], from: purchaseDate, to: Date()).month ?? 0
+                                    Text("Unopened for \(monthsOld) months")
+                                        .font(.caption)
+                                        .foregroundColor(.lushyPurple)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "gift")
+                                .foregroundColor(.lushyPurple)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.lushyPurple.opacity(0.1))
+                        )
+                    }
+                }
             }
         }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyPurple.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
     }
     
-    private func randomColor(for string: String) -> Color {
-        let colors: [Color] = [.lushyPink, .lushyPurple, .mossGreen, .lushyPeach, .lushyCream]
-        var hash = 0
-        for char in string.unicodeScalars {
-            hash = Int(char.value) + ((hash << 5) - hash)
+    // MARK: - Routine Consistency Card
+    private var routineConsistencyCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "repeat.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyMint)
+                Text("Routine Consistency")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            let consistency = viewModel.routineConsistency()
+            
+            VStack(spacing: 12) {
+                // Progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(height: 16)
+                        
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(LinearGradient(colors: [.lushyMint, .lushyPurple], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: geometry.size.width * (consistency / 100), height: 16)
+                    }
+                }
+                .frame(height: 16)
+                
+                HStack {
+                    Text("\(Int(consistency))% of products in active use")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text(consistency > 70 ? "Excellent!" : consistency > 50 ? "Good" : "Room for improvement")
+                        .font(.caption)
+                        .foregroundColor(consistency > 70 ? .green : consistency > 50 ? .orange : .red)
+                }
+            }
         }
-        return colors[abs(hash) % colors.count]
-    }
-}
-
-// MARK: - StatsViewModel Extensions
-
-extension StatsViewModel {
-    // Additional methods for chart data
-    
-    func mostUsedBrand() -> String? {
-        let brandCounts = getBrandDistribution()
-        return brandCounts.max(by: { $0.count < $1.count })?.brand
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyMint.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
     }
     
-    func calculateProductSavings() -> String {
-        let averageProductCost = 25.0 // Assumed average cost
-        let savingsAmount = Double(finishedProducts.count) * averageProductCost
-        
+    // MARK: - Repurchase Recommendations Card
+    private var repurchaseRecommendationsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyPink)
+                Text("Repurchase Recommendations")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            let recommendations = viewModel.repurchaseRecommendations()
+            
+            if recommendations.isEmpty {
+                Text("Finish and rate more products to get personalized recommendations!")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 20)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(recommendations.enumerated()), id: \.offset) { index, product in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(product.productName ?? "Unknown Product")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                
+                                if let brand = product.brand {
+                                    Text(brand)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            // Rating stars
+                            if let reviews = product.reviews as? Set<Review>,
+                               let review = reviews.first {
+                                HStack(spacing: 2) {
+                                    ForEach(1...5, id: \.self) { star in
+                                        Image(systemName: star <= review.rating ? "star.fill" : "star")
+                                            .foregroundColor(.yellow)
+                                            .font(.caption)
+                                    }
+                                }
+                            }
+                            
+                            Image(systemName: "arrow.right.circle.fill")
+                                .foregroundColor(.lushyPink)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.lushyPink.opacity(0.1))
+                        )
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyPink.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Seasonal Patterns Card
+    private var seasonalPatternsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "calendar.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.lushyPeach)
+                Text("Seasonal Patterns")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            // Simplified seasonal insights
+            VStack(spacing: 8) {
+                Text("Based on your usage history, you tend to finish more skincare in winter and makeup in summer.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.9))
+                .shadow(color: .lushyPeach.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Helper Views and Functions
+    
+    private func beautyStatCard(title: String, value: String, subtitle: String, icon: String, color: Color, gradientColors: [Color]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Text(title)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: gradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+        .cornerRadius(16)
+    }
+    
+    private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.maximumFractionDigits = 0
-        
-        return formatter.string(from: NSNumber(value: savingsAmount)) ?? "$0"
+        return formatter.string(from: NSNumber(value: amount)) ?? "$0"
     }
     
-    func getMonthlyUsageData() -> [(month: String, averageDays: Double)] {
-        // Get data for the last 6 months
-        let calendar = Calendar.current
-        let today = Date()
-        
-        // Create month labels
-        var data: [(month: String, averageDays: Double)] = []
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM"
-        
-        // Generate data for each of the last 6 months
-        for i in 0..<6 {
-            if let date = calendar.date(byAdding: .month, value: -i, to: today) {
-                let monthString = dateFormatter.string(from: date)
-                
-                // Get average usage time for products finished in this month
-                let monthData = finishedProducts.filter { product in
-                    guard let finishDate = product.value(forKey: "finishDate") as? Date else { return false }
-                    return calendar.isDate(finishDate, equalTo: date, toGranularity: .month)
-                }
-                
-                let usageData = monthData.compactMap { product -> Double? in
-                    guard let openDate = product.openDate,
-                          let finishDate = product.value(forKey: "finishDate") as? Date else { return nil }
-                    
-                    let days = calendar.dateComponents([.day], from: openDate, to: finishDate).day ?? 0
-                    return Double(days)
-                }
-                
-                let averageDays = usageData.isEmpty ? 0 : usageData.reduce(0, +) / Double(usageData.count)
-                data.append((month: monthString, averageDays: averageDays))
-            }
+    private func colorForCategory(_ category: String) -> Color {
+        switch category.lowercased() {
+        case "makeup": return .lushyPink
+        case "skincare": return .lushyMint
+        case "haircare": return .lushyPurple
+        case "fragrance": return .lushyPeach
+        default: return .gray
         }
-        
-        // Reverse to show oldest month first
-        return data.reversed()
-    }
-    
-    func getBrandDistribution() -> [(brand: String, count: Int)] {
-        var brandCounts: [String: Int] = [:]
-        
-        for product in finishedProducts {
-            let brand = product.brand ?? "Unknown"
-            brandCounts[brand, default: 0] += 1
-        }
-        
-        return brandCounts.map { (brand: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
-    }
-    
-    func getCategoryData() -> [(category: String, count: Int)] {
-        // This would ideally use product categories, but we'll simulate with product types
-        var categories: [String: Int] = [
-            "Skincare": 0,
-            "Makeup": 0,
-            "Hair": 0,
-            "Body": 0,
-            "Fragrance": 0,
-            "Other": 0
-        ]
-        
-        for product in finishedProducts {
-            // Parse product name to guess category
-            let name = product.productName?.lowercased() ?? ""
-            
-            if name.contains("cream") || name.contains("lotion") || name.contains("serum") || name.contains("face") {
-                categories["Skincare", default: 0] += 1
-            }
-            else if name.contains("foundation") || name.contains("mascara") || name.contains("lipstick") {
-                categories["Makeup", default: 0] += 1
-            }
-            else if name.contains("shampoo") || name.contains("conditioner") {
-                categories["Hair", default: 0] += 1
-            }
-            else if name.contains("soap") || name.contains("shower") || name.contains("body") {
-                categories["Body", default: 0] += 1
-            }
-            else if name.contains("perfume") || name.contains("cologne") || name.contains("fragrance") {
-                categories["Fragrance", default: 0] += 1
-            }
-            else {
-                categories["Other", default: 0] += 1
-            }
-        }
-        
-        return categories.map { (category: $0.key, count: $0.value) }
-            .filter { $0.count > 0 }
-            .sorted { $0.count > $1.count }
     }
 }
 
