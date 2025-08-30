@@ -3,6 +3,7 @@ import SwiftUI
 struct MoreView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var showingLogoutAlert = false
+    @State private var showingProfileSharing = false
     
     var body: some View {
         NavigationView {
@@ -35,6 +36,16 @@ struct MoreView: View {
                     }
                 }
                 
+                // Social Section
+                Section("Social") {
+                    Button(action: {
+                        showingProfileSharing = true
+                    }) {
+                        Label("Share Profile", systemImage: "square.and.arrow.up")
+                            .foregroundColor(.lushyPink)
+                    }
+                }
+                
                 // Account Section
                 Section("Account") {
                     NavigationLink(destination: SettingsView().environmentObject(authManager)) {
@@ -58,6 +69,9 @@ struct MoreView: View {
                 }
             } message: {
                 Text("Are you sure you want to sign out?")
+            }
+            .sheet(isPresented: $showingProfileSharing) {
+                ProfileSharingView()
             }
         }
     }

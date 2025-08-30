@@ -194,6 +194,7 @@ struct UserProfileView: View {
 struct ProfileHeaderView: View {
     let profile: UserProfile
     @ObservedObject var viewModel: UserProfileViewModel
+    @State private var showingProfileSharing = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -294,24 +295,67 @@ struct ProfileHeaderView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: viewModel.isFollowing)
             } else {
-                // Edit Profile Button (if viewing own profile) - smaller and more subtle
-                NavigationLink(destination: ProfileEditView(currentUser: profile)) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pencil")
-                            .font(.caption2)
-                        Text("Edit")
-                            .font(.caption2)
+                // Edit Profile and Share Buttons (if viewing own profile)
+                HStack(spacing: 12) {
+                    // Edit Profile Button
+                    NavigationLink(destination: ProfileEditView(currentUser: profile)) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pencil")
+                                .font(.caption)
+                            Text("Edit Profile")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.white.opacity(0.8))
+                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
+                        )
                     }
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
-                    )
-                    .cornerRadius(12)
+                    
+                    // Share Profile Button
+                    Button(action: {
+                        showingProfileSharing = true
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.caption)
+                            Text("Share")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.lushyPink)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.lushyPink.opacity(0.1),
+                                            Color.lushyPurple.opacity(0.05)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color.lushyPink.opacity(0.15), radius: 4, x: 0, y: 2)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.lushyPink.opacity(0.3), lineWidth: 0.5)
+                        )
+                    }
+                    .sheet(isPresented: $showingProfileSharing) {
+                        ProfileSharingView()
+                    }
                 }
             }
         }
