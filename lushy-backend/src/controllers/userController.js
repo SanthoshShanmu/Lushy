@@ -383,7 +383,7 @@ exports.updateUserSettings = async (req, res) => {
   }
 };
 
-// Update user profile (name, bio, username)
+// Update user profile (name, bio, username, email)
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -393,7 +393,7 @@ exports.updateProfile = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this profile.' });
     }
 
-    const { name, bio, username } = req.body;
+    const { name, bio, username, email } = req.body;
     const updates = {};
 
     if (name && name.trim()) {
@@ -417,6 +417,25 @@ exports.updateProfile = async (req, res) => {
       updates.username = usernameToCheck;
     }
 
+    if (email && email.trim()) {
+      const emailToCheck = email.trim().toLowerCase();
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailToCheck)) {
+        return res.status(400).json({ message: 'Invalid email format.' });
+      }
+      
+      // Check if email is already taken by another user
+      const existingUser = await User.findOne({ 
+        email: emailToCheck, 
+        _id: { $ne: userId } 
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email already in use.' });
+      }
+      updates.email = emailToCheck;
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       userId, 
       { $set: updates }, 
@@ -433,7 +452,13 @@ exports.updateProfile = async (req, res) => {
     });
   } catch (err) {
     if (err.code === 11000) {
-      return res.status(400).json({ message: 'Username already taken.' });
+      // Handle duplicate key errors
+      if (err.keyPattern?.username) {
+        return res.status(400).json({ message: 'Username already taken.' });
+      }
+      if (err.keyPattern?.email) {
+        return res.status(400).json({ message: 'Email already in use.' });
+      }
     }
     res.status(500).json({ message: 'Server error', error: err.message });
   }

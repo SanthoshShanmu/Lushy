@@ -62,4 +62,8 @@ router.post('/:userId/tags', userController.createTag);
 router.get('/:userId/settings', authMiddleware.authenticate, userController.getUserSettings);
 router.patch('/:userId/settings', authMiddleware.authenticate, userController.updateUserSettings);
 
+// Notification preferences endpoints
+router.get('/:userId/notification-preferences', authMiddleware.authenticate, require('../controllers/notificationController').getNotificationPreferences);
+router.patch('/:userId/notification-preferences', authMiddleware.authenticate, require('../controllers/notificationController').updateNotificationPreferences);
+
 module.exports = router;

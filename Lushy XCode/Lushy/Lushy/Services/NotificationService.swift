@@ -56,7 +56,8 @@ class NotificationService: ObservableObject {
         syncWithBackendNotifications(product: product, notificationDate: notificationDate)
     }
     
-    private func scheduleLocalNotification(identifier: String, title: String, body: String, date: Date) {
+    // Public method for scheduling local notifications
+    func scheduleLocalNotification(identifier: String, title: String, body: String, date: Date) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

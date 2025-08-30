@@ -11,7 +11,7 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
     match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+      /^\w+([\.-]?\w+)*@\w+(\.\w{2,3})+$/,
       'Please provide a valid email'
     ]
   },
@@ -62,6 +62,25 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ['GLOBAL', 'EU', 'US', 'JP'],
     default: 'GLOBAL'
+  },
+  // Notification preferences
+  notifCommentsLikes: {
+    type: Boolean,
+    default: true
+  },
+  notifUsageReminders: {
+    type: Boolean,
+    default: false
+  },
+  notifNewFollowers: {
+    type: Boolean,
+    default: true
+  },
+  notifUsageReminderDays: {
+    type: Number,
+    default: 7,
+    min: 1,
+    max: 30
   }
 });
 

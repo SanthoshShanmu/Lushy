@@ -1591,4 +1591,68 @@ class APIService {
         }
         .eraseToAnyPublisher()
     }
+    
+    // MARK: - Notification Preferences
+    func getNotificationPreferences(userId: String, completion: @escaping (Result<[String: Any], APIError>) -> Void) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("notification-preferences")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { 
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") 
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                completion(.failure(httpResponse.statusCode == 401 ? .authenticationRequired : .invalidResponse))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.noData))
+                return
+            }
+            
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let responseData = json["data"] as? [String: Any] {
+                    completion(.success(responseData))
+                } else {
+                    completion(.failure(.decodingError))
+                }
+            } catch {
+                completion(.failure(.decodingError))
+            }
+        }.resume()
+    }
+    
+    func updateNotificationPreferences(userId: String, preferences: [String: Any], completion: ((Result<Void, APIError>) -> Void)? = nil) {
+        let url = baseURL.appendingPathComponent("users").appendingPathComponent(userId).appendingPathComponent("notification-preferences")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = AuthService.shared.token { 
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization") 
+        }
+        
+        request.httpBody = try? JSONSerialization.data(withJSONObject: preferences)
+        
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            guard let completion = completion else { return }
+            guard let http = response as? HTTPURLResponse else { 
+                completion(.failure(.invalidResponse))
+                return 
+            }
+            guard (200...299).contains(http.statusCode) else {
+                completion(.failure(http.statusCode == 401 ? .authenticationRequired : .invalidResponse))
+                return
+            }
+            completion(.success(()))
+        }.resume()
+    }
 }

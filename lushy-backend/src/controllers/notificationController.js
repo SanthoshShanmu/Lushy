@@ -137,3 +137,76 @@ exports.proxyEthicsInfo = async (req, res) => {
     });
   }
 };
+
+// Get user notification preferences
+exports.getNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user._id.toString(); // Get from authenticated user
+    const User = require('../models/user');
+    
+    const user = await User.findById(userId).select('notifCommentsLikes notifUsageReminders notifNewFollowers notifUsageReminderDays');
+    
+    if (!user) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User not found'
+      });
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        commentsAndLikes: user.notifCommentsLikes ?? true,
+        usageReminders: user.notifUsageReminders ?? false,
+        newFollowers: user.notifNewFollowers ?? true,
+        usageReminderDays: user.notifUsageReminderDays ?? 7
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Update user notification preferences
+exports.updateNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user._id.toString(); // Get from authenticated user
+    const { commentsAndLikes, usageReminders, newFollowers, usageReminderDays } = req.body;
+    
+    // For now, we'll store these preferences in a simple way
+    // In a production app, you might want a separate NotificationPreferences model
+    const User = require('../models/user');
+    
+    const updates = {};
+    if (typeof commentsAndLikes === 'boolean') updates.notifCommentsLikes = commentsAndLikes;
+    if (typeof usageReminders === 'boolean') updates.notifUsageReminders = usageReminders;
+    if (typeof newFollowers === 'boolean') updates.notifNewFollowers = newFollowers;
+    if (typeof usageReminderDays === 'number') updates.notifUsageReminderDays = usageReminderDays;
+    
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User not found'
+      });
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Notification preferences updated successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};

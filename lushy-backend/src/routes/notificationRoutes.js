@@ -9,6 +9,7 @@ router.use(authMiddleware.authenticate);
 router.post('/schedule', notificationController.scheduleNotification);
 router.get('/user/:userId', notificationController.getUserNotifications);
 router.delete('/:notificationId', notificationController.cancelNotification);
+router.patch('/preferences', notificationController.updateNotificationPreferences);
 
 // API proxies - no authentication required for these routes
 router.get('/proxy/ethics/:brand', notificationController.proxyEthicsInfo);

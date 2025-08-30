@@ -92,7 +92,7 @@ struct BeautyBagsView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("💄 Beauty Bags")
+                                        Text("Beauty Bags")
                                             .font(.title)
                                             .fontWeight(.bold)
                                             .foregroundStyle(
