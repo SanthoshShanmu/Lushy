@@ -74,21 +74,25 @@ struct UserProfileView: View {
                                     )
                                 }
 
-                                // Products (active only)
-                                StatItem(
-                                    icon: "sparkles",
-                                    count: viewModel.activeProductsCount,
-                                    label: "Products",
-                                    color: .lushyMint
-                                )
+                                // Products (active only) - Make clickable
+                                NavigationLink(destination: AllProductsView(viewModel: viewModel)) {
+                                    StatItem(
+                                        icon: "sparkles",
+                                        count: viewModel.activeProductsCount,
+                                        label: "Products",
+                                        color: .lushyMint
+                                    )
+                                }
                                 
-                                // Finished Products
-                                StatItem(
-                                    icon: "checkmark.circle.fill",
-                                    count: viewModel.finishedProductsCount,
-                                    label: "Finished",
-                                    color: .lushyPeach
-                                )
+                                // Finished Products - Make clickable
+                                NavigationLink(destination: FinishedProductsView()) {
+                                    StatItem(
+                                        icon: "checkmark.circle.fill",
+                                        count: viewModel.finishedProductsCount,
+                                        label: "Finished",
+                                        color: .lushyPeach
+                                    )
+                                }
                             }
                             .padding(.horizontal)
                         }

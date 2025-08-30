@@ -254,7 +254,10 @@ struct BeautyBagDetailView: View {
             GridItem(.flexible(), spacing: 12)
         ], spacing: 16) {
             ForEach(bagProducts, id: \.self) { product in
-                BagProductCard(product: product, bag: bag, viewModel: viewModel)
+                NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: product))) {
+                    BagProductCard(product: product, bag: bag, viewModel: viewModel)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(.horizontal, 20)
