@@ -271,8 +271,8 @@ struct EnhancedFavoriteCard: View {
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.lushyMint.opacity(0.15))
-                            .foregroundColor(.lushyMint)
+                            .background(Color.mossGreen.opacity(0.15))
+                            .foregroundColor(.mossGreen)
                             .cornerRadius(6)
                     }
                     
@@ -423,8 +423,8 @@ struct BackendFavoriteCard: View {
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.lushyMint.opacity(0.15))
-                            .foregroundColor(.lushyMint)
+                            .background(Color.mossGreen.opacity(0.15))
+                            .foregroundColor(.mossGreen)
                             .cornerRadius(6)
                     }
                     

@@ -13,7 +13,7 @@ struct ReviewFormView: View {
                     gradient: Gradient(colors: [
                         Color.lushyPink.opacity(0.1),
                         Color.lushyPurple.opacity(0.05),
-                        Color.lushyMint.opacity(0.03)
+                        Color.mossGreen.opacity(0.03)
                     ]),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

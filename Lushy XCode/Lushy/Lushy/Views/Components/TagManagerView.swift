@@ -51,7 +51,7 @@ struct TagManagerView: View {
 struct AddTagSheet: View {
     @ObservedObject var viewModel: TagViewModel
     @Environment(\.presentationMode) var presentationMode
-    let colorOptions = ["lushyPink", "lushyPurple", "lushyMint", "lushyPeach"]
+    let colorOptions = ["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"]
 
     var body: some View {
         NavigationView {

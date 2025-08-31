@@ -235,8 +235,8 @@ struct StatsView: View {
                     value: formatCurrency(viewModel.averageProductValue),
                     subtitle: "Per item",
                     icon: "tag.fill",
-                    color: .lushyMint,
-                    gradientColors: [.lushyMint.opacity(0.2), .lushyMint.opacity(0.1)]
+                    color: .mossGreen,
+                    gradientColors: [.mossGreen.opacity(0.2), .mossGreen.opacity(0.1)]
                 )
             }
             .padding(.horizontal, 24)
@@ -648,7 +648,7 @@ struct StatsView: View {
                     Circle()
                         .trim(from: 0, to: wasteScore / 100)
                         .stroke(
-                            LinearGradient(colors: [.green, .lushyMint], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            LinearGradient(colors: [.green, .mossGreen], startPoint: .topLeading, endPoint: .bottomTrailing),
                             style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .frame(width: 80, height: 80)
@@ -846,7 +846,7 @@ struct StatsView: View {
             HStack {
                 Image(systemName: "repeat.circle.fill")
                     .font(.title2)
-                    .foregroundColor(.lushyMint)
+                    .foregroundColor(.mossGreen)
                 Text("Routine Consistency")
                     .font(.headline)
                     .fontWeight(.semibold)
@@ -864,7 +864,7 @@ struct StatsView: View {
                             .frame(height: 16)
                         
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(LinearGradient(colors: [.lushyMint, .lushyPurple], startPoint: .leading, endPoint: .trailing))
+                            .fill(LinearGradient(colors: [.mossGreen, .lushyPurple], startPoint: .leading, endPoint: .trailing))
                             .frame(width: geometry.size.width * (consistency / 100), height: 16)
                     }
                 }
@@ -885,7 +885,7 @@ struct StatsView: View {
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.white.opacity(0.9))
-                .shadow(color: .lushyMint.opacity(0.1), radius: 10, x: 0, y: 4)
+                .shadow(color: .mossGreen.opacity(0.1), radius: 10, x: 0, y: 4)
         )
         .padding(.horizontal, 24)
     }
@@ -1046,7 +1046,7 @@ struct StatsView: View {
     private func colorForCategory(_ category: String) -> Color {
         switch category.lowercased() {
         case "makeup": return .lushyPink
-        case "skincare": return .lushyMint
+        case "skincare": return .mossGreen
         case "haircare": return .lushyPurple
         case "fragrance": return .lushyPeach
         default: return .gray

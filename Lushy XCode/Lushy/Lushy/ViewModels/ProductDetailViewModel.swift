@@ -45,6 +45,7 @@ class ProductDetailViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let productId: String
     private let productFavoriteService = ProductFavoriteService.shared
+    private var favoriteDebounceTimer: Timer?
 
     // Computed property to check if editing should be disabled (for finished products)
     var isEditingDisabled: Bool {
@@ -164,30 +165,45 @@ class ProductDetailViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    // Toggle favorite status using the new ProductFavoriteService
+    /// Toggle favorite status with debouncing to prevent rapid state changes
     func toggleFavorite() {
-        guard let userId = AuthService.shared.userId,
-              let barcode = product.barcode else {
-            print("❌ Missing user ID or barcode for favorite toggle")
-            return
-        }
+        // Prevent multiple rapid calls
+        guard !isFavoriteLoading else { return }
         
         isFavoriteLoading = true
         
+        // Optimistically update UI immediately
+        let newState = !isFavorited
+        isFavorited = newState
+        
+        // Debounce the API call
+        favoriteDebounceTimer?.invalidate()
+        favoriteDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            self?.performFavoriteToggle(newState: newState)
+        }
+    }
+    
+    private func performFavoriteToggle(newState: Bool) {
+        guard let userId = AuthService.shared.userId,
+              let barcode = product.barcode else {
+            isFavoriteLoading = false
+            return
+        }
+        
         productFavoriteService.toggleFavorite(barcode: barcode, userId: userId)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
-                DispatchQueue.main.async {
-                    self?.isFavoriteLoading = false
-                    if case .failure(let error) = completion {
-                        print("❌ Failed to toggle favorite: \(error)")
-                    }
+                self?.isFavoriteLoading = false
+                if case .failure(let error) = completion {
+                    // Revert optimistic update on error
+                    self?.isFavorited = !newState
+                    print("❌ Failed to toggle favorite: \(error)")
                 }
             } receiveValue: { [weak self] response in
-                DispatchQueue.main.async {
-                    self?.isFavorited = response.data.product.isFavorited
-                    self?.favoriteCount = response.data.product.favoriteCount
-                    print("✅ Favorite toggled: \(response.data.product.isFavorited)")
-                }
+                // Update with server response
+                self?.isFavorited = response.data.product.isFavorited
+                self?.favoriteCount = response.data.product.favoriteCount
+                print("✅ Favorite toggled: \(response.data.product.isFavorited)")
             }
             .store(in: &cancellables)
     }

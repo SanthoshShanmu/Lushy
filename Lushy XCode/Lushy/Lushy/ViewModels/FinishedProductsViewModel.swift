@@ -129,4 +129,39 @@ class FinishedProductsViewModel: ObservableObject {
             return 1
         }
     }
+    
+    // Add method to count NON-FINISHED instances of the same product
+    func activeInstancesCount(for product: UserProduct) -> Int {
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        
+        var predicates: [NSPredicate] = [
+            NSPredicate(format: "isFinished != YES") // Only count non-finished products
+        ]
+        
+        // Match by product name and brand
+        if let productName = product.productName {
+            predicates.append(NSPredicate(format: "productName == %@", productName))
+        }
+        
+        if let brand = product.brand {
+            predicates.append(NSPredicate(format: "brand == %@", brand))
+        }
+        
+        // Match by size if available (within 10ml tolerance)
+        if product.sizeInMl > 0 {
+            let minSize = product.sizeInMl - 10
+            let maxSize = product.sizeInMl + 10
+            predicates.append(NSPredicate(format: "sizeInMl >= %f AND sizeInMl <= %f", minSize, maxSize))
+        }
+        
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        
+        do {
+            let count = try managedObjectContext.count(for: request)
+            return count
+        } catch {
+            print("Error counting active instances: \(error)")
+            return 1
+        }
+    }
 }

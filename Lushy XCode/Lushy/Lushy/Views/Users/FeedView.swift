@@ -637,10 +637,10 @@ struct BundledActivityCard: View {
                     Text("\(bundledActivities.count)")
                         .font(.caption2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.lushyMint)
+                        .foregroundColor(.mossGreen)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.lushyMint.opacity(0.1))
+                        .background(Color.mossGreen.opacity(0.1))
                         .clipShape(Capsule())
                 }
             }
@@ -746,14 +746,14 @@ struct BundledActivityCard: View {
                                 .overlay(
                                     ProgressView()
                                         .scaleEffect(0.5)
-                                        .tint(.lushyMint)
+                                        .tint(.mossGreen)
                                 )
                         }
                         .frame(width: 32, height: 32)
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
+                                .stroke(Color.mossGreen.opacity(0.2), lineWidth: 1)
                         )
                     } else {
                         Circle()
@@ -762,11 +762,11 @@ struct BundledActivityCard: View {
                             .overlay(
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.lushyMint.opacity(0.6))
+                                    .foregroundColor(.mossGreen.opacity(0.6))
                             )
                             .overlay(
                                 Circle()
-                                    .stroke(Color.lushyMint.opacity(0.2), lineWidth: 1)
+                                    .stroke(Color.mossGreen.opacity(0.2), lineWidth: 1)
                             )
                     }
                 }

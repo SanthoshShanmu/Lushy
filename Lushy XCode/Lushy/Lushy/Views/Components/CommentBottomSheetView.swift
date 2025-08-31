@@ -219,7 +219,7 @@ struct CommentRowView: View {
                                     gradient: Gradient(colors: [
                                         Color.lushyPink.opacity(0.7),
                                         Color.lushyPurple.opacity(0.5),
-                                        Color.lushyMint.opacity(0.3)
+                                        Color.mossGreen.opacity(0.3)
                                     ]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -241,7 +241,7 @@ struct CommentRowView: View {
                                 gradient: Gradient(colors: [
                                     Color.lushyPink.opacity(0.7),
                                     Color.lushyPurple.opacity(0.5),
-                                    Color.lushyMint.opacity(0.3)
+                                    Color.mossGreen.opacity(0.3)
                                 ]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing

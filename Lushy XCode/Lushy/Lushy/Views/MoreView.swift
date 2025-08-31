@@ -12,27 +12,27 @@ struct MoreView: View {
                 Section("Beauty Features") {
                     NavigationLink(destination: WishlistView().environmentObject(authManager)) {
                         Label("Wishlist", systemImage: "heart.text.square")
-                            .foregroundColor(.lushyPink)
+                            .foregroundColor(.black)
                     }
                     
                     NavigationLink(destination: StatsView()) {
                         Label("Beauty Stats", systemImage: "chart.bar.fill")
-                            .foregroundColor(.lushyPurple)
+                            .foregroundColor(.black)
                     }
                     
                     NavigationLink(destination: FavoritesView(viewModel: FavoritesViewModel())) {
                         Label("Favorites", systemImage: "star.fill")
-                            .foregroundColor(.mossGreen)
+                            .foregroundColor(.black)
                     }
                     
                     NavigationLink(destination: BeautyBagsView()) {
                         Label("Beauty Bags", systemImage: "bag.fill")
-                            .foregroundColor(.lushyPeach)
+                            .foregroundColor(.black)
                     }
                     
                     NavigationLink(destination: FinishedProductsView()) {
                         Label("Finished Products", systemImage: "checkmark.circle.fill")
-                            .foregroundColor(.mossGreen)
+                            .foregroundColor(.black)
                     }
                 }
                 
@@ -42,7 +42,7 @@ struct MoreView: View {
                         showingProfileSharing = true
                     }) {
                         Label("Share Profile", systemImage: "square.and.arrow.up")
-                            .foregroundColor(.lushyPink)
+                            .foregroundColor(.black)
                     }
                 }
                 
@@ -50,13 +50,13 @@ struct MoreView: View {
                 Section("Account") {
                     NavigationLink(destination: SettingsView().environmentObject(authManager)) {
                         Label("Settings", systemImage: "gearshape.fill")
-                            .foregroundColor(.lushyPurple)
+                            .foregroundColor(.black)
                     }
                     
                     if authManager.isAuthenticated {
                         Button(action: { showingLogoutAlert = true }) {
                             Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(.lushyPink.opacity(0.8))
+                                .foregroundColor(.black)
                         }
                     }
                 }

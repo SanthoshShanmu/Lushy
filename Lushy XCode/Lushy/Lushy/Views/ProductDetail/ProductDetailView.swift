@@ -611,9 +611,14 @@ struct _PrettyProductHeader: View {
                             .foregroundColor(.lushyPeach)
                             .cornerRadius(12)
                     }
-                    // Add quantity display
-                    if viewModel.product.quantity > 1 {
-                        Text("Qty: \(viewModel.product.quantity)")
+                    // Always show count of similar non-finished products
+                    let activeCount = CoreDataManager.shared.countSimilarActiveProducts(
+                        productName: viewModel.product.productName,
+                        brand: viewModel.product.brand,
+                        sizeInMl: viewModel.product.sizeInMl
+                    )
+                    if activeCount > 1 {
+                        Text("×\(activeCount)")
                             .font(.caption)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 8)

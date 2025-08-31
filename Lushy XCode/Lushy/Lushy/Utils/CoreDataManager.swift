@@ -1114,4 +1114,42 @@ class CoreDataManager {
             return []
         }
     }
+    
+    // MARK: - Product Quantity Calculations
+    
+    /// Count similar active (non-finished) products for quantity display
+    func countSimilarActiveProducts(productName: String?, brand: String?, sizeInMl: Double) -> Int {
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        
+        var predicates: [NSPredicate] = [
+            NSPredicate(format: "userId == %@", currentUserId()),
+            NSPredicate(format: "isFinished != YES") // Only count non-finished products
+        ]
+        
+        // Match by product name and brand
+        if let productName = productName {
+            predicates.append(NSPredicate(format: "productName == %@", productName))
+        }
+        
+        if let brand = brand {
+            predicates.append(NSPredicate(format: "brand == %@", brand))
+        }
+        
+        // Match by size if available (within 10ml tolerance)
+        if sizeInMl > 0 {
+            let minSize = sizeInMl - 10
+            let maxSize = sizeInMl + 10
+            predicates.append(NSPredicate(format: "sizeInMl >= %f AND sizeInMl <= %f", minSize, maxSize))
+        }
+        
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        
+        do {
+            let count = try viewContext.count(for: request)
+            return count
+        } catch {
+            print("Error counting similar active products: \(error)")
+            return 1
+        }
+    }
 }

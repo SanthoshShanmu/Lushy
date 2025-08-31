@@ -83,39 +83,6 @@ struct ProfileShareCardView: View {
                     }
                 }
                 
-                // User tags section
-                if !userTags.isEmpty {
-                    VStack(spacing: 8) {
-                        Text("My Style")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                        
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 6) {
-                            ForEach(Array(userTags.prefix(4)), id: \.objectID) { tag in
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color(tag.color ?? "lushyPink"))
-                                        .frame(width: 8, height: 8)
-                                    Text(tag.name ?? "Tag")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(Color(tag.color ?? "lushyPink").opacity(0.15))
-                                )
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                
                 // Top products section
                 if !topProducts.isEmpty {
                     VStack(spacing: 12) {
@@ -175,7 +142,7 @@ struct ProfileShareCardView: View {
                         StatPill(
                             count: profile.products?.count ?? 0,
                             label: "Products",
-                            color: .lushyMint
+                            color: .mossGreen
                         )
                         
                         StatPill(
@@ -195,25 +162,26 @@ struct ProfileShareCardView: View {
             }
             .padding(.bottom, 20)
             
-            // Footer with app info
-            VStack(spacing: 8) {
+            // Footer with app info - Made larger
+            VStack(spacing: 12) {
                 Divider()
                     .background(Color.gray.opacity(0.3))
                 
                 HStack(spacing: 12) {
                     Image(systemName: "sparkles")
-                        .font(.caption)
+                        .font(.body)
                         .foregroundColor(.lushyPink)
                     
                     Text("Join me on Lushy - Track your beauty journey")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
                     
                     Image(systemName: "sparkles")
-                        .font(.caption)
+                        .font(.body)
                         .foregroundColor(.lushyPink)
                 }
-                .padding(.bottom, 16)
+                .padding(.bottom, 20)
             }
         }
         .frame(maxWidth: 300)
@@ -252,7 +220,7 @@ struct ProfileShareCardView: View {
                     colors: [
                         Color.lushyPink.opacity(0.8),
                         Color.lushyPurple.opacity(0.6),
-                        Color.lushyMint.opacity(0.4)
+                        Color.mossGreen.opacity(0.4)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

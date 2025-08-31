@@ -80,7 +80,7 @@ struct UserProfileView: View {
                                         icon: "sparkles",
                                         count: viewModel.activeProductsCount,
                                         label: "Products",
-                                        color: .lushyMint
+                                        color: .mossGreen
                                     )
                                 }
                                 
@@ -248,7 +248,7 @@ struct ProfileHeaderView: View {
                             MiniStatItem(
                                 count: viewModel.activeProductsCount,
                                 label: "Products",
-                                color: .lushyMint
+                                color: .mossGreen
                             )
                             
                             MiniStatItem(
@@ -387,7 +387,7 @@ struct ProfileImageView: View {
                                 gradient: Gradient(colors: [
                                     Color.lushyPink.opacity(0.7),
                                     Color.lushyPurple.opacity(0.5),
-                                    Color.lushyMint.opacity(0.3)
+                                    Color.mossGreen.opacity(0.3)
                                 ]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -409,7 +409,7 @@ struct ProfileImageView: View {
                             gradient: Gradient(colors: [
                                 Color.lushyPink.opacity(0.7),
                                 Color.lushyPurple.opacity(0.5),
-                                Color.lushyMint.opacity(0.3)
+                                Color.mossGreen.opacity(0.3)
                             ]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -471,7 +471,7 @@ struct StatsSection: View {
                 icon: "bag.fill",
                 count: profile.bags?.count ?? 0,
                 label: "Bags",
-                color: .lushyMint
+                color: .mossGreen
             )
         }
         .padding(.horizontal)
