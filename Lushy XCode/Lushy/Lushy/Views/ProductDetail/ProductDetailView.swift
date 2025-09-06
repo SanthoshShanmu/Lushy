@@ -1081,16 +1081,7 @@ private struct BagAssignSheet: View {
     @Environment(\.presentationMode) var presentationMode
     
     @State private var selectedBagIDs: Set<NSManagedObjectID> = []
-    @State private var showingIconSelector = false
-    @State private var showingImagePicker = false
-    @State private var bagImage: UIImage? = nil
-    @State private var imageSource: ImageSourceType = .none
-    
-    enum ImageSourceType {
-        case none, camera, library
-    }
-    
-    private let colorOptions = ["lushyPink", "lushyPurple", "mossGreen", "lushyPeach"]
+    @State private var showingAddBagSheet = false
 
     var body: some View {
         ZStack {
@@ -1216,183 +1207,29 @@ private struct BagAssignSheet: View {
                                 .padding(.horizontal, 24)
                             }
                             
-                            // Create new bag section
-                            VStack(alignment: .leading, spacing: 20) {
-                                Text("Create New Bag")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                                
-                                // Live preview
-                                VStack(spacing: 12) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color(bagViewModel.newBagColor).opacity(0.15))
-                                            .frame(width: 80, height: 80)
-                                        
-                                        // Show custom image if available, otherwise show icon
-                                        if let bagImage = bagImage {
-                                            Image(uiImage: bagImage)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(width: 70, height: 70)
-                                                .clipShape(Circle())
-                                        } else if bagViewModel.newBagIcon.count == 1 {
-                                            // Emoji icon
-                                            Text(bagViewModel.newBagIcon)
-                                                .font(.system(size: 36))
-                                        } else {
-                                            // System icon
-                                            Image(systemName: bagViewModel.newBagIcon)
-                                                .font(.system(size: 36, weight: .medium))
-                                                .foregroundColor(Color(bagViewModel.newBagColor))
-                                        }
-                                    }
-                                    .shadow(color: Color(bagViewModel.newBagColor).opacity(0.1), radius: 8, x: 0, y: 4)
-                                    
-                                    if !bagViewModel.newBagName.isEmpty {
-                                        Text(bagViewModel.newBagName)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.primary)
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.center)
-                                    }
+                            // Create new bag button - uses the full ModernAddBagSheet
+                            Button(action: {
+                                showingAddBagSheet = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 18))
+                                    Text("Create New Bag")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
                                 }
-                                .padding(24)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color.white.opacity(0.9))
-                                        .shadow(color: Color(bagViewModel.newBagColor).opacity(0.1), radius: 8, x: 0, y: 4)
-                                )
-                                
-                                // Name input
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Bag Name")
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    TextField("Enter bag name...", text: $bagViewModel.newBagName)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .font(.body)
-                                }
-                                
-                                // Description input
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Description (Optional)")
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    TextField("Add a description for your bag...", text: $bagViewModel.newBagDescription, axis: .vertical)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .lineLimit(2...4)
-                                        .font(.body)
-                                }
-                                
-                                // Icon selection
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Choose Icon")
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    Button(action: { showingIconSelector = true }) {
-                                        HStack {
-                                            if bagViewModel.newBagIcon.count == 1 {
-                                                Text(bagViewModel.newBagIcon)
-                                                    .font(.system(size: 20))
-                                            } else {
-                                                Image(systemName: bagViewModel.newBagIcon)
-                                                    .font(.system(size: 20))
-                                                    .foregroundColor(Color(bagViewModel.newBagColor))
-                                            }
-                                            
-                                            Text("Choose Icon")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                            
-                                            Spacer()
-                                            
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .padding()
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.white)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                                )
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                
-                                // Color selection
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Choose Color")
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    HStack(spacing: 16) {
-                                        ForEach(colorOptions, id: \.self) { colorName in
-                                            let isSelected = colorName == bagViewModel.newBagColor
-                                            Button(action: { bagViewModel.newBagColor = colorName }) {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(Color(colorName))
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    if isSelected {
-                                                        Image(systemName: "checkmark")
-                                                            .font(.system(size: 20, weight: .bold))
-                                                            .foregroundColor(.white)
-                                                    }
-                                                }
-                                                .overlay(
-                                                    Circle()
-                                                        .stroke(isSelected ? Color.white : Color.clear, lineWidth: 3)
-                                                )
-                                                .shadow(color: Color(colorName).opacity(0.4), radius: isSelected ? 8 : 4, x: 0, y: 2)
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                                
-                                // Create button
-                                Button(action: {
-                                    bagViewModel.createBag(with: bagImage)
-                                    // Auto-select the newly created bag
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                        if let newBag = bagViewModel.bags.first(where: { $0.name == bagViewModel.newBagName }) {
-                                            selectedBagIDs.insert(newBag.objectID)
-                                        }
-                                    }
-                                }) {
-                                    HStack {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 18))
-                                        Text("Create Bag")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                    }
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(
-                                        LinearGradient(
-                                            colors: [Color.lushyPink, Color.lushyPurple],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
+                                    LinearGradient(
+                                        colors: [Color.lushyPink, Color.lushyPurple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
                                     )
-                                    .cornerRadius(16)
-                                    .shadow(color: Color.lushyPink.opacity(0.4), radius: 8, x: 0, y: 4)
-                                }
-                                .disabled(bagViewModel.newBagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                )
+                                .cornerRadius(16)
+                                .shadow(color: Color.lushyPink.opacity(0.4), radius: 8, x: 0, y: 4)
                             }
                             .padding(.horizontal, 24)
                         }
@@ -1405,15 +1242,18 @@ private struct BagAssignSheet: View {
             selectedBagIDs = Set(viewModel.bagsForProduct().map { $0.objectID })
             bagViewModel.fetchBags()
         }
-        .sheet(isPresented: $showingIconSelector) {
-            IconSelectorView(selectedIcon: $bagViewModel.newBagIcon, icons: [
-                "bag.fill", "case.fill", "suitcase.fill", "backpack.fill",
-                "sparkles", "star.fill", "heart.fill", "leaf.fill",
-                "💄", "✨", "🌸", "💅", "🎀", "💖", "🌺", "🦋"
-            ], onIconSelected: { _ in })
-        }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(selectedImage: $bagImage, sourceType: imageSource == .camera ? .camera : .photoLibrary)
+        .sheet(isPresented: $showingAddBagSheet) {
+            ModernAddBagSheet(viewModel: bagViewModel)
+                .onDisappear {
+                    // Auto-select the newly created bag when the sheet is dismissed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        bagViewModel.fetchBags()
+                        // Find the most recently created bag and select it
+                        if let newestBag = bagViewModel.bags.sorted(by: { ($0.createdAt ?? Date.distantPast) > ($1.createdAt ?? Date.distantPast) }).first {
+                            selectedBagIDs.insert(newestBag.objectID)
+                        }
+                    }
+                }
         }
     }
     
