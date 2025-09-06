@@ -63,7 +63,7 @@ struct FeedView: View {
             // Bundled activities - show bundled card without navigation
             BundledActivityCard(activity: activity, currentUserId: currentUserId)
         } else if activity.targetType == "UserProduct", let productId = activity.targetId {
-            NavigationLink(destination: GeneralProductDetailView(userId: currentUserId, productId: productId)) {
+            NavigationLink(destination: GeneralProductDetailView(userId: activity.user.id, productId: productId)) {
                 if activity.type == "review_added" {
                     ReviewActivityCard(activity: activity, currentUserId: currentUserId)
                 } else {
@@ -731,7 +731,7 @@ struct BundledActivityCard: View {
     }
     
     private func compactProductCard(_ bundledActivity: BundledActivityItem) -> some View {
-        NavigationLink(destination: GeneralProductDetailView(userId: currentUserId, productId: bundledActivity.targetId ?? "")) {
+        NavigationLink(destination: GeneralProductDetailView(userId: activity.user.id, productId: bundledActivity.targetId ?? "")) {
             VStack(spacing: 4) {
                 // Small circular product image
                 Group {
