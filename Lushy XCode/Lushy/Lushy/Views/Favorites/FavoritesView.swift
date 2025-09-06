@@ -266,14 +266,10 @@ struct EnhancedFavoriteCard: View {
                             .cornerRadius(6)
                     }
                     
-                    if product.sizeInMl > 0 {
-                        Text("\(String(format: "%.0f", product.sizeInMl))ml")
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.mossGreen.opacity(0.15))
-                            .foregroundColor(.mossGreen)
-                            .cornerRadius(6)
+                    if let size = product.size, !size.isEmpty {
+                        Text(size)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
                     Spacer()

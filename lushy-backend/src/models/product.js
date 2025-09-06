@@ -28,8 +28,8 @@ const ProductSchema = new Schema({
   },
   // Product-specific attributes (different values = different barcodes/products)
   shade: String, // e.g., "Light", "Medium", "Dark" for foundations/concealers
-  sizeInMl: Number, // e.g., 30, 50, 100 for different size variants
-  spf: Number, // e.g., 15, 30, 50 for different SPF levels
+  size: String, // Changed from sizeInMl (Number) to size (String) - e.g., "30ml", "50ml", "100ml"
+  spf: String, // Changed from Number to String - e.g., "15", "30", "50", "SPF 30"
   // Additional metadata
   category: String, // e.g., "skincare", "makeup", "haircare"
   // NEW: Product-level favorites system

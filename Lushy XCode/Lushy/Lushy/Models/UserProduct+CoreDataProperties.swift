@@ -23,8 +23,8 @@ extension UserProduct {
     @NSManaged public var price: Double
     @NSManaged public var productName: String?
     @NSManaged public var shade: String?
-    @NSManaged public var sizeInMl: Double
-    @NSManaged public var spf: Int16
+    @NSManaged public var size: String? // Changed from sizeInMl: Double to size: String?
+    @NSManaged public var spf: String? // Changed from spf: Int16 to spf: String?
     @NSManaged public var quantity: Int32
     @NSManaged public var purchaseDate: Date?
     @NSManaged public var vegan: Bool

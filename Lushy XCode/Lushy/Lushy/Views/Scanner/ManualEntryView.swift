@@ -443,8 +443,7 @@ struct ManualEntryView: View {
             // Metadata inputs
             TextField("Shade (Optional)", text: $viewModel.manualShade)
                 .textFieldStyle(.roundedBorder)
-            TextField("Size (ml, Optional)", text: $viewModel.manualSizeInMl)
-                .keyboardType(.decimalPad)
+            TextField("Size (e.g., 30ml, 50ml - Optional)", text: $viewModel.manualSize)
                 .textFieldStyle(.roundedBorder)
             TextField("SPF (Optional)", text: $viewModel.manualSpf)
                 .keyboardType(.numberPad)

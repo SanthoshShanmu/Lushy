@@ -308,8 +308,8 @@ class ProductDetailViewModel: ObservableObject {
                         
                         // Update user-specific metadata
                         if let shade = backendProd.shade { self.product.shade = shade }
-                        if let sizeValue = backendProd.sizeInMl { self.product.sizeInMl = sizeValue }
-                        if let spfValue = backendProd.spf { self.product.spf = Int16(spfValue) }
+                        if let sizeValue = backendProd.size { self.product.size = sizeValue } // Changed from sizeInMl to size
+                        if let spfValue = backendProd.spf { self.product.spf = spfValue } // Changed to handle string type
                         
                         try? ctx.save()
                     }
@@ -530,8 +530,8 @@ class ProductDetailViewModel: ObservableObject {
         productName: String,
         brand: String?,
         shade: String?,
-        sizeInMl: Double?,
-        spf: Int?,
+        size: String?, // Changed from sizeInMl: Double? to size: String?
+        spf: String?, // Changed from spf: Int? to spf: String?
         price: Double?,
         currency: String,
         purchaseDate: Date,
@@ -565,8 +565,8 @@ class ProductDetailViewModel: ObservableObject {
             productName: productName,
             brand: brand,
             shade: shade,
-            sizeInMl: sizeInMl,
-            spf: spf,
+            size: size, // Changed from sizeInMl to size
+            spf: spf, // Changed to string type
             price: price,
             currency: currency,
             purchaseDate: purchaseDate,

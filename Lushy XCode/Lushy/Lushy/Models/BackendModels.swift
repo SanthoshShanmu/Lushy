@@ -39,8 +39,8 @@ struct BackendProductCatalog: Codable {
     let category: String?
     // Product-specific attributes (different values = different barcodes/products)
     let shade: String?
-    let sizeInMl: Double?
-    let spf: Int?
+    let size: String? // Changed from sizeInMl: Double? to size: String?
+    let spf: String? // Changed from spf: Int? to spf: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -55,12 +55,12 @@ struct BackendProductCatalog: Codable {
         case crueltyFree
         case category
         case shade
-        case sizeInMl
+        case size // Remove the mapping to "sizeInMl" to fix Core Data crash
         case spf
     }
     
     // Memberwise initializer
-    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, imageData: String?, imageMimeType: String?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, category: String?, shade: String?, sizeInMl: Double?, spf: Int?) {
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, imageData: String?, imageMimeType: String?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, category: String?, shade: String?, size: String?, spf: String?) {
         self.id = id
         self.barcode = barcode
         self.productName = productName
@@ -73,7 +73,7 @@ struct BackendProductCatalog: Codable {
         self.crueltyFree = crueltyFree
         self.category = category
         self.shade = shade
-        self.sizeInMl = sizeInMl
+        self.size = size
         self.spf = spf
     }
     
@@ -91,8 +91,8 @@ struct BackendProductCatalog: Codable {
         crueltyFree = (try? container.decode(Bool.self, forKey: .crueltyFree)) ?? false
         category = try? container.decode(String.self, forKey: .category)
         shade = try? container.decode(String.self, forKey: .shade)
-        sizeInMl = try? container.decode(Double.self, forKey: .sizeInMl)
-        spf = try? container.decode(Int.self, forKey: .spf)
+        size = try? container.decode(String.self, forKey: .size)
+        spf = try? container.decode(String.self, forKey: .spf)
     }
 }
 
@@ -137,11 +137,11 @@ struct BackendUserProduct: Codable, Identifiable {
     var vegan: Bool { product.vegan }
     var crueltyFree: Bool { product.crueltyFree }
     var shade: String? { product.shade }
-    var sizeInMl: Double? { product.sizeInMl }
-    var spf: Int? { product.spf }
+    var size: String? { product.size }
+    var spf: String? { product.spf }
 
     // Custom initializer for backward compatibility
-    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, sizeInMl: Double?, spf: Int?, quantity: Int = 1) {
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, purchaseDate: Date, openDate: Date?, periodsAfterOpening: String?, vegan: Bool, crueltyFree: Bool, tags: [TagSummary]?, bags: [BeautyBagSummary]?, shade: String?, size: String?, spf: String?, quantity: Int = 1) {
         self.id = id
         self.product = BackendProductCatalog(
             id: "",
@@ -156,7 +156,7 @@ struct BackendUserProduct: Codable, Identifiable {
             crueltyFree: crueltyFree,
             category: nil,
             shade: shade,
-            sizeInMl: sizeInMl,
+            size: size,
             spf: spf
         )
         self.purchaseDate = purchaseDate
@@ -338,6 +338,7 @@ struct UserProductSummary: Identifiable, Codable {
     let id: String
     let name: String
     let brand: String?
+    let imageUrl: String?  // Added imageUrl property
     let isFavorite: Bool?
     let isFinished: Bool?  // Add finished status property
     let tags: [TagSummary]?  // added to decode tag associations
@@ -347,6 +348,7 @@ struct UserProductSummary: Identifiable, Codable {
         case id = "_id"
         case name = "productName"  // Map productName from backend to name in iOS
         case brand
+        case imageUrl = "imageUrl"  // Added imageUrl mapping
         case isFavorite = "favorite"  // Map favorite from backend to isFavorite in iOS
         case isFinished = "isFinished"  // Map isFinished from backend
         case tags
@@ -543,8 +545,8 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
     let periodsAfterOpening: String?
     let category: String?
     let shade: String?
-    let sizeInMl: Double?
-    let spf: Int?
+    let size: String? // Changed from sizeInMl: Double? to size: String?
+    let spf: String? // Changed from spf: Int? to spf: String?
     let ingredients: [String]?
 
     enum CodingKeys: String, CodingKey {
@@ -558,13 +560,13 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         case periodsAfterOpening
         case category
         case shade
-        case sizeInMl
+        case size // Remove the mapping to "sizeInMl" to fix Core Data crash
         case spf
         case ingredients
     }
 
     // Memberwise initializer for manual creation
-    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, vegan: Bool, crueltyFree: Bool, periodsAfterOpening: String?, category: String?, shade: String?, sizeInMl: Double?, spf: Int?, ingredients: [String]? = nil) {
+    init(id: String, barcode: String, productName: String, brand: String?, imageUrl: String?, vegan: Bool, crueltyFree: Bool, periodsAfterOpening: String?, category: String?, shade: String?, size: String?, spf: String?, ingredients: [String]? = nil) {
         self.id = id
         self.barcode = barcode
         self.productName = productName
@@ -575,7 +577,7 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         self.periodsAfterOpening = periodsAfterOpening
         self.category = category
         self.shade = shade
-        self.sizeInMl = sizeInMl
+        self.size = size
         self.spf = spf
         self.ingredients = ingredients
     }
@@ -592,8 +594,8 @@ struct ProductSearchSummary: Identifiable, Decodable, Hashable {
         periodsAfterOpening = try? container.decode(String.self, forKey: .periodsAfterOpening)
         category = try? container.decode(String.self, forKey: .category)
         shade = try? container.decode(String.self, forKey: .shade)
-        sizeInMl = try? container.decode(Double.self, forKey: .sizeInMl)
-        spf = try? container.decode(Int.self, forKey: .spf)
+        size = try? container.decode(String.self, forKey: .size)
+        spf = try? container.decode(String.self, forKey: .spf)
         ingredients = try? container.decode([String].self, forKey: .ingredients)
     }
 }

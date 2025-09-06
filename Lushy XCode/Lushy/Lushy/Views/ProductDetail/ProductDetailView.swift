@@ -193,8 +193,8 @@ struct ProductDetailView: View {
         if force || editName.isEmpty { editName = p.productName ?? "" }
         if force || editBrand.isEmpty { editBrand = p.brand ?? "" }
         if force || (!userEditedShade) { editShade = p.shade ?? "" }
-        if force || (!userEditedSize) { editSizeText = p.sizeInMl > 0 ? String(format: "%.0f", p.sizeInMl) : "" }
-        if force || (!userEditedSpf) { editSpfText = p.spf > 0 ? String(p.spf) : "" }
+        if force || (!userEditedSize) { editSizeText = p.size ?? "" } // Changed to use size as string
+        if force || (!userEditedSpf) { editSpfText = (p.spf?.isEmpty == false) ? p.spf! : "" }
         if force || editPurchaseDate == Date() { editPurchaseDate = p.purchaseDate ?? Date() }
         editIsOpened = p.openDate != nil
         if let od = p.openDate { editOpenDate = od }
@@ -276,8 +276,8 @@ struct ProductDetailView: View {
         let currentName = viewModel.product.productName ?? ""
         let currentBrand = viewModel.product.brand ?? ""
         let currentShade = viewModel.product.shade ?? ""
-        let currentSize = viewModel.product.sizeInMl > 0 ? String(format: "%.0f", viewModel.product.sizeInMl) : ""
-        let currentSpf = viewModel.product.spf > 0 ? String(viewModel.product.spf) : ""
+        let currentSize = viewModel.product.size ?? "" // Changed to use size as string
+        let currentSpf = (viewModel.product.spf?.isEmpty == false) ? viewModel.product.spf! : ""
         if editName != currentName { return true }
         if editBrand != currentBrand { return true }
         if editShade != currentShade { return true }
@@ -583,8 +583,8 @@ struct _PrettyProductHeader: View {
                             .foregroundColor(.lushyPurple)
                             .cornerRadius(12)
                     }
-                    if viewModel.product.sizeInMl > 0 {
-                        Text("\(String(format: "%.0f", viewModel.product.sizeInMl)) ml")
+                    if let size = viewModel.product.size, !size.isEmpty {
+                        Text("\(size)")
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -592,8 +592,10 @@ struct _PrettyProductHeader: View {
                             .foregroundColor(Color("mossGreen", bundle: nil))
                             .cornerRadius(12)
                     }
-                    // Travel-size-friendly tag for products less than 100ml
-                    if viewModel.product.sizeInMl > 0 && viewModel.product.sizeInMl < 100 {
+                    // Travel-size-friendly tag for products with size containing "ml" and < 100
+                    if let size = viewModel.product.size, 
+                       let sizeValue = extractNumericSize(from: size),
+                       sizeValue > 0 && sizeValue < 100 {
                         Text("Travel-Size-Friendly")
                             .font(.caption)
                             .padding(.horizontal, 8)
@@ -602,8 +604,8 @@ struct _PrettyProductHeader: View {
                             .foregroundColor(.mossGreen)
                             .cornerRadius(12)
                     }
-                    if viewModel.product.spf > 0 {
-                        Text("SPF \(viewModel.product.spf)")
+                    if let spf = viewModel.product.spf, !spf.isEmpty {
+                        Text("SPF \(spf)")
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -615,7 +617,7 @@ struct _PrettyProductHeader: View {
                     let activeCount = CoreDataManager.shared.countSimilarActiveProducts(
                         productName: viewModel.product.productName,
                         brand: viewModel.product.brand,
-                        sizeInMl: viewModel.product.sizeInMl
+                        size: String(extractNumericSize(from: viewModel.product.size ?? "") ?? 0) // Changed to convert extracted numeric value back to string for countSimilarActiveProducts
                     )
                     if activeCount > 1 {
                         Text("×\(activeCount)")
@@ -1719,8 +1721,8 @@ struct SimpleProductEditView: View {
         editName = product.productName ?? ""
         editBrand = product.brand ?? ""
         editShade = product.shade ?? ""
-        editSize = product.sizeInMl > 0 ? String(format: "%.0f", product.sizeInMl) : ""
-        editSpf = product.spf > 0 ? String(product.spf) : ""
+        editSize = product.size ?? "" // Changed to use size as string
+        editSpf = (product.spf?.isEmpty == false) ? product.spf! : ""
         editPrice = product.price > 0 ? String(format: "%.2f", product.price) : ""
         editCurrency = product.currency ?? "USD"
         editPurchaseDate = product.purchaseDate ?? Date()
@@ -1740,16 +1742,14 @@ struct SimpleProductEditView: View {
         
         isSaving = true
         
-        let sizeValue = Double(editSize) ?? 0
-        let spfValue = Int(editSpf) ?? 0
         let priceValue = Double(editPrice) ?? 0
         
         viewModel.updateDetails(
             productName: editName,
             brand: editBrand.isEmpty ? nil : editBrand,
             shade: editShade.isEmpty ? nil : editShade,
-            sizeInMl: sizeValue > 0 ? sizeValue : nil,
-            spf: spfValue,
+            size: editSize.isEmpty ? nil : editSize, // Changed from sizeInMl to size, now passes string directly
+            spf: editSpf, // Changed to pass string directly instead of converting to Int
             price: priceValue > 0 ? priceValue : nil,
             currency: editCurrency,
             purchaseDate: editPurchaseDate,
@@ -1764,4 +1764,13 @@ struct SimpleProductEditView: View {
         isSaving = false
         isPresented = false
     }
+}
+
+// Helper function to extract numeric size from string
+private func extractNumericSize(from size: String) -> Double? {
+    let pattern = "[0-9]+(\\.[0-9]+)?"
+    if let range = size.range(of: pattern, options: .regularExpression) {
+        return Double(size[range])
+    }
+    return nil
 }

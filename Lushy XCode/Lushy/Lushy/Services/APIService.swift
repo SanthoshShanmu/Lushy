@@ -885,8 +885,8 @@ class APIService {
             "crueltyFree": product.crueltyFree,
             // REMOVED: "favorite": product.favorite - now handled at product level
             "shade": product.shade ?? "",
-            "sizeInMl": product.sizeInMl,
-            "spf": Int(product.spf),
+            "size": product.size ?? "", // Fixed: Changed from sizeInMl to size to match backend and Core Data model
+            "spf": product.spf ?? "", // Now sending spf as string
             "currentAmount": product.currentAmount,
             "quantity": Int(product.quantity)
         ]
@@ -904,7 +904,6 @@ class APIService {
             productData["finishDate"] = Int64(finishDate.timeIntervalSince1970) * 1000
         }
         
-        // Handle periods after opening
         if let pao = product.periodsAfterOpening {
             productData["periodsAfterOpening"] = pao
         }

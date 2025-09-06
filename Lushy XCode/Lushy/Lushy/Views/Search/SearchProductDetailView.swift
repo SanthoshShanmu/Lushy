@@ -135,12 +135,14 @@ struct SearchProductDetailView: View {
                     detailRow(label: "Shade", value: shade)
                 }
                 
-                if let sizeInMl = product.sizeInMl, sizeInMl > 0 {
-                    detailRow(label: "Size", value: "\(String(format: "%.0f", sizeInMl)) ml")
+                if let size = product.size, !size.isEmpty {
+                    Text(size)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
-                if let spf = product.spf, spf > 0 {
-                    detailRow(label: "SPF", value: "\(spf)")
+                if let spf = product.spf, !spf.isEmpty {
+                    detailRow(label: "SPF", value: spf)
                 }
                 
                 if let pao = product.periodsAfterOpening, !pao.isEmpty {

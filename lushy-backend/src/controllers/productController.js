@@ -29,7 +29,7 @@ exports.searchProducts = async (req, res) => {
     // Search only in product catalog (since UserProduct now references Product)
     const catalogProducts = await Product.find(searchCriteria)
       .limit(25)
-      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening category shade sizeInMl spf ingredients')
+      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening category shade size spf ingredients')
       .lean();
 
     // Format the results with all detailed information
@@ -43,7 +43,7 @@ exports.searchProducts = async (req, res) => {
       periodsAfterOpening: product.periodsAfterOpening,
       category: product.category,
       shade: product.shade,
-      sizeInMl: product.sizeInMl,
+      size: product.size,
       spf: product.spf,
       ingredients: product.ingredients,
       imageUrl: product.imageData && product.imageMimeType 
@@ -69,7 +69,7 @@ exports.getProductByBarcode = async (req, res) => {
     
     // Check product catalog only
     const product = await Product.findOne({ barcode })
-      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening ingredients')
+      .select('productName brand imageUrl imageData imageMimeType barcode vegan crueltyFree periodsAfterOpening ingredients size')
       .lean();
     
     if (!product) {
@@ -89,6 +89,7 @@ exports.getProductByBarcode = async (req, res) => {
       crueltyFree: product.crueltyFree,
       periodsAfterOpening: product.periodsAfterOpening,
       ingredients: product.ingredients,
+      size: product.size,
       imageUrl: product.imageData && product.imageMimeType 
         ? `data:${product.imageMimeType};base64,${product.imageData}`
         : product.imageUrl || '/uploads/defaults/default-placeholder.jpg'

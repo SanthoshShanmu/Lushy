@@ -20,7 +20,7 @@ class ScannerViewModel: ObservableObject {
     
     // Add metadata published properties
     @Published var manualShade = ""
-    @Published var manualSizeInMl = ""
+    @Published var manualSize = "" // Changed from manualSizeInMl
     @Published var manualSpf = ""
     @Published var manualPrice = ""
     @Published var manualCurrency = "USD"
@@ -326,8 +326,8 @@ class ScannerViewModel: ObservableObject {
         
         // Convert metadata values
         let shadeValue = manualShade.isEmpty ? nil : manualShade
-        let sizeValue = Double(manualSizeInMl)
-        let spfValue = Int16(manualSpf) ?? 0
+        let sizeValue = manualSize.isEmpty ? nil : manualSize // Changed to use manualSize as string
+        let spfValue = manualSpf.isEmpty ? nil : manualSpf // Changed to use manualSpf as string
         let priceValue = Double(manualPrice) // Convert price from string to double
         
         // Call CoreDataManager with new parameters including price and currency
@@ -343,10 +343,10 @@ class ScannerViewModel: ObservableObject {
             crueltyFree: isCrueltyFree,
             expiryOverride: nil,
             shade: shadeValue,
-            sizeInMl: sizeValue,
-            spf: spfValue,
-            price: priceValue, // Add price parameter
-            currency: manualCurrency // Add currency parameter
+            size: sizeValue, // Changed from sizeInMl to size
+            spf: spfValue, // Changed to pass string instead of Int16
+            price: priceValue,
+            currency: manualCurrency
         )
         
         // Let the caller handle navigation and associations
@@ -376,7 +376,7 @@ class ScannerViewModel: ObservableObject {
         manualProductName = ""
         manualBrand = ""
         manualShade = ""
-        manualSizeInMl = ""
+        manualSize = ""
         manualSpf = ""
         manualPrice = ""
         manualCurrency = "USD"

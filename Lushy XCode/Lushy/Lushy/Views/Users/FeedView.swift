@@ -954,16 +954,12 @@ private struct GeneralProductHeader: View {
                             .foregroundColor(.lushyPurple)
                             .cornerRadius(12)
                     }
-                    if let sizeInMl = product.product.sizeInMl, sizeInMl > 0 {
-                        Text("\(String(format: "%.0f", sizeInMl)) ml")
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.mossGreen.opacity(0.2))
-                            .foregroundColor(.mossGreen)
-                            .cornerRadius(12)
+                    if let size = product.product.size, !size.isEmpty {
+                        Text(size)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
                     }
-                    if let spf = product.product.spf, spf > 0 {
+                    if let spf = product.product.spf, !spf.isEmpty {
                         Text("SPF \(spf)")
                             .font(.caption)
                             .padding(.horizontal, 8)

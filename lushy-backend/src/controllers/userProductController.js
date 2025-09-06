@@ -56,7 +56,7 @@ function getFallbackCategory(productName) {
 function generatePlaceholderImage(category) {
   // Simple 1x1 pixel colored images as base64 for different categories
   const placeholders = {
-    'skincare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'skincare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'makeup': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'haircare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'fragrance': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
@@ -147,7 +147,7 @@ exports.getUserProduct = async (req, res) => {
         crueltyFree: product.product.crueltyFree || false,
         category: product.product.category || null,
         shade: product.product.shade || null,
-        sizeInMl: product.product.sizeInMl || null,
+        size: product.product.size || null, // Changed from sizeInMl
         spf: product.product.spf || null
       },
       // User-specific fields with proper date formatting
@@ -188,12 +188,9 @@ exports.createUserProduct = async (req, res) => {
     console.log('Creating product for user:', req.params.userId);
     const rawBody = req.body || {};
     
-    // Coerce primitive types from multipart form-data strings
-    const coerceNumber = v => (v === undefined || v === null || v === '' ? undefined : (isNaN(v) ? undefined : Number(v)));
+    // Remove the coerceNumber conversion for size and spf since they're now strings
     if (rawBody.purchaseDate && /^(\d+)$/.test(rawBody.purchaseDate)) rawBody.purchaseDate = new Date(Number(rawBody.purchaseDate));
     if (rawBody.openDate && /^(\d+)$/.test(rawBody.openDate)) rawBody.openDate = new Date(Number(rawBody.openDate));
-    if (rawBody.sizeInMl) rawBody.sizeInMl = coerceNumber(rawBody.sizeInMl);
-    if (rawBody.spf) rawBody.spf = coerceNumber(rawBody.spf);
     
     // Separate product catalog data from user-specific data
     const productCatalogData = {
@@ -205,8 +202,8 @@ exports.createUserProduct = async (req, res) => {
       crueltyFree: rawBody.crueltyFree || false,
       // Product-specific attributes (different values = different barcodes)
       shade: rawBody.shade,
-      sizeInMl: rawBody.sizeInMl,
-      spf: rawBody.spf,
+      size: rawBody.size || rawBody.sizeInMl, // Support both old and new field names
+      spf: rawBody.spf, // Now a string
       category: rawBody.category || getFallbackCategory(rawBody.productName)
     };
     
@@ -329,14 +326,18 @@ exports.updateUserProduct = async (req, res) => {
       });
     }
     
-    // Handle updates to product-specific fields (shade, sizeInMl, spf)
+    // Handle updates to product-specific fields (shade, size, spf) - now as strings
     const productUpdates = {};
-    if (req.body.sizeInMl && /^(\d+\.?\d*)$/.test(req.body.sizeInMl)) {
-      productUpdates.sizeInMl = Number(req.body.sizeInMl);
+    if (req.body.size) {
+      productUpdates.size = req.body.size; // Keep as string
+      delete req.body.size; // Remove from user product updates
+    }
+    if (req.body.sizeInMl) {
+      productUpdates.size = req.body.sizeInMl; // Support legacy field name
       delete req.body.sizeInMl; // Remove from user product updates
     }
-    if (req.body.spf && /^(\d+)$/.test(req.body.spf)) {
-      productUpdates.spf = Number(req.body.spf);
+    if (req.body.spf) {
+      productUpdates.spf = req.body.spf; // Keep as string
       delete req.body.spf; // Remove from user product updates
     }
     if (req.body.shade) {
@@ -689,7 +690,7 @@ exports.getUserProductByBarcode = async (req, res) => {
         crueltyFree: userProduct.product.crueltyFree || false,
         category: userProduct.product.category || null,
         shade: userProduct.product.shade || null,
-        sizeInMl: userProduct.product.sizeInMl || null,
+        size: userProduct.product.size || null, // Changed from sizeInMl
         spf: userProduct.product.spf || null
       },
       // User-specific fields with proper date formatting

@@ -168,7 +168,7 @@ struct WishlistView: View {
             periodsAfterOpening: nil,
             category: nil,
             shade: nil,
-            sizeInMl: nil,
+            size: nil, // Changed from sizeInMl: nil
             spf: nil
         )
     }

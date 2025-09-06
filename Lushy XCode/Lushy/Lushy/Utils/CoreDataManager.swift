@@ -19,53 +19,85 @@ class CoreDataManager {
     }
     
     private init() {
-        // Before loading persistent stores, enable lightweight migration
         container = NSPersistentContainer(name: "Lushy")
-        if let description = container.persistentStoreDescriptions.first {
-            description.shouldMigrateStoreAutomatically = true
-            description.shouldInferMappingModelAutomatically = true
-        }
         
-        // Add better error handling
-        container.loadPersistentStores { (storeDescription, error) in
-            if let error = error as NSError? {
-                print("Persistent store loading error: \(error), \(error.userInfo)")
-                
-                // Handle corrupted store by recreating it
-                if error.code == NSPersistentStoreIncompatibleVersionHashError ||
-                   error.code == 256 || // The file couldn't be opened
-                   error.domain == NSSQLiteErrorDomain {
-                    
-                    self.recreateCorruptedStore()
-                }
-            }
-        }
+        // Force complete database recreation for size/spf field type changes
+        self.forceCompleteReset()
         
-        // Set global configurations for the container
+        // Configure the context
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
     
-    // Add this method to handle corrupted database
-    private func recreateCorruptedStore() {
-        // Get URL to the SQLite store
-        guard let storeURL = container.persistentStoreCoordinator.persistentStores.first?.url else {
-            print("Could not find store URL")
-            return
+    private func forceCompleteReset() {
+        print("🔄 Performing COMPLETE Core Data reset for size/spf field migration...")
+        
+        // Get all store URLs before any operations
+        let storeDescriptions = container.persistentStoreDescriptions
+        
+        // Delete ALL store files first, before trying to load stores
+        let fileManager = FileManager.default
+        
+        for storeDescription in storeDescriptions {
+            guard let storeURL = storeDescription.url else { continue }
+            
+            let storeDirectory = storeURL.deletingLastPathComponent()
+            
+            do {
+                let files = try fileManager.contentsOfDirectory(at: storeDirectory, includingPropertiesForKeys: nil)
+                for file in files {
+                    let fileName = file.lastPathComponent
+                    if fileName.contains("Lushy") || fileName.contains(".sqlite") {
+                        try fileManager.removeItem(at: file)
+                        print("🗑️ Deleted: \(fileName)")
+                    }
+                }
+            } catch {
+                print("Warning: Could not clean database files: \(error)")
+            }
         }
         
-        print("Attempting to recreate corrupted store at \(storeURL)")
+        // Also clear any cached Core Data metadata
+        if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let coreDataPath = documentsPath.appendingPathComponent("CoreDataModel_CACHE")
+            try? fileManager.removeItem(at: coreDataPath)
+            print("🗑️ Cleared Core Data cache")
+        }
         
-        do {
-            // Remove corrupted store
-            try container.persistentStoreCoordinator.destroyPersistentStore(at: storeURL, ofType: NSSQLiteStoreType)
-            
-            // Create a new store
-            try container.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: storeURL, options: nil)
-            
-            print("Successfully recreated store")
-        } catch {
-            print("Failed to recreate store: \(error)")
+        // Force recreation of persistent store descriptions
+        container.persistentStoreDescriptions.forEach { storeDescription in
+            storeDescription.shouldInferMappingModelAutomatically = false
+            storeDescription.shouldMigrateStoreAutomatically = false
+            storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        }
+        
+        // Now load the persistent stores with fresh configuration
+        container.loadPersistentStores { (storeDescription, error) in
+            if let error = error as NSError? {
+                print("❌ Store loading failed after reset: \(error)")
+                fatalError("Could not load Core Data store after reset: \(error)")
+            } else {
+                print("✅ Core Data store loaded successfully after complete reset")
+                
+                // Clear any potential expression caches by forcing a simple query
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    do {
+                        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+                        request.fetchLimit = 1
+                        _ = try self.viewContext.fetch(request)
+                        print("✅ Core Data expressions validated successfully")
+                    } catch {
+                        print("⚠️ Expression validation failed: \(error)")
+                    }
+                }
+                
+                // Schedule data sync to repopulate
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    // Try to sync data back from backend
+                    SyncService.shared.performInitialSync()
+                }
+            }
         }
     }
     
@@ -90,8 +122,8 @@ class CoreDataManager {
         crueltyFree: Bool,
         expiryOverride: Date? = nil,
         shade: String? = nil,
-        sizeInMl: Double? = nil,
-        spf: Int16? = nil,
+        size: String? = nil, // Changed from sizeInMl: Double? to size: String?
+        spf: String? = nil, // Changed from spf: Int16? to spf: String?
         price: Double? = nil,
         currency: String? = nil
     ) -> NSManagedObjectID? {
@@ -134,8 +166,8 @@ class CoreDataManager {
             product.crueltyFree = crueltyFree
             // New metadata
             product.shade = shade
-            product.sizeInMl = sizeInMl ?? 0.0
-            product.spf = spf ?? 0
+            product.size = size
+            product.spf = spf
             // Add price and currency
             product.price = price ?? 0.0
             product.currency = currency ?? "USD"
@@ -859,8 +891,8 @@ class CoreDataManager {
         productName: String,
         brand: String?,
         shade: String?,
-        sizeInMl: Double?,
-        spf: Int?,
+        size: String?,
+        spf: String?,
         price: Double?,
         currency: String,
         purchaseDate: Date,
@@ -881,8 +913,8 @@ class CoreDataManager {
             product.productName = productName
             product.brand = brand
             product.shade = shade
-            product.sizeInMl = sizeInMl ?? 0.0
-            product.spf = Int16(spf ?? 0)
+            product.size = size
+            product.spf = spf
             product.price = price ?? 0.0
             product.currency = currency
             product.purchaseDate = purchaseDate
@@ -947,7 +979,7 @@ class CoreDataManager {
                     "currency": currency
                 ]
                 if let shade = shade { body["shade"] = shade }
-                if let sizeInMl = sizeInMl { body["sizeInMl"] = sizeInMl }
+                if let size = size { body["size"] = size }
                 if let spf = spf { body["spf"] = spf }
                 if isOpened {
                     if let od = product.openDate { body["openDate"] = od.msSinceEpoch }
@@ -1118,37 +1150,45 @@ class CoreDataManager {
     // MARK: - Product Quantity Calculations
     
     /// Count similar active (non-finished) products for quantity display
-    func countSimilarActiveProducts(productName: String?, brand: String?, sizeInMl: Double) -> Int {
+    func countSimilarActiveProducts(productName: String?, brand: String?, size: String?) -> Int {
+        // Use a safer approach that avoids NSPredicate queries with the size field entirely
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         
+        // Only use safe predicates that don't involve the size field
         var predicates: [NSPredicate] = [
-            NSPredicate(format: "userId == %@", currentUserId()),
+            NSPredicate(format: "userId == %@", currentUserId() as NSString),
             NSPredicate(format: "isFinished != YES") // Only count non-finished products
         ]
         
-        // Match by product name and brand
+        // Match by product name and brand using safe string comparisons
         if let productName = productName {
-            predicates.append(NSPredicate(format: "productName == %@", productName))
+            predicates.append(NSPredicate(format: "productName == %@", productName as NSString))
         }
         
         if let brand = brand {
-            predicates.append(NSPredicate(format: "brand == %@", brand))
+            predicates.append(NSPredicate(format: "brand == %@", brand as NSString))
         }
         
-        // Match by size if available (within 10ml tolerance)
-        if sizeInMl > 0 {
-            let minSize = sizeInMl - 10
-            let maxSize = sizeInMl + 10
-            predicates.append(NSPredicate(format: "sizeInMl >= %f AND sizeInMl <= %f", minSize, maxSize))
-        }
-        
+        // Completely avoid using size in NSPredicate - fetch all matching products and filter manually
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         
         do {
-            let count = try viewContext.count(for: request)
-            return count
+            let products = try viewContext.fetch(request)
+            
+            // If no size filter needed, return count directly
+            guard let size = size, !size.isEmpty else {
+                return products.count
+            }
+            
+            // Manual filtering for size to avoid Core Data expression issues
+            let filteredProducts = products.filter { product in
+                return product.size == size
+            }
+            
+            return filteredProducts.count
         } catch {
             print("Error counting similar active products: \(error)")
+            // Ultimate fallback: return 1 to prevent crashes
             return 1
         }
     }

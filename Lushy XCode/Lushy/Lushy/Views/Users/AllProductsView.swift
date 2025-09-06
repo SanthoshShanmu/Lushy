@@ -38,23 +38,17 @@ struct AllProductsView: View {
                             ForEach(allProductsViewModel.filteredProducts) { summary in
                                 // Check if viewing own profile or another user's profile
                                 if viewModel.isViewingOwnProfile {
-                                    // For own profile, create/fetch local UserProduct for full editing
-                                    let localProduct: UserProduct = {
-                                        if let existing = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
-                                            return existing
-                                        } else {
-                                            let context = CoreDataManager.shared.viewContext
-                                            let stub = UserProduct(context: context)
-                                            stub.backendId = summary.id
-                                            stub.productName = summary.name
-                                            stub.brand = summary.brand
-                                            stub.userId = viewModel.currentUserId
-                                            try? context.save()
-                                            return stub
+                                    // For own profile, try to find the local UserProduct first
+                                    if let localProduct = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
+                                        // Use full ProductDetailView for owned products with complete Core Data object
+                                        NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
+                                            AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
                                         }
-                                    }()
-                                    NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
-                                        AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                                    } else {
+                                        // Fallback to GeneralProductDetailView if Core Data object not found
+                                        NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
+                                            AllProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                                        }
                                     }
                                 } else {
                                     // For other users' profiles, use general product detail view
@@ -248,17 +242,37 @@ struct AllProductCard: View {
                     endPoint: .bottomTrailing
                 )
                 
-                // UserProductSummary doesn't have imageUrl property, so show placeholder
-                VStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 28))
-                        .foregroundColor(.lushyPink.opacity(0.6))
-                    
-                    Text("No Image")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                // Product image - now uses imageUrl from UserProductSummary
+                if let imageUrl = product.imageUrl, !imageUrl.isEmpty {
+                    AsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        VStack(spacing: 6) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                                .scaleEffect(0.8)
+                            Text("Loading...")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(height: 100)
+                    .clipped()
+                } else {
+                    // Fallback when no image URL is available
+                    VStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 28))
+                            .foregroundColor(.lushyPink.opacity(0.6))
+                        
+                        Text("No Image")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(height: 100)
                 }
-                .frame(height: 100)
             }
             .frame(height: 100)
             .cornerRadius(12, corners: [.topLeft, .topRight])

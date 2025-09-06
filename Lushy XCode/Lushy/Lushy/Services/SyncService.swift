@@ -303,8 +303,8 @@ class SyncService {
         localProduct.vegan = backendProduct.product.vegan
         localProduct.crueltyFree = backendProduct.product.crueltyFree
         localProduct.shade = backendProduct.product.shade
-        localProduct.sizeInMl = backendProduct.product.sizeInMl ?? 0
-        localProduct.spf = Int16(backendProduct.product.spf ?? 0)
+        localProduct.size = backendProduct.product.size ?? "" // Changed to use size field as string
+        localProduct.spf = backendProduct.product.spf ?? "" // Changed to use spf as string
         
         // Handle image URL from product catalog
         if let imageData = backendProduct.product.imageData,
@@ -334,8 +334,8 @@ class SyncService {
         
         // Set product-specific attributes from product catalog
         product.shade = backendProduct.product.shade
-        product.sizeInMl = backendProduct.product.sizeInMl ?? 0
-        product.spf = Int16(backendProduct.product.spf ?? 0)
+        product.size = backendProduct.product.size ?? "" // Changed to use size field as string
+        product.spf = backendProduct.product.spf ?? "" // Changed to use spf as string
         
         // Handle image URL from product catalog
         if let imageData = backendProduct.product.imageData,

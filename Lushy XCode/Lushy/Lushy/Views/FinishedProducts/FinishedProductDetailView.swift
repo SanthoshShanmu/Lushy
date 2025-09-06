@@ -116,12 +116,12 @@ struct FinishedProductDetailView: View {
                     detailRow(label: "Shade", value: shade)
                 }
                 
-                if product.sizeInMl > 0 {
-                    detailRow(label: "Size", value: "\(String(format: "%.0f", product.sizeInMl)) ml")
+                if let size = product.size, !size.isEmpty {
+                    detailRow(label: "Size", value: size)
                 }
                 
-                if product.spf > 0 {
-                    detailRow(label: "SPF", value: "\(product.spf)")
+                if let spf = product.spf, !spf.isEmpty {
+                    detailRow(label: "SPF", value: spf)
                 }
                 
                 if let pao = product.periodsAfterOpening, !pao.isEmpty {

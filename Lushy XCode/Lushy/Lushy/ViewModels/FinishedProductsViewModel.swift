@@ -76,7 +76,7 @@ class FinishedProductsViewModel: ObservableObject {
     private func makeProductKey(for product: UserProduct) -> String {
         let name = product.productName ?? ""
         let brand = product.brand ?? ""
-        let size = product.sizeInMl > 0 ? String(Int(product.sizeInMl)) : ""
+        let size = product.size ?? "" // Changed from sizeInMl to size
         return "\(brand)|\(name)|\(size)"
     }
     
@@ -99,31 +99,37 @@ class FinishedProductsViewModel: ObservableObject {
     func finishedInstancesCount(for product: UserProduct) -> Int {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         
+        // Use safe predicates that avoid the size field
         var predicates: [NSPredicate] = [
             NSPredicate(format: "isFinished == YES")
         ]
         
-        // Match by product name and brand
+        // Match by product name and brand using safe string comparisons
         if let productName = product.productName {
-            predicates.append(NSPredicate(format: "productName == %@", productName))
+            predicates.append(NSPredicate(format: "productName == %@", productName as NSString))
         }
         
         if let brand = product.brand {
-            predicates.append(NSPredicate(format: "brand == %@", brand))
+            predicates.append(NSPredicate(format: "brand == %@", brand as NSString))
         }
         
-        // Match by size if available (within 10ml tolerance)
-        if product.sizeInMl > 0 {
-            let minSize = product.sizeInMl - 10
-            let maxSize = product.sizeInMl + 10
-            predicates.append(NSPredicate(format: "sizeInMl >= %f AND sizeInMl <= %f", minSize, maxSize))
-        }
-        
+        // Avoid using size in NSPredicate - fetch all matching products and filter manually
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         
         do {
-            let count = try managedObjectContext.count(for: request)
-            return count
+            let products = try managedObjectContext.fetch(request)
+            
+            // If no size filter needed, return count directly
+            guard let size = product.size, !size.isEmpty else {
+                return products.count
+            }
+            
+            // Manual filtering for size to avoid Core Data expression issues
+            let filteredProducts = products.filter { fetchedProduct in
+                return fetchedProduct.size == size
+            }
+            
+            return filteredProducts.count
         } catch {
             print("Error counting finished instances: \(error)")
             return 1
@@ -134,34 +140,46 @@ class FinishedProductsViewModel: ObservableObject {
     func activeInstancesCount(for product: UserProduct) -> Int {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
         
+        // Use safe predicates that avoid the size field
         var predicates: [NSPredicate] = [
             NSPredicate(format: "isFinished != YES") // Only count non-finished products
         ]
         
-        // Match by product name and brand
+        // Match by product name and brand using safe string comparisons
         if let productName = product.productName {
-            predicates.append(NSPredicate(format: "productName == %@", productName))
+            predicates.append(NSPredicate(format: "productName == %@", productName as NSString))
         }
         
         if let brand = product.brand {
-            predicates.append(NSPredicate(format: "brand == %@", brand))
+            predicates.append(NSPredicate(format: "brand == %@", brand as NSString))
         }
         
-        // Match by size if available (within 10ml tolerance)
-        if product.sizeInMl > 0 {
-            let minSize = product.sizeInMl - 10
-            let maxSize = product.sizeInMl + 10
-            predicates.append(NSPredicate(format: "sizeInMl >= %f AND sizeInMl <= %f", minSize, maxSize))
-        }
-        
+        // Avoid using size in NSPredicate - fetch all matching products and filter manually
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         
         do {
-            let count = try managedObjectContext.count(for: request)
-            return count
+            let products = try managedObjectContext.fetch(request)
+            
+            // If no size filter needed, return count directly
+            guard let size = product.size, !size.isEmpty else {
+                return products.count
+            }
+            
+            // Manual filtering for size to avoid Core Data expression issues
+            let filteredProducts = products.filter { fetchedProduct in
+                return fetchedProduct.size == size
+            }
+            
+            return filteredProducts.count
         } catch {
             print("Error counting active instances: \(error)")
             return 1
         }
+    }
+    
+    func reviewCopy(for product: UserProduct) -> String {
+        let size = product.size ?? "" // Changed from sizeInMl to size
+        let sizeText = size.isEmpty ? "" : " (\(size))"
+        return "\(product.productName ?? "Product")\(sizeText) by \(product.brand ?? "Unknown Brand")"
     }
 }
