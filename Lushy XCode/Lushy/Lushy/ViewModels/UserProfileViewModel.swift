@@ -99,18 +99,25 @@ class UserProfileViewModel: ObservableObject {
                     let uniqueRemoteBags = remoteBags.reduce(into: [BeautyBagSummary]()) { acc, bag in
                         if !acc.contains(where: { $0.id == bag.id }) { acc.append(bag) }
                     }
-                    self?.bags = uniqueRemoteBags
-                    // Sync local Core Data store for bags
-                    DispatchQueue.global(qos: .background).async {
-                        let existingIds = Set(CoreDataManager.shared.fetchBeautyBags().compactMap { $0.backendId })
-                        for summary in uniqueRemoteBags {
-                            if !existingIds.contains(summary.id) {
-                                if let newId = CoreDataManager.shared.createBeautyBag(name: summary.name, color: "lushyPink", icon: "bag.fill") {
-                                    CoreDataManager.shared.updateBeautyBagBackendId(id: newId, backendId: summary.id)
-                                }
+                    
+                    // Sync local Core Data store for bags synchronously on main thread to avoid race condition
+                    let existingIds = Set(CoreDataManager.shared.fetchBeautyBags().compactMap { $0.backendId })
+                    for summary in uniqueRemoteBags {
+                        if !existingIds.contains(summary.id) {
+                            if let newId = CoreDataManager.shared.createBeautyBag(
+                                name: summary.name, 
+                                description: summary.description ?? "",
+                                color: summary.color ?? "lushyPink", 
+                                icon: summary.icon ?? "bag.fill"
+                            ) {
+                                CoreDataManager.shared.updateBeautyBagBackendId(id: newId, backendId: summary.id)
                             }
                         }
                     }
+                    
+                    // Update bags array after Core Data sync is complete
+                    self?.bags = uniqueRemoteBags
+                    
                     // Sync backend products to local Core Data for navigation
                     SyncService.shared.fetchRemoteProducts()
                     self?.products = wrapper.user.products ?? []

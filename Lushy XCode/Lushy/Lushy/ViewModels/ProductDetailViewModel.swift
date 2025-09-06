@@ -37,6 +37,7 @@ class ProductDetailViewModel: ObservableObject {
     @Published var isFavorited = false
     @Published var favoriteCount = 0
     @Published var isFavoriteLoading = false
+    private var hasLoadedInitialFavoriteStatus = false
     
     // Enhanced usage tracking
     @Published var usageEntries: [UsageEntry] = []
@@ -145,11 +146,16 @@ class ProductDetailViewModel: ObservableObject {
     
     // NEW: Load favorite status from backend
     private func loadFavoriteStatus() {
+        // Only load favorite status once to prevent multiple API calls
+        guard !hasLoadedInitialFavoriteStatus else { return }
+        
         guard let userId = AuthService.shared.userId,
               let barcode = product.barcode else {
             print("❌ Missing user ID or barcode for favorite status check")
             return
         }
+        
+        hasLoadedInitialFavoriteStatus = true
         
         productFavoriteService.getFavoriteStatus(barcode: barcode, userId: userId)
             .sink { completion in
@@ -167,23 +173,25 @@ class ProductDetailViewModel: ObservableObject {
     
     /// Toggle favorite status with debouncing to prevent rapid state changes
     func toggleFavorite() {
-        // Prevent multiple rapid calls
-        guard !isFavoriteLoading else { return }
+        // Prevent multiple rapid calls with stricter checks
+        guard !isFavoriteLoading else { 
+            print("🚫 Favorite toggle blocked: already loading")
+            return 
+        }
+        
+        // Cancel any existing timer to prevent overlapping calls
+        favoriteDebounceTimer?.invalidate()
+        favoriteDebounceTimer = nil
         
         isFavoriteLoading = true
         
-        // Optimistically update UI immediately
-        let newState = !isFavorited
-        isFavorited = newState
-        
-        // Debounce the API call
-        favoriteDebounceTimer?.invalidate()
+        // Increased debounce time to ensure stability
         favoriteDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-            self?.performFavoriteToggle(newState: newState)
+            self?.performFavoriteToggle()
         }
     }
     
-    private func performFavoriteToggle(newState: Bool) {
+    private func performFavoriteToggle() {
         guard let userId = AuthService.shared.userId,
               let barcode = product.barcode else {
             isFavoriteLoading = false
@@ -195,12 +203,10 @@ class ProductDetailViewModel: ObservableObject {
             .sink { [weak self] completion in
                 self?.isFavoriteLoading = false
                 if case .failure(let error) = completion {
-                    // Revert optimistic update on error
-                    self?.isFavorited = !newState
                     print("❌ Failed to toggle favorite: \(error)")
                 }
             } receiveValue: { [weak self] response in
-                // Update with server response
+                // Only update UI state when server responds successfully
                 self?.isFavorited = response.data.product.isFavorited
                 self?.favoriteCount = response.data.product.favoriteCount
                 print("✅ Favorite toggled: \(response.data.product.isFavorited)")
