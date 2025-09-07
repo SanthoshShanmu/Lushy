@@ -18,13 +18,37 @@ const userRoutes = require('./routes/userRoutes');
 const app = express();
 
 // Global Middlewares
-// Set security HTTP headers
-app.use(helmet());
+// Enable CORS first
+app.use(cors());
 
 // Development logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
+
+// Set security HTTP headers - but allow static files
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Disable CSP for static files
+}));
+
+// Serve uploaded images BEFORE other middleware
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads'), {
+  setHeaders: (res, path) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
+
+// Add a debug route to check path resolution
+app.get('/debug/uploads', (req, res) => {
+  const uploadsPath = path.resolve(__dirname, '../uploads');
+  res.json({
+    uploadsPath,
+    exists: require('fs').existsSync(uploadsPath),
+    contents: require('fs').existsSync(uploadsPath) ? require('fs').readdirSync(uploadsPath) : []
+  });
+});
 
 // Rate limiting
 const limiter = rateLimit({
@@ -37,12 +61,6 @@ app.use('/api', limiter);
 // Body parser, reading data from body into req.body
 app.use(express.json({ limit: '15mb' })); // Increased from '10kb' to '15mb' to handle base64 images
 app.use(express.urlencoded({ extended: true, limit: '15mb' })); // Also increased urlencoded limit
-
-// Enable CORS
-app.use(cors());
-
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // API Routes
 app.use('/api/auth', authRoutes);

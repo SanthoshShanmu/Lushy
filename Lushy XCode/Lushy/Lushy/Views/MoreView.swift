@@ -80,6 +80,7 @@ struct MoreView: View {
 struct SettingsView: View {
     @State private var showingPasswordChange = false
     @State private var showingEmailChange = false
+    @State private var showingOnboarding = false
     @State private var commentsAndLikes = false
     @State private var usageReminders = false
     @State private var newFollowers = false
@@ -89,6 +90,22 @@ struct SettingsView: View {
     
     var body: some View {
         List {
+            // App Experience Section
+            Section("App Experience") {
+                Button(action: { 
+                    showingOnboarding = true
+                }) {
+                    HStack {
+                        Label("View App Introduction", systemImage: "sparkles.rectangle.stack")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+                .foregroundColor(.primary)
+            }
+            
             // Account Security Section
             Section("Account & Security") {
                 Button(action: { showingPasswordChange = true }) {
@@ -234,6 +251,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingEmailChange) {
             ChangeEmailView()
+        }
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView(showOnboarding: $showingOnboarding)
         }
         .onAppear {
             // Request notification permissions when settings appear

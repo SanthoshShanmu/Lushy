@@ -7,6 +7,7 @@ struct LushyApp: App {
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var tabSelection = TabSelection()
     @State private var showSplash = true
+    @State private var showOnboarding = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var lastBackgroundDate: Date?
 
@@ -26,11 +27,21 @@ struct LushyApp: App {
                 LoginView(isLoggedIn: .constant(false))
                     .environmentObject(authManager)
                     .environmentObject(tabSelection)
+            } else if showOnboarding {
+                OnboardingView(showOnboarding: $showOnboarding)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
             } else {
                 ContentView()
                     .environment(\.managedObjectContext, CoreDataManager.shared.viewContext)
                     .environmentObject(authManager)
                     .environmentObject(tabSelection)
+            }
+        }
+        .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
+            if isAuthenticated {
+                // Check if user has completed onboarding
+                let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+                showOnboarding = !hasCompletedOnboarding
             }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in

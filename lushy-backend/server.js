@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -24,7 +25,19 @@ try {
 
 // Middleware
 app.use(cors());
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Disable CSP for static files
+}));
+
+// Serve uploaded images - Add this BEFORE other middleware
+app.use('/uploads', express.static(path.resolve(__dirname, 'uploads'), {
+  setHeaders: (res, path) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
+
 app.use(express.json({ limit: '15mb' })); // Increased from default to handle base64 images
 app.use(express.urlencoded({ extended: false, limit: '15mb' })); // Also increased urlencoded limit
 app.use(morgan('dev'));
