@@ -74,7 +74,19 @@ class SearchProductDetailViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 switch result {
-                case .success(_):
+                case .success(let backendId):
+                    // FIXED Issue 1: Force immediate sync after product addition
+                    print("✅ Product added to collection with backend ID: \(backendId)")
+                    
+                    // Trigger immediate sync to ensure product is available locally
+                    SyncService.shared.fetchRemoteProducts()
+                    
+                    // Also refresh the profile to update product counts and lists
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                        NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    }
+                    
                     completion(.success(()))
                 case .failure(let error):
                     completion(.failure(error))

@@ -1,6 +1,5 @@
 const UserProduct = require('../models/userProduct');
 const ProductTag = require('../models/productTag');
-const BeautyBag = require('../models/beautyBag');
 const mongoose = require('mongoose');
 
 // Add PAO taxonomy data directly in the backend
@@ -56,7 +55,7 @@ function getFallbackCategory(productName) {
 function generatePlaceholderImage(category) {
   // Simple 1x1 pixel colored images as base64 for different categories
   const placeholders = {
-    'skincare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
+    'skincare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'makeup': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'haircare': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
     'fragrance': '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/AB2p',
@@ -92,7 +91,8 @@ exports.getUserProducts = async (req, res) => {
       quantity: product.quantity || 1,
       comments: product.comments || [],
       reviews: product.reviews || [],
-      usageEntries: product.usageEntries || []
+      usageEntries: product.usageEntries || [],
+      journeyEvents: product.journeyEvents || []
     }));
 
     res.status(200).json({
@@ -164,7 +164,8 @@ exports.getUserProduct = async (req, res) => {
       quantity: product.quantity || 1,
       comments: product.comments || [],
       reviews: product.reviews || [],
-      usageEntries: product.usageEntries || []
+      usageEntries: product.usageEntries || [],
+      journeyEvents: product.journeyEvents || []
     };
 
     res.status(200).json({
@@ -443,6 +444,51 @@ exports.updateUserProduct = async (req, res) => {
       delete req.body.newReview;
     }
 
+    // Handle journey event addition
+    if (req.body.newJourneyEvent) {
+      const { eventType, text, title, rating, createdAt } = req.body.newJourneyEvent;
+      if (!eventType) {
+        return res.status(400).json({ status: 'fail', message: 'Missing journey event type' });
+      }
+      
+      const journeyEvent = {
+        eventType,
+        text: text || null,
+        title: title || null,
+        rating: rating || 0,
+        createdAt: createdAt ? new Date(createdAt) : new Date()
+      };
+      await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $push: { journeyEvents: journeyEvent } }
+      );
+      
+      console.log('Journey event added:', eventType, 'for product', req.params.id);
+      delete req.body.newJourneyEvent;
+    }
+
+    // Handle usage entry addition
+    if (req.body.newUsageEntry) {
+      const { usageType, usageAmount, notes, createdAt } = req.body.newUsageEntry;
+      if (!usageType || usageAmount === undefined) {
+        return res.status(400).json({ status: 'fail', message: 'Missing usage entry fields' });
+      }
+      
+      const usageEntry = {
+        usageType,
+        usageAmount,
+        notes: notes || null,
+        createdAt: createdAt ? new Date(createdAt) : new Date()
+      };
+      await UserProduct.findOneAndUpdate(
+        { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+        { $push: { usageEntries: usageEntry } }
+      );
+      
+      console.log('Usage entry added:', usageType, 'for product', req.params.id);
+      delete req.body.newUsageEntry;
+    }
+
     // Handle bag associations
     if (req.body.addToBagId) {
       await UserProduct.findOneAndUpdate(
@@ -574,6 +620,113 @@ exports.getPAOTaxonomy = async (req, res) => {
   }
 };
 
+// NEW: Dedicated endpoint for creating usage entries
+exports.createUsageEntry = async (req, res) => {
+  try {
+    const { usageType, usageAmount, notes } = req.body;
+    
+    if (!usageType || usageAmount === undefined) {
+      return res.status(400).json({ 
+        status: 'fail', 
+        message: 'Missing required fields: usageType and usageAmount' 
+      });
+    }
+    
+    const usageEntry = {
+      usageType,
+      usageAmount,
+      notes: notes || null,
+      createdAt: new Date()
+    };
+    
+    const product = await UserProduct.findOneAndUpdate(
+      { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+      { $push: { usageEntries: usageEntry } },
+      { new: true }
+    )
+    .populate('product')
+    .populate('tags', 'name color')
+    .populate('bags', 'name');
+    
+    if (!product) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found'
+      });
+    }
+    
+    console.log('✅ Usage entry created via dedicated endpoint:', usageType, 'for product', req.params.id);
+    
+    res.status(201).json({
+      status: 'success',
+      data: { 
+        product,
+        usageEntry
+      }
+    });
+  } catch (error) {
+    console.error('createUsageEntry error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// NEW: Dedicated endpoint for creating journey events
+exports.createJourneyEvent = async (req, res) => {
+  try {
+    const { eventType, text, title, rating, createdAt } = req.body;
+    
+    if (!eventType) {
+      return res.status(400).json({ 
+        status: 'fail', 
+        message: 'Missing required field: eventType' 
+      });
+    }
+    
+    const journeyEvent = {
+      eventType,
+      text: text || null,
+      title: title || null,
+      rating: rating || 0,
+      createdAt: createdAt ? new Date(createdAt) : new Date()
+    };
+    
+    const product = await UserProduct.findOneAndUpdate(
+      { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
+      { $push: { journeyEvents: journeyEvent } },
+      { new: true }
+    )
+    .populate('product')
+    .populate('tags', 'name color')
+    .populate('bags', 'name');
+    
+    if (!product) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Product not found'
+      });
+    }
+    
+    console.log('✅ Journey event created via dedicated endpoint:', eventType, 'for product', req.params.id);
+    
+    res.status(201).json({
+      status: 'success',
+      data: { 
+        product,
+        journeyEvent
+      }
+    });
+  } catch (error) {
+    console.error('createJourneyEvent error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
 // Get all reviews for a product (from all users)
 exports.getAllReviewsForProduct = async (req, res) => {
   try {
@@ -610,7 +763,7 @@ exports.getAllReviewsForProduct = async (req, res) => {
             text: review.text,
             createdAt: review.date,
             user: userProduct.user ? {
-              id: userProduct.user._id,
+              id: userProduct.user._id.toString(), // FIXED: Explicitly convert ObjectId to string
               name: userProduct.user.name,
               username: userProduct.user.username,
               profileImage: userProduct.user.profileImage
@@ -706,7 +859,8 @@ exports.getUserProductByBarcode = async (req, res) => {
       quantity: userProduct.quantity || 1,
       comments: userProduct.comments || [],
       reviews: userProduct.reviews || [],
-      usageEntries: userProduct.usageEntries || []
+      usageEntries: userProduct.usageEntries || [],
+      journeyEvents: userProduct.journeyEvents || []
     };
 
     res.status(200).json({

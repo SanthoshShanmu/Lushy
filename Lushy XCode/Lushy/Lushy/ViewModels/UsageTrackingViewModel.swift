@@ -47,56 +47,25 @@ class UsageTrackingViewModel: ObservableObject {
             return
         }
         
-        // Check if already checked in today for this date
-        let calendar = Calendar.current
-        let existingEntry = usageEntries.first { entry in
-            calendar.isDate(entry.createdAt, inSameDayAs: date)
-        }
+        // Allow multiple uses per day
+        CoreDataManager.shared.addUsageEntry(
+            to: product.objectID,
+            type: "check_in",
+            amount: 1.0,
+            notes: createNotesWithMetadata(notes: notes, context: context)
+        )
         
-        if existingEntry != nil {
-            print("Already checked in for this date")
-            return // Could show alert to user instead
-        }
+        // FIXED Issue 2: Usage entries are stored and synced to backend
+        // They do NOT create journey thoughts automatically
+        // Usage tracking and journey thoughts are separate systems
         
-        let coreDataContext = CoreDataManager.shared.viewContext
-        let entry = UsageEntry(context: coreDataContext)
-        entry.userProduct = product
-        entry.createdAt = date
-        entry.usageAmount = 1.0 // Use 1.0 to represent a single usage
-        entry.usageType = "check_in"
-        entry.userId = AuthService.shared.userId ?? ""
-        
-        // Store context and notes in notes as JSON
-        if let notesData = createNotesWithMetadata(notes: notes, context: context) {
-            entry.notes = notesData
-        }
-        
-        // Mark as opened if this is the first usage and not already opened
-        if product.openDate == nil {
-            product.openDate = date
+        // Force immediate reload to ensure UI updates
+        DispatchQueue.main.async {
+            self.loadUsageEntries()
+            self.calculateUsagePatterns()
             
-            // Calculate expiry if we have PAO
-            if let pao = product.periodsAfterOpening, let months = extractMonths(from: pao) {
-                product.expireDate = Calendar.current.date(byAdding: .month, value: months, to: date)
-                NotificationService.shared.scheduleExpiryNotification(for: product)
-            }
-        }
-        
-        do {
-            try coreDataContext.save()
-            loadUsageEntries()
-            
-            // Create journey event for usage
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .thought, // Use thought type since usage type doesn't exist
-                text: "Used product - \(context)" + (notes?.isEmpty == false ? ": \(notes!)" : ""),
-                title: nil,
-                rating: 0,
-                date: date
-            )
-        } catch {
-            print("Error saving usage check-in: \(error)")
+            // Notify other views that usage data has changed
+            NotificationCenter.default.post(name: NSNotification.Name("UsageDataChanged"), object: self.product.objectID)
         }
     }
     

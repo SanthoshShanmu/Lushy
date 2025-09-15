@@ -1005,7 +1005,7 @@ private struct GeneralProductDetails: View {
                 }
                 
                 // Fix: Remove optional binding since purchaseDate is not optional
-                detailRow(label: "Owner purchased", value: DateFormatter.medium.string(from: product.purchaseDate))
+                detailRow(label: "Owner purchased", value: DateFormatter.mediumDate.string(from: product.purchaseDate))
             }
         }
         .padding()

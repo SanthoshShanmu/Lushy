@@ -6,7 +6,7 @@ const UsageEntrySchema = new Schema({
   usageType: {
     type: String,
     required: true,
-    enum: ['light', 'medium', 'heavy', 'custom']
+    enum: ['light', 'medium', 'heavy', 'custom', 'check_in']
   },
   usageAmount: {
     type: Number,
@@ -17,6 +17,33 @@ const UsageEntrySchema = new Schema({
   notes: {
     type: String,
     required: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Journey Event schema for tracking user's beauty journey
+const JourneyEventSchema = new Schema({
+  eventType: {
+    type: String,
+    required: true,
+    enum: ['purchase', 'open', 'thought', 'review', 'halfEmpty', 'finished']
+  },
+  text: {
+    type: String,
+    required: false
+  },
+  title: {
+    type: String,
+    required: false
+  },
+  rating: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
   },
   createdAt: {
     type: Date,
@@ -108,6 +135,8 @@ const UserProductSchema = new Schema({
   finishDate: Date,
   // Usage entries for detailed tracking
   usageEntries: [UsageEntrySchema],
+  // Journey events for tracking user's beauty journey
+  journeyEvents: [JourneyEventSchema],
   // Quantity field to track similar products
   quantity: {
     type: Number,

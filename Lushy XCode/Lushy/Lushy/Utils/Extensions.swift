@@ -237,7 +237,7 @@ extension Date {
 
 // Add these formatters to the existing Extensions.swift file:
 extension DateFormatter {
-    static let medium: DateFormatter = {
+    static let mediumDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none

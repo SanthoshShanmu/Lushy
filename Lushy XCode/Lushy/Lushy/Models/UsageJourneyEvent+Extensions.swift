@@ -6,6 +6,7 @@ extension UsageJourneyEvent {
     enum EventType: String, CaseIterable {
         case purchase = "purchase"
         case open = "open"
+        case usage = "usage"
         case thought = "thought"
         case review = "review"
         case halfEmpty = "halfEmpty"
@@ -15,6 +16,7 @@ extension UsageJourneyEvent {
             switch self {
             case .purchase: return "Purchased"
             case .open: return "Opened"
+            case .usage: return "Used"
             case .thought: return "Thought"
             case .review: return "Review"
             case .halfEmpty: return "Half Empty"
@@ -26,6 +28,7 @@ extension UsageJourneyEvent {
             switch self {
             case .purchase: return "bag.fill"
             case .open: return "lock.open.fill"
+            case .usage: return "checkmark.circle.fill"
             case .thought: return "bubble.left.fill"
             case .review: return "star.fill"
             case .halfEmpty: return "drop.halffull"

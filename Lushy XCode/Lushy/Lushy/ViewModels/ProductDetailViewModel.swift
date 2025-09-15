@@ -356,9 +356,26 @@ class ProductDetailViewModel: ObservableObject {
     func submitReview() {
         guard !reviewTitle.isEmpty && !reviewText.isEmpty else { return }
         
-        // Check if user has already reviewed this product
+        // FIXED Issue 4: Prevent multiple reviews - check if user has already reviewed this product
         if hasUserReviewed {
+            print("❌ Review submission blocked: User has already reviewed this product")
+            // Reset form and close sheet
+            reviewRating = 3
+            reviewTitle = ""
+            reviewText = ""
+            showReviewForm = false
             return // Prevent multiple reviews
+        }
+        
+        // ADDITIONAL FIX: Only allow reviews on finished products
+        if !product.isFinished {
+            print("❌ Review submission blocked: Product must be finished to write a review")
+            // Reset form and close sheet
+            reviewRating = 3
+            reviewTitle = ""
+            reviewText = ""
+            showReviewForm = false
+            return
         }
         
         // Save review locally - CoreDataManager handles backend sync and activity creation
@@ -369,10 +386,7 @@ class ProductDetailViewModel: ObservableObject {
             text: reviewText
         )
         
-        // Automatically mark product as finished after writing a review
-        if !product.isFinished {
-            CoreDataManager.shared.markProductAsFinished(id: product.objectID)
-        }
+        // Product is already finished if we reach this point, no need to mark as finished again
         
         // Reset form
         reviewRating = 3
@@ -607,6 +621,13 @@ class ProductDetailViewModel: ObservableObject {
     func deleteProduct() {
         if isDeleted { return }
         
+        // FIXED Issue 6: Prevent deletion of finished products
+        if product.isFinished {
+            print("❌ Product deletion blocked: Cannot delete finished products")
+            error = "Finished products cannot be deleted. They are part of your beauty journey history."
+            return
+        }
+        
         // Mark as deleted immediately to prevent any further operations
         markAsDeletedAndCleanup()
         
@@ -666,13 +687,20 @@ class ProductDetailViewModel: ObservableObject {
             return
         }
         
+        // FIXED Issue 3: Prevent multiple concurrent review loading calls
+        guard !isLoadingReviews else {
+            print("⚠️ Review loading already in progress, skipping")
+            return
+        }
+        
         isLoadingReviews = true
         
         APIService.shared.getAllReviewsForProduct(barcode: barcode)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoadingReviews = false
+                    guard let self = self else { return }
+                    self.isLoadingReviews = false
                     switch completion {
                     case .failure(let error):
                         print("❌ Failed to load all reviews: \(error)")
@@ -681,8 +709,20 @@ class ProductDetailViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] reviews in
+                    guard let self = self else { return }
                     print("✅ Loaded \(reviews.count) reviews from all users")
-                    self?.allReviewsForProduct = reviews
+                    
+                    // FIXED Issue 3: Stable review state management to prevent flickering
+                    // Only update if the reviews have actually changed
+                    let currentReviewIds = Set(self.allReviewsForProduct?.map { $0.id } ?? [])
+                    let newReviewIds = Set(reviews.map { $0.id })
+                    
+                    if currentReviewIds != newReviewIds {
+                        self.allReviewsForProduct = reviews
+                        print("📝 Updated reviews state with \(reviews.count) reviews")
+                    } else {
+                        print("📝 Reviews unchanged, skipping UI update")
+                    }
                 }
             )
             .store(in: &cancellables)

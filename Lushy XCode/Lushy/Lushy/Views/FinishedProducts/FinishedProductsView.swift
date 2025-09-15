@@ -104,7 +104,8 @@ struct FinishedProductsView: View {
         }
         .navigationDestination(isPresented: $showProductDetail) {
             if let product = selectedProduct {
-                ProductDetailView(viewModel: ProductDetailViewModel(product: product))
+                // FIXED: Use the specialized finished product detail view instead of regular ProductDetailView
+                FinishedProductDetailView(product: product)
             }
         }
     }

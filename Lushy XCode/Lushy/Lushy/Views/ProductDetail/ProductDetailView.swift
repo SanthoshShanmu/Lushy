@@ -153,9 +153,11 @@ struct ProductDetailView: View {
     // Extracted toolbar menu to reduce type-check complexity in body
     private var moreMenu: some View {
         Menu {
-            // Delete full product
-            Button(role: .destructive) { showingDeleteAlert = true } label: {
-                Label("Remove Product", systemImage: "trash")
+            // FIXED Issue 6: Only show delete option for unfinished products
+            if !viewModel.product.isFinished {
+                Button(role: .destructive) { showingDeleteAlert = true } label: {
+                    Label("Remove Product", systemImage: "trash")
+                }
             }
             
             // Only show edit button if product is not finished
@@ -327,24 +329,39 @@ struct ProductDetailView: View {
                     }
                 }
                 
-                // Add divider if there are also community reviews
-                if let allReviews = viewModel.allReviewsForProduct, !allReviews.isEmpty {
+                // Add divider if there are also community reviews from other users
+                if let allReviews = viewModel.allReviewsForProduct, 
+                   let currentUserId = AuthService.shared.userId,
+                   allReviews.contains(where: { $0.user?.id != currentUserId }) {
                     Divider()
                         .padding(.vertical, 8)
                 }
             }
             
-            // Community reviews from all users
+            // Community reviews from OTHER users ONLY
             if let allReviews = viewModel.allReviewsForProduct, !allReviews.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Community Reviews (\(allReviews.count))")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(allReviews) { review in
-                        reviewRow(review)
+                let otherUsersReviews = allReviews.filter { review in
+                    guard let currentUserId = AuthService.shared.userId, let reviewUserId = review.user?.id else { return true }
+                    // Exclude current user's reviews from community section
+                    return reviewUserId != currentUserId
+                }
+                
+                if !otherUsersReviews.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Community Reviews (\(otherUsersReviews.count))")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        ForEach(otherUsersReviews) { review in
+                            reviewRow(review)
+                        }
                     }
+                } else {
+                    Text("No community reviews yet for this product")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .italic()
                 }
             } else if !viewModel.isLoadingReviews && viewModel.allReviewsForProduct?.isEmpty == true {
                 Text("No community reviews yet for this product")
@@ -834,7 +851,7 @@ private struct _PrettyBeautyJourneySection: View {
     @ObservedObject var viewModel: ProductDetailViewModel
     
     var body: some View {
-        NavigationLink(destination: UsageJourneyView(product: viewModel.product)) {
+        NavigationLink(destination: UsageJourneyView(product: viewModel.product, usageTrackingViewModel: viewModel.usageTrackingViewModel)) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "map.fill")
@@ -897,26 +914,43 @@ private struct _PrettyBeautyJourneySection: View {
     }
     
     private var journeyEventCount: Int {
-        // Count only meaningful journey events (purchase, open, finish, thoughts)
+        // FIXED: Use the enhanced journey view model for accurate count
+        // Force context refresh to ensure we have latest data
+        CoreDataManager.shared.viewContext.refreshAllObjects()
+        
+        // Count meaningful journey events (purchase, open, finish, thoughts)
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@", viewModel.product)
         
         let journeyEvents = (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
         
-        // Add milestone events
-        var milestoneCount = 0
-        if viewModel.product.purchaseDate != nil { milestoneCount += 1 }
-        if viewModel.product.openDate != nil { milestoneCount += 1 }
-        if viewModel.product.isFinished { milestoneCount += 1 }
+        // Add usage entries to the count (they appear in the timeline too)
+        let usageEntries = CoreDataManager.shared.fetchUsageEntries(for: viewModel.product.objectID)
+        let usageCheckIns = usageEntries.filter { $0.usageType == "check_in" }.count
         
-        return milestoneCount + journeyEvents
+        // Return combined count of all timeline items
+        return journeyEvents + usageCheckIns
     }
     
     private var thoughtCount: Int {
-        // Count only journey events with type "thought"
+        // FIXED: Count both journey thoughts and usage entries with notes
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@ AND eventType == %@", viewModel.product, "thought")
-        return (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
+        let journeyThoughts = (try? CoreDataManager.shared.viewContext.count(for: request)) ?? 0
+        
+        // Count usage entries with meaningful notes
+        let usageEntries = CoreDataManager.shared.fetchUsageEntries(for: viewModel.product.objectID)
+        let usageWithNotes = usageEntries.filter { entry in
+            guard let notes = entry.notes,
+                  let data = notes.data(using: .utf8),
+                  let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let userNotes = metadata["notes"] as? String else {
+                return false
+            }
+            return !userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+        
+        return journeyThoughts + usageWithNotes
     }
     
     private var reviewCount: Int {
@@ -1364,7 +1398,7 @@ private struct TagAssignSheet: View {
 
     private func toggle(_ tag: ProductTag) { if selectedTagIDs.contains(tag.objectID) { selectedTagIDs.remove(tag.objectID) } else { selectedTagIDs.insert(tag.objectID) } }
     private func createTag() {
-        CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+        _ = CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
         viewModel.fetchBagsAndTags()
         if let newTag = viewModel.allTags.first(where: { ($0.name ?? "") == newTagName }) {
             selectedTagIDs.insert(newTag.objectID)

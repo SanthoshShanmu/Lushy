@@ -317,6 +317,12 @@ class SyncService {
         // Ensure required Core Data fields are populated
         localProduct.userId = AuthService.shared.userId ?? localProduct.userId
         localProduct.backendId = backendProduct.id // <-- set backendId
+        
+        // FIXED: Restore usage entries from backend
+        self.restoreUsageEntries(for: localProduct, from: backendProduct.usageEntries)
+        
+        // FIXED: Restore journey events from backend  
+        self.restoreJourneyEvents(for: localProduct, from: backendProduct.journeyEvents)
     }
     
     // Create new local product from backend data - handle new referential structure
@@ -359,6 +365,10 @@ class SyncService {
         product.userId = AuthService.shared.userId ?? ""
         product.backendId = backendProduct.id
         
+        // FIXED: Restore usage entries and journey events for new products too
+        self.restoreUsageEntries(for: product, from: backendProduct.usageEntries)
+        self.restoreJourneyEvents(for: product, from: backendProduct.journeyEvents)
+        
         return product
     }
     
@@ -389,9 +399,12 @@ class SyncService {
                 product.backendId = backendId
                 try? CoreDataManager.shared.viewContext.save()
                 
-                // Refresh the feed to show the new activity
+                // FIXED: Immediately refresh profile and products to ensure navigation works
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+                    NotificationCenter.default.post(name: NSNotification.Name("RefreshProfile"), object: nil)
+                    // Force immediate sync to ensure product is available for navigation
+                    SyncService.shared.fetchRemoteProducts()
                 }
                 
                 // Persist any existing local tag relationships
@@ -410,5 +423,296 @@ class SyncService {
                 }
             })
             .store(in: &cancellables)
+    }
+    
+    // MARK: - Helper Methods for Restoring Tracking Data
+    
+    // Restore usage entries from backend data
+    private func restoreUsageEntries(for product: UserProduct, from backendEntries: [BackendUsageEntry]?) {
+        guard let backendEntries = backendEntries,
+              let context = product.managedObjectContext else { return }
+        
+        // Clear existing usage entries to avoid duplicates
+        if let existingEntries = product.usageEntries as? Set<UsageEntry> {
+            for entry in existingEntries {
+                context.delete(entry)
+            }
+        }
+        
+        // Restore usage entries from backend
+        for backendEntry in backendEntries {
+            let usageEntry = UsageEntry(context: context)
+            usageEntry.usageType = backendEntry.usageType
+            usageEntry.usageAmount = backendEntry.usageAmount
+            usageEntry.notes = backendEntry.notes
+            usageEntry.createdAt = backendEntry.createdAt
+            usageEntry.userId = AuthService.shared.userId ?? ""
+            usageEntry.backendId = backendEntry.id
+            usageEntry.userProduct = product
+        }
+        
+        print("✅ Restored \(backendEntries.count) usage entries for product: \(product.productName ?? "Unknown")")
+    }
+    
+    // Restore journey events from backend data
+    private func restoreJourneyEvents(for product: UserProduct, from backendEvents: [BackendJourneyEvent]?) {
+        guard let backendEvents = backendEvents,
+              let context = product.managedObjectContext else { return }
+        
+        // Clear existing journey events to avoid duplicates
+        if let existingEvents = product.journeyEvents as? Set<UsageJourneyEvent> {
+            for event in existingEvents {
+                context.delete(event)
+            }
+        }
+        
+        // Restore journey events from backend
+        for backendEvent in backendEvents {
+            let journeyEvent = UsageJourneyEvent(context: context)
+            journeyEvent.eventType = backendEvent.eventType
+            journeyEvent.text = backendEvent.text
+            journeyEvent.title = backendEvent.title
+            journeyEvent.rating = Int16(backendEvent.rating)
+            journeyEvent.createdAt = backendEvent.createdAt
+            journeyEvent.userProduct = product
+        }
+        
+        print("✅ Restored \(backendEvents.count) journey events for product: \(product.productName ?? "Unknown")")
+    }
+    
+    // Add new selective sync method that preserves local data
+    func performSelectiveSync() {
+        print("🔄 Starting selective sync to merge backend changes without losing local data...")
+        
+        // Only sync if we have authentication
+        guard AuthService.shared.userId != nil else {
+            print("No user authenticated, skipping selective sync")
+            return
+        }
+        
+        // Sync tags first (they're referenced by products)
+        syncTags { [weak self] in
+            // Then sync bags
+            self?.syncBags { [weak self] in
+                // Finally sync products (preserving local usage data)
+                self?.syncProductsSelectively()
+            }
+        }
+    }
+    
+    // FIXED: New selective product sync that preserves local usage tracking data
+    private func syncProductsSelectively() {
+        APIService.shared.fetchUserProductsFromBackend()
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("Error in selective product sync: \(error)")
+                }
+            }, receiveValue: { backendProducts in
+                self.mergeBackendProductsSelectively(backendProducts)
+            })
+            .store(in: &cancellables)
+    }
+    
+    // FIXED: Merge backend products while preserving local usage data and journey events
+    private func mergeBackendProductsSelectively(_ backendProducts: [BackendUserProduct]) {
+        let context = CoreDataManager.shared.viewContext
+        
+        context.performAndWait {
+            for backendProduct in backendProducts {
+                if let localProduct = CoreDataManager.shared.fetchUserProduct(backendId: backendProduct.id) {
+                    // Update existing product but preserve local usage data
+                    self.updateLocalProductSelectively(localProduct, with: backendProduct)
+                } else {
+                    // Create new product with all backend data
+                    let newProduct = self.createLocalProduct(from: backendProduct, in: context)
+                    // Sync relationships for new products
+                    self.syncProductRelationships(newProduct, with: backendProduct)
+                }
+            }
+            
+            // Only remove products that definitely don't exist on backend anymore
+            // Keep any products without backendId (local-only products)
+            let backendIds = Set(backendProducts.map { $0.id })
+            let fetchRequest: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+            
+            if let localProducts = try? context.fetch(fetchRequest) {
+                for product in localProducts {
+                    // Only delete if it has a backendId but is not in the backend response
+                    if let backendId = product.backendId, !backendIds.contains(backendId) {
+                        print("🗑️ Removing stale product: \(product.productName ?? "Unknown")")
+                        context.delete(product)
+                    }
+                }
+            }
+            
+            do {
+                try context.save()
+                print("✅ Selective product sync completed")
+            } catch {
+                print("❌ Error saving selective product sync: \(error)")
+            }
+        }
+    }
+    
+    // FIXED: Update local product while preserving usage entries and journey events
+    private func updateLocalProductSelectively(_ localProduct: UserProduct, with backendProduct: BackendUserProduct) {
+        // Store existing local usage data before updating
+        let existingUsageEntries = localProduct.usageEntries?.allObjects as? [UsageEntry] ?? []
+        let existingJourneyEvents = localProduct.journeyEvents?.allObjects as? [UsageJourneyEvent] ?? []
+        
+        // Update product fields from backend
+        updateLocalProduct(localProduct, with: backendProduct)
+        
+        // If backend has usage/journey data, merge it with local data (don't replace)
+        if let backendUsageEntries = backendProduct.usageEntries, !backendUsageEntries.isEmpty {
+            // Merge backend usage entries with existing local ones
+            mergeUsageEntries(localProduct, backendEntries: backendUsageEntries, existingEntries: existingUsageEntries)
+        }
+        
+        if let backendJourneyEvents = backendProduct.journeyEvents, !backendJourneyEvents.isEmpty {
+            // Merge backend journey events with existing local ones
+            mergeJourneyEvents(localProduct, backendEvents: backendJourneyEvents, existingEvents: existingJourneyEvents)
+        }
+        
+        print("✅ Updated product selectively: \(localProduct.productName ?? "Unknown")")
+    }
+    
+    // FIXED: Merge usage entries without duplicating
+    private func mergeUsageEntries(_ product: UserProduct, backendEntries: [BackendUsageEntry], existingEntries: [UsageEntry]) {
+        guard let context = product.managedObjectContext else { return }
+        
+        // Create a set of existing entry timestamps to avoid duplicates
+        let existingTimestamps = Set(existingEntries.map { $0.createdAt.timeIntervalSince1970 })
+        
+        // Only add backend entries that don't already exist locally
+        for backendEntry in backendEntries {
+            let backendTimestamp = backendEntry.createdAt.timeIntervalSince1970
+            
+            // Allow small time differences (1 second) to account for sync timing
+            let isDuplicate = existingTimestamps.contains { abs($0 - backendTimestamp) < 1.0 }
+            
+            if !isDuplicate {
+                let usageEntry = UsageEntry(context: context)
+                usageEntry.usageType = backendEntry.usageType
+                usageEntry.usageAmount = backendEntry.usageAmount
+                usageEntry.notes = backendEntry.notes
+                usageEntry.createdAt = backendEntry.createdAt
+                usageEntry.userId = AuthService.shared.userId ?? ""
+                usageEntry.backendId = backendEntry.id
+                usageEntry.userProduct = product
+            }
+        }
+    }
+    
+    // FIXED: Merge journey events without duplicating
+    private func mergeJourneyEvents(_ product: UserProduct, backendEvents: [BackendJourneyEvent], existingEvents: [UsageJourneyEvent]) {
+        guard let context = product.managedObjectContext else { return }
+        
+        // Create a set of existing event identifiers to avoid duplicates
+        let existingIdentifiers = Set(existingEvents.map { "\($0.eventType ?? "")_\($0.createdAt?.timeIntervalSince1970 ?? 0)" })
+        
+        // Only add backend events that don't already exist locally
+        for backendEvent in backendEvents {
+            let backendIdentifier = "\(backendEvent.eventType)_\(backendEvent.createdAt.timeIntervalSince1970)"
+            
+            if !existingIdentifiers.contains(backendIdentifier) {
+                let journeyEvent = UsageJourneyEvent(context: context)
+                journeyEvent.eventType = backendEvent.eventType
+                journeyEvent.text = backendEvent.text
+                journeyEvent.title = backendEvent.title
+                journeyEvent.rating = Int16(backendEvent.rating)
+                journeyEvent.createdAt = backendEvent.createdAt
+                journeyEvent.userProduct = product
+                print("✅ Added backend journey event: \(backendEvent.eventType) for \(product.productName ?? "Unknown")")
+            }
+        }
+    }
+    
+    // FIXED: Add method to force sync of usage tracking data after app startup
+    func syncUsageTrackingData() {
+        print("🔄 Syncing usage tracking data to ensure persistence...")
+        
+        guard let userId = AuthService.shared.userId else { return }
+        
+        let context = CoreDataManager.shared.viewContext
+        let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
+        
+        do {
+            let products = try context.fetch(request)
+            
+            for product in products {
+                guard let backendId = product.backendId else { continue }
+                
+                // Sync any local usage entries that might not be on backend
+                if let usageEntries = product.usageEntries as? Set<UsageEntry> {
+                    for entry in usageEntries where entry.backendId == nil {
+                        CoreDataManager.shared.syncUsageEntryToBackend(
+                            userId: userId,
+                            productId: backendId,
+                            usageType: entry.usageType,
+                            usageAmount: entry.usageAmount,
+                            notes: entry.notes,
+                            createdAt: entry.createdAt
+                        )
+                    }
+                }
+                
+                // Sync any local journey events that might not be on backend
+                if let journeyEvents = product.journeyEvents as? Set<UsageJourneyEvent> {
+                    for event in journeyEvents {
+                        // Safely unwrap required non-optional parameters
+                        guard let eventType = event.eventType,
+                              let createdAt = event.createdAt else {
+                            print("⚠️ Skipping journey event with missing required fields")
+                            continue
+                        }
+                        
+                        CoreDataManager.shared.syncJourneyEventToBackend(
+                            userId: userId,
+                            productId: backendId,
+                            eventType: eventType,
+                            text: event.text,
+                            title: event.title,
+                            rating: Int(event.rating),
+                            createdAt: createdAt
+                        )
+                    }
+                }
+            }
+        } catch {
+            print("❌ Error syncing usage tracking data: \(error)")
+        }
+    }
+    
+    // Helper to sync product relationships
+    private func syncProductRelationships(_ product: UserProduct, with backendProduct: BackendUserProduct) {
+        // Sync tag relationships
+        if let tagSummaries = backendProduct.tags {
+            for summary in tagSummaries {
+                if let tag = CoreDataManager.shared.fetchProductTags().first(where: { $0.backendId == summary.id }) {
+                    product.addToTags(tag)
+                }
+            }
+        }
+        
+        // Sync bag relationships
+        if let bagSummaries = backendProduct.bags {
+            for summary in bagSummaries {
+                if let bag = CoreDataManager.shared.fetchBeautyBags().first(where: { $0.backendId == summary.id }) {
+                    product.addToBags(bag)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Individual Entity Sync Methods
+    
+    private func syncTags(completion: @escaping () -> Void) {
+        fetchRemoteTags(completion: completion)
+    }
+    
+    private func syncBags(completion: @escaping () -> Void) {
+        fetchRemoteBags(completion: completion)
     }
 }

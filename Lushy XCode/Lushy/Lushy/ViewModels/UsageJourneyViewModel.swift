@@ -15,18 +15,19 @@ class UsageJourneyViewModel: ObservableObject {
     
     init(product: UserProduct) {
         self.product = product
-        fetchEvents()
+        loadEvents() // Use loadEvents() which doesn't return a value
         
         // Subscribe to Core Data changes
         NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.fetchEvents()
+                self?.loadEvents() // Use loadEvents() which doesn't return a value
             }
             .store(in: &cancellables)
     }
     
-    func fetchEvents() {
+    // FIXED: Separate methods - one for loading (side effect), one for fetching (return value)
+    private func loadEvents() {
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@", product)
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
@@ -35,6 +36,21 @@ class UsageJourneyViewModel: ObservableObject {
             events = try managedObjectContext.fetch(request)
         } catch {
             print("Error fetching usage journey events: \(error)")
+            events = []
+        }
+    }
+    
+    // FIXED: Separate method for when we need the return value
+    private func fetchEventsArray() -> [UsageJourneyEvent] {
+        let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
+        request.predicate = NSPredicate(format: "userProduct == %@", product)
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        
+        do {
+            return try managedObjectContext.fetch(request)
+        } catch {
+            print("Error fetching usage journey events: \(error)")
+            return []
         }
     }
     
@@ -58,63 +74,142 @@ class UsageJourneyViewModel: ObservableObject {
         
         do {
             try managedObjectContext.save()
-            fetchEvents()
+            loadEvents() // Use loadEvents() which doesn't return a value
         } catch {
-            print("Error creating journey event: \(error)")
+            print("Error saving usage journey event: \(error)")
         }
     }
     
-    // Create automatic events for existing product data
+    // FIXED: Enhanced initial events creation with better validation
     func createInitialEvents() {
-        let existingEvents = events
+        // Ensure we have the latest data
+        managedObjectContext.refreshAllObjects()
         
-        // Create purchase event if needed
+        let existingEvents = fetchEventsArray() // Use fetchEventsArray() when we need the return value
+        
+        // Create purchase event if needed and purchase date exists
         if let purchaseDate = product.purchaseDate,
-           !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.purchase.rawValue }) {
-            createEvent(type: "purchase", text: nil, date: purchaseDate)
+           !existingEvents.contains(where: { $0.eventType == "purchase" }) {
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .purchase,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: purchaseDate
+            )
         }
         
-        // Create open event if needed
+        // Create open event if needed and open date exists
         if let openDate = product.openDate,
-           !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.open.rawValue }) {
-            createEvent(type: "open", text: nil, date: openDate)
+           !existingEvents.contains(where: { $0.eventType == "open" }) {
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .open,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: openDate
+            )
         }
         
-        // Create finished event if needed
+        // Create finished event if needed and product is finished
         if product.isFinished,
-           !existingEvents.contains(where: { $0.eventType == UsageJourneyEvent.EventType.finished.rawValue }) {
-            createEvent(type: "finished", text: nil, date: product.finishDate ?? Date())
+           !existingEvents.contains(where: { $0.eventType == "finished" }) {
+            let finishDate = product.finishDate ?? Date()
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .finished,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: finishDate
+            )
         }
         
-        // Convert existing comments to thoughts
-        if let comments = product.comments as? Set<Comment> {
-            for comment in comments {
-                if !existingEvents.contains(where: { 
-                    $0.eventType == UsageJourneyEvent.EventType.thought.rawValue && 
-                    $0.text == comment.text 
-                }) {
-                    createEvent(type: "thought", text: comment.text, date: comment.createdAt ?? Date())
-                }
+        // Refresh events after creating initial ones
+        loadEvents() // Use loadEvents() which doesn't return a value
+    }
+    
+    // FIXED: Add method to get combined timeline count for accurate stats
+    func getTotalTimelineItems() -> Int {
+        // Force context refresh to ensure we have latest data
+        managedObjectContext.refreshAllObjects()
+        
+        let journeyEvents = fetchEventsArray().count
+        let usageEntries = CoreDataManager.shared.fetchUsageEntries(for: product.objectID)
+        let usageCheckIns = usageEntries.filter { $0.usageType == "check_in" }.count
+        
+        return journeyEvents + usageCheckIns
+    }
+    
+    // FIXED: Add method to get usage entries with notes for accurate thought count
+    func getThoughtCount() -> Int {
+        // Count journey thoughts
+        let journeyThoughts = events.filter { $0.eventType == "thought" }.count
+        
+        // Count usage entries with meaningful notes (exclude basic check-ins)
+        let usageEntries = CoreDataManager.shared.fetchUsageEntries(for: product.objectID)
+        let usageWithNotes = usageEntries.filter { entry in
+            guard let notes = entry.notes,
+                  !notes.isEmpty,
+                  let data = notes.data(using: .utf8),
+                  let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let userNotes = metadata["notes"] as? String else {
+                return false
             }
+            // Only count entries with actual user-written notes (not just context)
+            return !userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+        
+        return journeyThoughts + usageWithNotes
+    }
+    
+    // Enhanced event creation for better data persistence
+    func ensureInitialEventsExist() {
+        let existingEvents = fetchEventsArray() // Use fetchEventsArray() when we need the return value
+        
+        // Check if we need purchase event
+        if let purchaseDate = product.purchaseDate,
+           !existingEvents.contains(where: { $0.eventType == "purchase" }) {
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .purchase,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: purchaseDate
+            )
         }
         
-        // Convert existing reviews to review events
-        if let reviews = product.reviews as? Set<Review> {
-            for review in reviews {
-                if !existingEvents.contains(where: { 
-                    $0.eventType == UsageJourneyEvent.EventType.review.rawValue && 
-                    $0.title == review.title 
-                }) {
-                    CoreDataManager.shared.addUsageJourneyEventNew(
-                        to: product.objectID,
-                        type: .review,
-                        text: review.text,
-                        title: review.title,
-                        rating: Int16(review.rating),
-                        date: review.createdAt ?? Date()
-                    )
-                }
-            }
+        // Check if we need open event (only if product is opened)
+        if let openDate = product.openDate,
+           !existingEvents.contains(where: { $0.eventType == "open" }) {
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .open,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: openDate
+            )
         }
+        
+        // Check if we need finished event (only if product is finished)
+        if product.isFinished,
+           !existingEvents.contains(where: { $0.eventType == "finished" }) {
+            let finishDate = product.finishDate ?? Date()
+            CoreDataManager.shared.addUsageJourneyEventNew(
+                to: product.objectID,
+                type: .finished,
+                text: nil,
+                title: nil,
+                rating: 0,
+                date: finishDate
+            )
+        }
+        
+        // Refresh events after ensuring initial ones exist
+        loadEvents() // Use loadEvents() which doesn't return a value
     }
 }

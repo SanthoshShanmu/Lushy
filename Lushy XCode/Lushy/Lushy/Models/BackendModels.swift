@@ -111,6 +111,8 @@ struct BackendUserProduct: Codable, Identifiable {
     let tags: [TagSummary]?  // Tag associations
     let bags: [BeautyBagSummary]?  // Bag associations
     let quantity: Int
+    let usageEntries: [BackendUsageEntry]? // Usage tracking data
+    let journeyEvents: [BackendJourneyEvent]? // Journey events data
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -126,6 +128,8 @@ struct BackendUserProduct: Codable, Identifiable {
         case tags
         case bags
         case quantity
+        case usageEntries
+        case journeyEvents
     }
 
     // Convenience accessors for product catalog fields
@@ -170,6 +174,8 @@ struct BackendUserProduct: Codable, Identifiable {
         self.tags = tags
         self.bags = bags
         self.quantity = quantity
+        self.usageEntries = nil
+        self.journeyEvents = nil
     }
 
     init(from decoder: Decoder) throws {
@@ -212,6 +218,8 @@ struct BackendUserProduct: Codable, Identifiable {
         tags = try? c.decode([TagSummary].self, forKey: .tags)
         bags = try? c.decode([BeautyBagSummary].self, forKey: .bags)
         quantity = (try? c.decode(Int.self, forKey: .quantity)) ?? 1
+        usageEntries = try? c.decode([BackendUsageEntry].self, forKey: .usageEntries)
+        journeyEvents = try? c.decode([BackendJourneyEvent].self, forKey: .journeyEvents)
     }
 }
 
@@ -338,6 +346,7 @@ struct UserProductSummary: Identifiable, Codable {
     let id: String
     let name: String
     let brand: String?
+    let barcode: String?  // Add missing barcode property
     let imageUrl: String?  // Added imageUrl property
     let isFavorite: Bool?
     let isFinished: Bool?  // Add finished status property
@@ -348,6 +357,7 @@ struct UserProductSummary: Identifiable, Codable {
         case id = "_id"
         case name = "productName"  // Map productName from backend to name in iOS
         case brand
+        case barcode  // Add barcode to CodingKeys
         case imageUrl = "imageUrl"  // Added imageUrl mapping
         case isFavorite = "favorite"  // Map favorite from backend to isFavorite in iOS
         case isFinished = "isFinished"  // Map isFinished from backend
@@ -665,5 +675,80 @@ struct AllReviewsResponse: Codable {
     
     struct AllReviewsData: Codable {
         let reviews: [BackendReview]
+    }
+}
+
+// Backend usage entry model for syncing usage tracking data
+struct BackendUsageEntry: Codable, Identifiable {
+    let id: String?
+    let usageType: String
+    let usageAmount: Double
+    let notes: String?
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case usageType
+        case usageAmount
+        case notes
+        case createdAt
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try? container.decode(String.self, forKey: .id)
+        usageType = try container.decode(String.self, forKey: .usageType)
+        usageAmount = try container.decode(Double.self, forKey: .usageAmount)
+        notes = try? container.decode(String.self, forKey: .notes)
+        
+        // Handle date decoding
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let createdAtString = try? container.decode(String.self, forKey: .createdAt) {
+            createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+        } else {
+            createdAt = Date()
+        }
+    }
+}
+
+// Backend journey event model for syncing usage journey data
+struct BackendJourneyEvent: Codable, Identifiable {
+    let id: String?
+    let eventType: String
+    let text: String?
+    let title: String?
+    let rating: Int
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case eventType
+        case text
+        case title
+        case rating
+        case createdAt
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try? container.decode(String.self, forKey: .id)
+        eventType = try container.decode(String.self, forKey: .eventType)
+        text = try? container.decode(String.self, forKey: .text)
+        title = try? container.decode(String.self, forKey: .title)
+        rating = (try? container.decode(Int.self, forKey: .rating)) ?? 0
+        
+        // Handle date decoding
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let createdAtString = try? container.decode(String.self, forKey: .createdAt) {
+            createdAt = dateFormatter.date(from: createdAtString) ?? Date()
+        } else {
+            createdAt = Date()
+        }
     }
 }

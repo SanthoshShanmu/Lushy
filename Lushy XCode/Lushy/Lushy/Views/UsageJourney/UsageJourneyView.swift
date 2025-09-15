@@ -2,198 +2,193 @@ import SwiftUI
 
 struct UsageJourneyView: View {
     @StateObject private var viewModel: UsageJourneyViewModel
-    @Environment(\.presentationMode) var presentationMode
+    @ObservedObject var usageTrackingViewModel: UsageTrackingViewModel
+    @State private var showingThoughtSheet = false
+    @State private var showingProductDetailSheet = false
+    @State private var showingUsageSheet = false
+    @State private var refreshTrigger = false
     
-    init(product: UserProduct) {
-        _viewModel = StateObject(wrappedValue: UsageJourneyViewModel(product: product))
+    init(product: UserProduct, usageTrackingViewModel: UsageTrackingViewModel) {
+        self._viewModel = StateObject(wrappedValue: UsageJourneyViewModel(product: product))
+        self.usageTrackingViewModel = usageTrackingViewModel
     }
     
     var body: some View {
-        ZStack {
-            // Beautiful gradient background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.lushyPink.opacity(0.1),
-                    Color.lushyPurple.opacity(0.05),
-                    Color.white
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
+        NavigationView {
             ScrollView {
-                VStack(spacing: 0) {
-                    // Header
-                    headerSection
+                VStack(spacing: 20) {
+                    // Product header
+                    productHeader
                     
-                    // Add thought section - moved to top for better UX
-                    addThoughtSection
+                    // Journey stats
+                    journeyStats
                     
-                    // Timeline - now shows newest entries first
-                    if viewModel.events.isEmpty {
-                        emptyStateView
-                    } else {
-                        timelineView
-                    }
+                    // Action buttons
+                    actionButtons
+                    
+                    // Timeline
+                    timelineSection
                 }
-                .padding(.bottom, 30)
+                .padding()
             }
-        }
-        .navigationTitle("Usage Journey")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            viewModel.createInitialEvents()
+            .navigationTitle("Usage Journey")
+            .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                viewModel.createInitialEvents() // No return value, so no warning
+                viewModel.ensureInitialEventsExist() // No return value, so no warning
+            }
+            .sheet(isPresented: $showingThoughtSheet) {
+                ThoughtEntrySheet(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showingProductDetailSheet) {
+                ProductDetailView(viewModel: ProductDetailViewModel(product: viewModel.product))
+            }
+            .sheet(isPresented: $showingUsageSheet) {
+                UsageEntrySheet(
+                    product: viewModel.product,
+                    usageTrackingViewModel: usageTrackingViewModel,
+                    showingSheet: $showingUsageSheet
+                )
+            }
         }
     }
     
-    private var headerSection: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 8) {
-                Image(systemName: "map.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.lushyPink)
+    private var productHeader: some View {
+        VStack(spacing: 12) {
+            HStack {
+                AsyncImage(url: URL(string: viewModel.product.imageUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        )
+                }
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 
-                Text("Your Beauty Journey")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(viewModel.product.productName ?? "Product")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .lineLimit(2)
+                    
+                    if let brand = viewModel.product.brand {
+                        Text(brand)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Status indicator
+                    HStack {
+                        Circle()
+                            .fill(viewModel.product.isFinished ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(viewModel.product.isFinished ? "Finished" : "In Use")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(viewModel.product.isFinished ? .green : .orange)
+                    }
+                }
                 
-                Text("Track your experiences and thoughts about this product")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-            }
-            
-            // Journey stats
-            HStack(spacing: 30) {
-                StatCard(
-                    icon: "calendar",
-                    title: "Milestones",
-                    value: "\(milestoneCount)",
-                    color: .mossGreen
-                )
-                
-                StatCard(
-                    icon: "bubble.left.fill",
-                    title: "Thoughts",
-                    value: "\(thoughtCount)",
-                    color: .lushyPeach
-                )
-                
-                StatCard(
-                    icon: "clock",
-                    title: "Days",
-                    value: "\(daysSincePurchase)",
-                    color: .lushyPurple
-                )
+                Spacer()
             }
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         )
-        .padding(.horizontal)
-        .padding(.top, 10)
     }
     
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 60))
-                .foregroundColor(.lushyPink.opacity(0.3))
+    private var journeyStats: some View {
+        HStack(spacing: 20) {
+            JourneyStatCard(
+                icon: "calendar",
+                title: "Timeline Items",
+                value: "\(viewModel.getTotalTimelineItems())",
+                color: .lushyPink
+            )
             
-            Text("Your journey starts here")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
+            JourneyStatCard(
+                icon: "bubble.left.fill",
+                title: "Thoughts",
+                value: "\(viewModel.getThoughtCount())",
+                color: .lushyPurple
+            )
             
-            Text("Add your first thought about this product to begin tracking your experience")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+            JourneyStatCard(
+                icon: "clock",
+                title: "Days Owned",
+                value: "\(daysSincePurchase)",
+                color: .mossGreen
+            )
         }
-        .padding(.vertical, 60)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
     }
     
-    private var timelineView: some View {
-        LazyVStack(spacing: 20) {
-            ForEach(Array(viewModel.events.enumerated().reversed()), id: \.element.objectID) { index, event in
-                TimelineEventView(
-                    event: event,
-                    isLast: index == 0
-                )
+    private var actionButtons: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Button(action: {
+                    showingThoughtSheet = true
+                }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Thought")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.lushyPink)
+                    .cornerRadius(12)
+                }
+                
+                Button(action: {
+                    showingUsageSheet = true
+                }) {
+                    HStack {
+                        Image(systemName: "checkmark.circle")
+                        Text("Log Usage")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.lushyPink)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.lushyPink, lineWidth: 1.5)
+                    )
+                }
             }
         }
-        .padding(.horizontal)
-        .padding(.top, 20)
     }
     
-    private var addThoughtSection: some View {
-        VStack(spacing: 16) {
+    private var timelineSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: "plus.bubble.fill")
-                    .font(.title3)
-                    .foregroundColor(.lushyPink)
-                
-                Text("Add a Thought")
+                Text("Journey Timeline")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
                 Spacer()
             }
             
-            VStack(spacing: 12) {
-                TextField("What are you thinking about this product?", text: $viewModel.newThoughtText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(3...6)
-                
-                HStack(spacing: 12) {
-                    Button(action: {
-                        viewModel.addThought()
-                    }) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add for Today")
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [.lushyPink, .lushyPurple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(10)
-                    }
-                    .disabled(viewModel.newThoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    
-                    Button(action: {
-                        viewModel.showingCustomDateSheet = true
-                    }) {
-                        HStack {
-                            Image(systemName: "calendar.badge.plus")
-                            Text("Custom Date")
-                        }
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.lushyPink)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.lushyPink, lineWidth: 1)
-                        )
-                    }
-                    .disabled(viewModel.newThoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            LazyVStack(spacing: 12) {
+                ForEach(timelineItems, id: \.id) { item in
+                    TimelineItemView(item: item)
                 }
             }
         }
@@ -201,66 +196,108 @@ struct UsageJourneyView: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
         )
-        .padding(.horizontal)
-        .padding(.top, 20)
-        .sheet(isPresented: $viewModel.showingCustomDateSheet) {
-            AddThoughtWithDateSheet(
-                text: $viewModel.newThoughtText,
-                date: $viewModel.customThoughtDate,
-                purchaseDate: viewModel.product.purchaseDate,
-                onSave: { text, date in
-                    viewModel.addThought(withDate: date)
-                }
-            )
+    }
+    
+    private var timelineItems: [TimelineItem] {
+        var items: [TimelineItem] = []
+        
+        // Add journey events
+        for event in viewModel.events {
+            items.append(TimelineItem(
+                id: event.objectID.uriRepresentation().absoluteString,
+                type: .journeyEvent,
+                date: event.createdAt ?? Date(),
+                title: event.eventType?.capitalized ?? "Event",
+                subtitle: event.text,
+                icon: iconForEventType(event.eventType ?? ""),
+                color: colorForEventType(event.eventType ?? "")
+            ))
         }
-    }
-    
-    // Computed properties for stats
-    private var milestoneCount: Int {
-        viewModel.events.filter { event in
-            ["purchase", "open", "finished"].contains(event.eventType)
-        }.count
-    }
-    
-    private var thoughtCount: Int {
-        viewModel.events.filter { $0.eventType == "thought" }.count
+        
+        // Add usage entries
+        let usageEntries = CoreDataManager.shared.fetchUsageEntries(for: viewModel.product.objectID)
+        for entry in usageEntries {
+            let metadata = parseUsageMetadata(entry.notes)
+            items.append(TimelineItem(
+                id: entry.objectID.uriRepresentation().absoluteString,
+                type: .usageEntry,
+                date: entry.createdAt,
+                title: "Used Product",
+                subtitle: metadata.notes.isEmpty ? metadata.context.capitalized : metadata.notes,
+                icon: "checkmark.circle.fill",
+                color: .lushyPeach
+            ))
+        }
+        
+        return items.sorted { $0.date < $1.date }
     }
     
     private var daysSincePurchase: Int {
-        // Calculate days since purchase date if available
-        guard let purchaseDate = viewModel.events.first(where: { $0.eventType == "purchase" })?.createdAt else {
-            return 0
+        guard let purchaseDate = viewModel.product.purchaseDate else { return 0 }
+        return Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 0
+    }
+    
+    private func iconForEventType(_ eventType: String) -> String {
+        switch eventType {
+        case "purchase": return "bag.fill"
+        case "open": return "lock.open.fill"
+        case "finished": return "checkmark.seal.fill"
+        case "thought": return "bubble.left.fill"
+        default: return "circle.fill"
         }
-        let days = Calendar.current.dateComponents([.day], from: purchaseDate, to: Date()).day ?? 0
-        return max(0, days)
+    }
+    
+    private func colorForEventType(_ eventType: String) -> Color {
+        switch eventType {
+        case "purchase": return .mossGreen
+        case "open": return .lushyPurple
+        case "finished": return .green
+        case "thought": return .lushyPink
+        default: return .gray
+        }
+    }
+    
+    private func parseUsageMetadata(_ notes: String?) -> (context: String, notes: String, rating: Int) {
+        guard let notes = notes,
+              let data = notes.data(using: .utf8),
+              let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ("general", "", 0)
+        }
+        
+        let context = metadata["context"] as? String ?? "general"
+        let userNotes = metadata["notes"] as? String ?? ""
+        let rating = metadata["rating"] as? Int ?? 0
+        
+        return (context, userNotes, rating)
     }
 }
 
-struct StatCard: View {
+// MARK: - Supporting Views
+
+struct JourneyStatCard: View {
     let icon: String
     let title: String
     let value: String
     let color: Color
     
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.title3)
+                .font(.title2)
                 .foregroundColor(color)
             
             Text(value)
                 .font(.title3)
                 .fontWeight(.bold)
-                .foregroundColor(.primary)
             
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(color.opacity(0.1))
@@ -268,124 +305,103 @@ struct StatCard: View {
     }
 }
 
-struct TimelineEventView: View {
-    let event: UsageJourneyEvent
-    let isLast: Bool
+struct TimelineItem {
+    let id: String
+    let type: TimelineItemType
+    let date: Date
+    let title: String
+    let subtitle: String?
+    let icon: String
+    let color: Color
+    
+    enum TimelineItemType {
+        case journeyEvent
+        case usageEntry
+    }
+}
+
+struct TimelineItemView: View {
+    let item: TimelineItem
     
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            // Timeline indicator
-            VStack(spacing: 0) {
-                Circle()
-                    .fill(eventColor)
-                    .frame(width: 12, height: 12)
-                
-                if !isLast {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 2, height: 40)
-                }
-            }
+        HStack(spacing: 12) {
+            // Timeline dot
+            Circle()
+                .fill(item.color)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white, lineWidth: 2)
+                )
             
-            // Event content
-            VStack(alignment: .leading, spacing: 8) {
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(eventTitle)
+                    Text(item.title)
                         .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .fontWeight(.medium)
                     
                     Spacer()
                     
-                    Text(formatDate(event.createdAt ?? Date()))
+                    Text(formatDate(item.date))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
-                if let text = event.text, !text.isEmpty {
-                    Text(text)
-                        .font(.subheadline)
+                if let subtitle = item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
                         .foregroundColor(.secondary)
-                        .padding(.leading, 8)
+                        .lineLimit(3)
                 }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(eventColor.opacity(0.3), lineWidth: 1)
-                    )
-            )
+            
+            Spacer()
         }
-    }
-    
-    private var eventColor: Color {
-        switch event.eventType {
-        case "purchase": return .mossGreen
-        case "open": return .lushyPeach
-        case "finished": return .green
-        case "thought": return .lushyPink
-        default: return .lushyPurple
-        }
-    }
-    
-    private var eventTitle: String {
-        switch event.eventType {
-        case "purchase": return "Purchased"
-        case "open": return "First Use"
-        case "finished": return "Finished"
-        case "thought": return "Thought"
-        default: return "Event"
-        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(item.color.opacity(0.05))
+        )
     }
     
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
-        
         if Calendar.current.isDateInToday(date) {
-            return "Today"
+            formatter.timeStyle = .short
+            return "Today, \(formatter.string(from: date))"
         } else if Calendar.current.isDateInYesterday(date) {
-            return "Yesterday"
+            formatter.timeStyle = .short
+            return "Yesterday, \(formatter.string(from: date))"
         } else {
-            formatter.dateStyle = .medium
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
             return formatter.string(from: date)
         }
     }
 }
 
-// Sheet for adding thoughts with custom dates
-struct AddThoughtWithDateSheet: View {
-    @Binding var text: String
-    @Binding var date: Date
-    let purchaseDate: Date?
-    let onSave: (String, Date) -> Void
-    
+// MARK: - Sheet Views
+
+struct ThoughtEntrySheet: View {
+    @ObservedObject var viewModel: UsageJourneyViewModel
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Thought Details")) {
-                    TextField("What are you thinking about this product?", text: $text, axis: .vertical)
-                        .lineLimit(3...8)
-                    
-                    DatePicker("Date", selection: $date, in: dateRange, displayedComponents: .date)
-                }
+            VStack(spacing: 20) {
+                TextEditor(text: $viewModel.newThoughtText)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.gray.opacity(0.1))
+                    )
+                    .frame(minHeight: 120)
                 
-                Section {
-                    HStack {
-                        Spacer()
-                        Text("This thought will be added to your journey for \(formatDate(date))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        Spacer()
-                    }
-                }
+                Spacer()
             }
+            .padding()
             .navigationTitle("Add Thought")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -397,24 +413,62 @@ struct AddThoughtWithDateSheet: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        onSave(text, date)
+                        viewModel.addThought()
                         presentationMode.wrappedValue.dismiss()
                     }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(viewModel.newThoughtText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
+}
+
+struct UsageEntrySheet: View {
+    let product: UserProduct
+    @ObservedObject var usageTrackingViewModel: UsageTrackingViewModel
+    @Binding var showingSheet: Bool
+    @Environment(\.presentationMode) var presentationMode
     
-    private var dateRange: ClosedRange<Date> {
-        let startDate = purchaseDate ?? Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-        let endDate = Date()
-        return startDate...endDate
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Quick check-in for using this product")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Button(action: {
+                    usageTrackingViewModel.quickCheckIn(
+                        context: "general",
+                        notes: nil,
+                        date: Date()
+                    )
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Log Usage Now")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.lushyPink)
+                    .cornerRadius(12)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Log Usage")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
     }
 }

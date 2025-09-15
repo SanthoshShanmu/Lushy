@@ -48,14 +48,10 @@ struct UsageTrackingView: View {
                 Spacer()
             }
             
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
+            HStack(spacing: 16) {
                 UsageStatCard(
-                    icon: "calendar",
-                    title: "Check-ins",
+                    icon: "chart.bar.fill",
+                    title: "Total Uses",
                     value: "\(usageViewModel.totalCheckIns)",
                     subtitle: "times used",
                     color: .mossGreen
@@ -88,17 +84,14 @@ struct UsageTrackingView: View {
                     Spacer()
                     if !usageViewModel.usageCheckIns.isEmpty {
                         Button("View All") {
+                            // Navigate to usage history view
                         }
                         .font(.caption)
                         .foregroundColor(.lushyPink)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.lushyPink.opacity(0.1))
-                )
+                .padding(.horizontal)
+                .padding(.top, 8)
             }
         }
         .padding()

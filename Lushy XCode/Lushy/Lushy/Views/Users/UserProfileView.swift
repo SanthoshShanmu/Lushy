@@ -122,7 +122,7 @@ struct UserProfileView: View {
                                                 $0.backendId == bagSummary.id ||
                                                 $0.objectID.uriRepresentation().absoluteString == bagSummary.id
                                             }) {
-                                                let bagView = Group {
+                                                Group {
                                                     if viewModel.isViewingOwnProfile {
                                                         NavigationLink(destination: BeautyBagDetailView(bag: cdBag)) {
                                                             LocalBagCard(bag: cdBag)
@@ -143,10 +143,9 @@ struct UserProfileView: View {
                                                         }
                                                     }
                                                 }
-                                                bagView
                                             } else {
                                                 // Fallback to summary if no local bag found
-                                                let bagView = Group {
+                                                Group {
                                                     if viewModel.isViewingOwnProfile {
                                                         BagCard(bag: bagSummary)
                                                             .frame(width: 140)
@@ -156,7 +155,6 @@ struct UserProfileView: View {
                                                     }
                                                 }
                                                 .padding(.vertical, 8)
-                                                bagView
                                             }
                                         }
                                     }
@@ -863,26 +861,12 @@ struct ProductsSection: View {
                 GridItem(.flexible())
             ], spacing: 12) {
                 ForEach(recentProducts) { summary in
-                    // Check if viewing own profile or another user's profile
-                    if viewModel.isViewingOwnProfile {
-                        // For own profile, try to find the local UserProduct first
-                        if let localProduct = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
-                            // Use full ProductDetailView for owned products with complete Core Data object
-                            NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
-                                ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
-                            }
-                        } else {
-                            // Fallback to GeneralProductDetailView if Core Data object not found
-                            NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
-                                ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
-                            }
-                        }
-                    } else {
-                        // For other users' profiles, use general product detail view
-                        NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
-                            ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
-                        }
-                    }
+                    ProductNavigationView(
+                        summary: summary,
+                        viewModel: viewModel,
+                        wishlistMessage: $wishlistMessage,
+                        showingWishlistAlert: $showingWishlistAlert
+                    )
                 }
             }
         }
@@ -893,143 +877,33 @@ struct ProductsSection: View {
                 .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         )
     }
-}
-
-struct ProductCard: View {
-    let product: UserProductSummary
-    var viewModel: UserProfileViewModel
-    @Binding var wishlistMessage: String?
-    @Binding var showingWishlistAlert: Bool
-
-    // Computed property for wishlist status
-    private var isAdded: Bool {
-        viewModel.addedWishlistIds.contains(product.id)
-    }
     
-    var body: some View {
-        VStack(spacing: 0) {
-            // Product image section
-            ZStack {
-                // Background gradient for image area
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.lushyPink.opacity(0.1),
-                        Color.lushyPurple.opacity(0.05)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Product image - now uses imageUrl from UserProductSummary
-                if let imageUrl = product.imageUrl, !imageUrl.isEmpty {
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        VStack(spacing: 6) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
-                                .scaleEffect(0.8)
-                            Text("Loading...")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .frame(height: 80)
-                    .clipped()
-                } else {
-                    // Fallback when no image URL is available
-                    VStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 24))
-                            .foregroundColor(.lushyPink.opacity(0.6))
-                        
-                        Text("No Image")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(height: 80)
-                }
-            }
-            .frame(height: 80)
-            .cornerRadius(12, corners: [.topLeft, .topRight])
-            
-            // Product info section
-            VStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(product.name)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .foregroundColor(.primary)
-                    
-                    if let brand = product.brand {
-                        Text(brand.uppercased())
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.lushyPurple)
-                            .tracking(0.3)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                // Wishlist button for other users' profiles
-                if !viewModel.isViewingOwnProfile {
-                    Button(action: {
-                        guard !isAdded else { return }
-                        viewModel.addProductToWishlist(productId: product.id) { result in
-                            switch result {
-                            case .success:
-                                wishlistMessage = "Added to wishlist! 💕"
-                            case .failure(let error):
-                                wishlistMessage = error.localizedDescription
-                            }
-                            showingWishlistAlert = true
-                        }
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "heart.fill")
-                                .font(.caption2)
-                            Text(isAdded ? "Added" : "Add to Wishlist")
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.lushyPink, Color.lushyPurple]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
-                    }
-                    .disabled(isAdded)
-                }
-            }
-            .padding(8)
+    // Helper to find local product with multiple lookup strategies
+    private func findLocalProduct(for summary: UserProductSummary) -> UserProduct? {
+        // Try multiple strategies to find the local product
+        
+        // Strategy 1: Find by backend ID
+        if let localProduct = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
+            return localProduct
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.lushyPink.opacity(0.15), Color.lushyPurple.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
+        
+        // Strategy 2: Find by barcode if available
+        if let barcode = summary.barcode, !barcode.isEmpty {
+            let allProducts = CoreDataManager.shared.fetchUserProducts()
+            if let productByBarcode = allProducts.first(where: { $0.barcode == barcode }) {
+                return productByBarcode
+            }
+        }
+        
+        // Strategy 3: Find by name and brand combination
+        let allProducts = CoreDataManager.shared.fetchUserProducts()
+        if let productByDetails = allProducts.first(where: { 
+            $0.productName == summary.name && $0.brand == summary.brand 
+        }) {
+            return productByDetails
+        }
+        
+        return nil
     }
 }
 
@@ -1059,5 +933,151 @@ struct EmptyProfilePrompt: View {
                 .fill(Color.white.opacity(0.8))
                 .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         )
+    }
+}
+
+// MARK: - Product Card Component
+struct ProductCard: View {
+    let product: UserProductSummary
+    @ObservedObject var viewModel: UserProfileViewModel
+    @Binding var wishlistMessage: String?
+    @Binding var showingWishlistAlert: Bool
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Product Image
+            if let imageUrl = product.imageUrl, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .lushyPink))
+                        )
+                }
+                .frame(height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.lushyPink.opacity(0.3), Color.lushyPurple.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 100)
+                    .overlay(
+                        Image(systemName: "sparkles")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                    )
+            }
+            
+            // Product Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                if let brand = product.brand, !brand.isEmpty {
+                    Text(brand)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                // Show favorite indicator if this is a favorite
+                if product.isFavorite == true {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundColor(.yellow)
+                        Text("Favorite")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Product Navigation View
+struct ProductNavigationView: View {
+    let summary: UserProductSummary
+    @ObservedObject var viewModel: UserProfileViewModel
+    @Binding var wishlistMessage: String?
+    @Binding var showingWishlistAlert: Bool
+    
+    var body: some View {
+        if viewModel.isViewingOwnProfile {
+            // For own profile, try to find the local UserProduct first
+            let localProduct = findLocalProduct(for: summary)
+            if let localProduct = localProduct {
+                // Use full ProductDetailView for owned products with complete Core Data object
+                NavigationLink(destination: ProductDetailView(viewModel: ProductDetailViewModel(product: localProduct))) {
+                    ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                }
+            } else {
+                // Fallback to GeneralProductDetailView if Core Data object not found
+                NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
+                    ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+                }
+            }
+        } else {
+            // For other users' profiles, use general product detail view
+            NavigationLink(destination: GeneralProductDetailView(userId: viewModel.targetUserId, productId: summary.id)) {
+                ProductCard(product: summary, viewModel: viewModel, wishlistMessage: $wishlistMessage, showingWishlistAlert: $showingWishlistAlert)
+            }
+        }
+    }
+    
+    // Helper to find local product with multiple lookup strategies
+    private func findLocalProduct(for summary: UserProductSummary) -> UserProduct? {
+        // Try multiple strategies to find the local product
+        
+        // Strategy 1: Find by backend ID
+        if let localProduct = CoreDataManager.shared.fetchUserProduct(backendId: summary.id) {
+            return localProduct
+        }
+        
+        // Strategy 2: Find by barcode if available
+        if let barcode = summary.barcode, !barcode.isEmpty {
+            let allProducts = CoreDataManager.shared.fetchUserProducts()
+            if let productByBarcode = allProducts.first(where: { $0.barcode == barcode }) {
+                return productByBarcode
+            }
+        }
+        
+        // Strategy 3: Find by name and brand combination
+        let allProducts = CoreDataManager.shared.fetchUserProducts()
+        if let productByDetails = allProducts.first(where: { 
+            $0.productName == summary.name && $0.brand == summary.brand 
+        }) {
+            return productByDetails
+        }
+        
+        return nil
     }
 }

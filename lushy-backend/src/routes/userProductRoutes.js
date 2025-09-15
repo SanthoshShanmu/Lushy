@@ -23,6 +23,16 @@ router
   .put(upload.single('image'), userProductController.updateUserProduct)
   .delete(userProductController.deleteUserProduct);
 
+// NEW: Dedicated endpoint for usage entries
+router
+  .route('/:id/usage-entries')
+  .post(userProductController.createUsageEntry);
+
+// NEW: Dedicated endpoint for journey events
+router
+  .route('/:id/journey-events')
+  .post(userProductController.createJourneyEvent);
+
 // Get all reviews for a product by barcode
 router.get('/reviews/barcode/:barcode', userProductController.getAllReviewsForProduct);
 
