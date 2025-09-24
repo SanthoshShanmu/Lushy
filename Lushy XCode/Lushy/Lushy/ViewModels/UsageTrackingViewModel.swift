@@ -28,14 +28,20 @@ class UsageTrackingViewModel: ObservableObject {
     }
     
     private func loadUsageEntries() {
+        // Force context refresh to get latest data
+        CoreDataManager.shared.viewContext.refreshAllObjects()
+        
         let request: NSFetchRequest<UsageEntry> = UsageEntry.fetchRequest()
         request.predicate = NSPredicate(format: "userProduct == %@", product)
         request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         
         do {
-            usageEntries = try CoreDataManager.shared.viewContext.fetch(request)
+            let fetchedEntries = try CoreDataManager.shared.viewContext.fetch(request)
+            usageEntries = fetchedEntries
+            print("📊 UsageTrackingViewModel loaded \(fetchedEntries.count) usage entries for product")
         } catch {
-            print("Error loading usage entries: \(error)")
+            print("❌ Error loading usage entries: \(error)")
+            usageEntries = []
         }
     }
     

@@ -620,58 +620,7 @@ exports.getPAOTaxonomy = async (req, res) => {
   }
 };
 
-// NEW: Dedicated endpoint for creating usage entries
-exports.createUsageEntry = async (req, res) => {
-  try {
-    const { usageType, usageAmount, notes } = req.body;
-    
-    if (!usageType || usageAmount === undefined) {
-      return res.status(400).json({ 
-        status: 'fail', 
-        message: 'Missing required fields: usageType and usageAmount' 
-      });
-    }
-    
-    const usageEntry = {
-      usageType,
-      usageAmount,
-      notes: notes || null,
-      createdAt: new Date()
-    };
-    
-    const product = await UserProduct.findOneAndUpdate(
-      { _id: req.params.id, user: new mongoose.Types.ObjectId(req.params.userId) },
-      { $push: { usageEntries: usageEntry } },
-      { new: true }
-    )
-    .populate('product')
-    .populate('tags', 'name color')
-    .populate('bags', 'name');
-    
-    if (!product) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'Product not found'
-      });
-    }
-    
-    console.log('✅ Usage entry created via dedicated endpoint:', usageType, 'for product', req.params.id);
-    
-    res.status(201).json({
-      status: 'success',
-      data: { 
-        product,
-        usageEntry
-      }
-    });
-  } catch (error) {
-    console.error('createUsageEntry error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-};
+// Get all reviews for a product (from all users)
 
 // NEW: Dedicated endpoint for creating journey events
 exports.createJourneyEvent = async (req, res) => {
@@ -871,6 +820,127 @@ exports.getUserProductByBarcode = async (req, res) => {
     });
   } catch (error) {
     console.error('getUserProductByBarcode error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Create a new usage entry for a user product
+exports.createUsageEntry = async (req, res) => {
+  try {
+    const { userId, id } = req.params;
+    const { usageType, usageAmount, notes } = req.body;
+
+    console.log('Creating usage entry for userId:', userId, 'productId:', id);
+    console.log('Body:', { usageType, usageAmount, notes });
+
+    if (!usageType || usageAmount === undefined) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'usageType and usageAmount are required'
+      });
+    }
+
+    // Convert userId to ObjectId if it's not already
+    const mongoose = require('mongoose');
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    
+    const userProduct = await UserProduct.findOne({
+      _id: id,
+      user: userObjectId  // Fixed: use 'user' field with ObjectId
+    });
+
+    console.log('Found userProduct:', !!userProduct);
+
+    if (!userProduct) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User product not found'
+      });
+    }
+
+    // Create new usage entry
+    const newUsageEntry = {
+      usageType,
+      usageAmount,
+      notes: notes || null,
+      createdAt: new Date()
+    };
+
+    userProduct.usageEntries.push(newUsageEntry);
+    await userProduct.save();
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        usageEntry: newUsageEntry
+      }
+    });
+  } catch (error) {
+    console.error('createUsageEntry error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Create a new journey event for a user product
+exports.createJourneyEvent = async (req, res) => {
+  try {
+    const { userId, id } = req.params;
+    const { eventType, text, title, rating } = req.body;
+
+    console.log('Creating journey event for userId:', userId, 'productId:', id);
+    console.log('Body:', { eventType, text, title, rating });
+
+    if (!eventType) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'eventType is required'
+      });
+    }
+
+    // Convert userId to ObjectId if it's not already
+    const mongoose = require('mongoose');
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const userProduct = await UserProduct.findOne({
+      _id: id,
+      user: userObjectId  // Fixed: use 'user' field with ObjectId
+    });
+
+    console.log('Found userProduct:', !!userProduct);
+
+    if (!userProduct) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User product not found'
+      });
+    }
+
+    // Create new journey event
+    const newJourneyEvent = {
+      eventType,
+      text: text || null,
+      title: title || null,
+      rating: rating || 0,
+      createdAt: new Date()
+    };
+
+    userProduct.journeyEvents.push(newJourneyEvent);
+    await userProduct.save();
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        journeyEvent: newJourneyEvent
+      }
+    });
+  } catch (error) {
+    console.error('createJourneyEvent error:', error);
     res.status(500).json({
       status: 'error',
       message: error.message

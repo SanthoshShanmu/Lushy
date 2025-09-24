@@ -47,6 +47,7 @@ class ProductDetailViewModel: ObservableObject {
     private let productId: String
     private let productFavoriteService = ProductFavoriteService.shared
     private var favoriteDebounceTimer: Timer?
+    private var _usageTrackingViewModel: UsageTrackingViewModel?
 
     // Computed property to check if editing should be disabled (for finished products)
     var isEditingDisabled: Bool {
@@ -526,7 +527,6 @@ class ProductDetailViewModel: ObservableObject {
     }
     
     // Create usage tracking view model
-    private var _usageTrackingViewModel: UsageTrackingViewModel?
     var usageTrackingViewModel: UsageTrackingViewModel {
         if _usageTrackingViewModel == nil {
             _usageTrackingViewModel = UsageTrackingViewModel(product: product)

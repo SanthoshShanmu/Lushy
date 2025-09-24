@@ -254,6 +254,8 @@ struct ProductDetailView: View {
             }
         }
         .onAppear {
+            // Force Core Data context refresh to ensure latest data
+            CoreDataManager.shared.viewContext.refreshAllObjects()
             // Always refresh from backend when this view appears
             viewModel.fetchBagsAndTags()
             viewModel.refreshRemoteDetail()
@@ -857,7 +859,7 @@ private struct _PrettyBeautyJourneySection: View {
                     Image(systemName: "map.fill")
                         .font(.title3)
                         .foregroundColor(.lushyPink)
-                    Text("Beauty Journey")
+                    Text("Usage Journey")
                         .font(.headline)
                         .fontWeight(.semibold)
                     Spacer()

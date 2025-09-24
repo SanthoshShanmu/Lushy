@@ -449,7 +449,7 @@ struct ProductFoundView: View {
                             .frame(width: 80)
                             Button("Add") {
                                 if !newTagName.isEmpty {
-                                    CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
+                                    _ = CoreDataManager.shared.createProductTag(name: newTagName, color: newTagColor)
                                     allTags = CoreDataManager.shared.fetchProductTags()
                                     newTagName = ""
                                     newTagColor = "lushyPink"

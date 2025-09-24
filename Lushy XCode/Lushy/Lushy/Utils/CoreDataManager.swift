@@ -9,11 +9,22 @@ class CoreDataManager {
     // MARK: - Core Data stack
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "Lushy")
+        
+        // Configure store description with proper options
+        if let storeDescription = container.persistentStoreDescriptions.first {
+            storeDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            storeDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        }
+        
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
                 fatalError("Unresolved error \(error), \(error.userInfo)")
             }
         })
+        
+        // Configure view context
+        container.viewContext.automaticallyMergesChangesFromParent = true
+        
         return container
     }()
     
@@ -34,79 +45,94 @@ class CoreDataManager {
             }
         }
     }
+    
+    // MARK: - Store Management
+    func resetCoreDataStore() {
+        guard let storeURL = persistentContainer.persistentStoreDescriptions.first?.url else {
+            return
+        }
+        
+        do {
+            try persistentContainer.persistentStoreCoordinator.destroyPersistentStore(at: storeURL, ofType: NSSQLiteStoreType, options: nil)
+            try persistentContainer.persistentStoreCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: storeURL, options: nil)
+        } catch {
+            print("Failed to reset Core Data store: \(error)")
+        }
+    }
 
     // Add a new usage entry
     func addUsageEntry(to productID: NSManagedObjectID, type: String, amount: Double, notes: String? = nil) {
-        let context = persistentContainer.newBackgroundContext()
+        print("🔄 Starting addUsageEntry - Type: \(type), Amount: \(amount)")
         
-        context.performAndWait {
-            guard let product = try? context.existingObject(with: productID) as? UserProduct else { return }
-            
-            // FIXED: Check if this is the first use to create appropriate journey events
-            let isFirstUse = product.openDate == nil
-            
-            // ALWAYS create a usage entry for tracking purposes
-            let usageEntry = UsageEntry(context: context)
-            usageEntry.usageType = type
-            usageEntry.usageAmount = amount
-            usageEntry.notes = notes
-            usageEntry.createdAt = Date()
-            usageEntry.userId = currentUserId()
-            usageEntry.userProduct = product
-            
-            // For first use, mark product as opened
-            if isFirstUse && type == "check_in" {
-                product.openDate = Date()
-                
-                // Calculate expiry if we have PAO
-                if let pao = product.periodsAfterOpening, let months = extractMonths(from: pao) {
-                    product.expireDate = Calendar.current.date(byAdding: .month, value: months, to: Date())
-                    NotificationService.shared.scheduleExpiryNotification(for: product)
+        // FIXED: Use main context to avoid deadlock issues with sync calls
+        let context = viewContext
+        
+        context.perform {
+            do {
+                guard let product = try context.existingObject(with: productID) as? UserProduct else {
+                    print("❌ CRITICAL: Product not found for ID: \(productID)")
+                    return
                 }
                 
-                // Create "Open" journey event for first use
-                let openEvent = UsageJourneyEvent(
-                    context: context,
-                    type: .open,
-                    text: nil,
-                    title: "First use",
-                    rating: 0,
-                    date: Date()
-                )
-                openEvent.userProduct = product
-                print("✅ First use - created both usage entry and open journey event")
-            } else {
-                // For regular usage, create a usage journey event
-                let usageEvent = UsageJourneyEvent(
-                    context: context,
-                    type: .usage,
-                    text: notes,
-                    title: "Used",
-                    rating: 0,
-                    date: Date()
-                )
-                usageEvent.userProduct = product
-                print("✅ Regular use - created both usage entry and usage journey event")
-            }
-            
-            // Update product's current amount
-            let newAmount = max(0, product.currentAmount - amount)
-            product.currentAmount = newAmount
-            
-            // Mark as finished if empty
-            if newAmount <= 0 && !product.isFinished {
-                product.setValue(true, forKey: "isFinished")
-                product.setValue(Date(), forKey: "finishDate")
-                NotificationService.shared.cancelNotification(for: product)
-            }
-            
-            do {
-                try context.save()
-                print("✅ Usage entry and journey events created and saved: \(type)")
+                print("🔍 Adding usage entry to product: \(product.productName ?? "Unknown")")
+                print("🔍 Product openDate: \(String(describing: product.openDate))")
                 
-                // Sync usage entry to backend
+                // ALWAYS create a usage entry for tracking purposes
+                let usageEntry = UsageEntry(context: context)
+                usageEntry.usageType = type
+                usageEntry.usageAmount = amount
+                usageEntry.notes = notes
+                usageEntry.createdAt = Date()
+                usageEntry.userId = self.currentUserId()
+                usageEntry.userProduct = product
+                print("✅ Created UsageEntry with type: \(type)")
+                
+                // SIMPLE LOGIC: For check_in type, only handle first use setup
+                // NO JOURNEY EVENT CREATION HERE - that's handled elsewhere
+                if type == "check_in" {
+                    // If this is the first use, set openDate
+                    if product.openDate == nil {
+                        product.openDate = Date()
+                        
+                        // Calculate expiry if we have PAO
+                        if let pao = product.periodsAfterOpening, let months = self.extractMonths(from: pao) {
+                            product.expireDate = Calendar.current.date(byAdding: .month, value: months, to: Date())
+                            NotificationService.shared.scheduleExpiryNotification(for: product)
+                        }
+                        print("✅ First use - set openDate only")
+                    }
+                    
+                    print("✅ Usage entry created for check_in - NO duplicate journey event")
+                }
+                
+                // Update product's current amount
+                let newAmount = max(0, product.currentAmount - amount)
+                product.currentAmount = newAmount
+                print("📊 Updated product amount from \(product.currentAmount + amount) to \(newAmount)")
+                
+                // Mark as finished if empty
+                if newAmount <= 0 && !product.isFinished {
+                    product.setValue(true, forKey: "isFinished")
+                    product.setValue(Date(), forKey: "finishDate")
+                    NotificationService.shared.cancelNotification(for: product)
+                    print("🏁 Product marked as finished")
+                }
+                
+                // CRITICAL: Save main context directly (no background context issues)
+                try context.save()
+                print("✅ Main context saved successfully - data WILL persist")
+                
+                // Post notification that usage data changed
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("UsageDataChanged"), 
+                    object: productID
+                )
+                print("📢 Posted UsageDataChanged notification")
+                
+                // Sync usage entry to backend (non-blocking)
                 if let userId = AuthService.shared.userId, let backendId = product.backendId {
-                    DispatchQueue.main.async {
+                    print("🔄 Starting backend sync for usage entry")
+                    DispatchQueue.global(qos: .background).async {
                         self.syncUsageEntryToBackend(
                             userId: userId,
                             productId: backendId,
@@ -116,42 +142,17 @@ class CoreDataManager {
                             createdAt: Date()
                         )
                     }
+                } else {
+                    print("⚠️ Skipping backend sync - missing userId or backendId")
                 }
                 
-                // Sync journey event to backend
-                if isFirstUse && type == "check_in" {
-                    if let userId = AuthService.shared.userId, let backendId = product.backendId {
-                        DispatchQueue.main.async {
-                            self.syncJourneyEventToBackend(
-                                userId: userId,
-                                productId: backendId,
-                                eventType: "open",
-                                text: nil,
-                                title: "First use",
-                                rating: 0,
-                                createdAt: Date()
-                            )
-                        }
-                    }
-                } else {
-                    if let userId = AuthService.shared.userId, let backendId = product.backendId {
-                        DispatchQueue.main.async {
-                            self.syncJourneyEventToBackend(
-                                userId: userId,
-                                productId: backendId,
-                                eventType: "usage",
-                                text: notes,
-                                title: "Used",
-                                rating: 0,
-                                createdAt: Date()
-                            )
-                        }
-                    }
-                }
             } catch {
-                print("❌ Error adding usage entry: \(error)")
+                print("❌ CRITICAL ERROR in addUsageEntry: \(error)")
+                print("❌ Stack trace: \(Thread.callStackSymbols)")
             }
         }
+        
+        print("🏁 addUsageEntry completed for type: \(type)")
     }
     
     // MARK: - Helper methods
@@ -187,7 +188,7 @@ class CoreDataManager {
     
     func fetchUserProduct(backendId: String) -> UserProduct? {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-        request.predicate = NSPredicate(format: "backendId == %@", backendId)
+        request.predicate = NSPredicate(format: "%K == %@", "backendId", backendId)
         request.fetchLimit = 1
         
         do {
@@ -215,7 +216,7 @@ class CoreDataManager {
         }
         
         let request: NSFetchRequest<UsageEntry> = UsageEntry.fetchRequest()
-        request.predicate = NSPredicate(format: "userProduct == %@", product)
+        request.predicate = NSPredicate(format: "%K == %@", "userProduct", product)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \UsageEntry.createdAt, ascending: false)]
         
         do {
@@ -232,7 +233,7 @@ class CoreDataManager {
         }
         
         let request: NSFetchRequest<UsageJourneyEvent> = UsageJourneyEvent.fetchRequest()
-        request.predicate = NSPredicate(format: "userProduct == %@", product)
+        request.predicate = NSPredicate(format: "%K == %@", "userProduct", product)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \UsageJourneyEvent.createdAt, ascending: false)]
         
         do {
@@ -245,7 +246,7 @@ class CoreDataManager {
     
     func products(withTag tag: ProductTag) -> [UserProduct] {
         let request: NSFetchRequest<UserProduct> = UserProduct.fetchRequest()
-        request.predicate = NSPredicate(format: "ANY tags == %@", tag)
+        request.predicate = NSPredicate(format: "ANY %K == %@", "tags", tag)
         
         do {
             return try viewContext.fetch(request)
@@ -262,21 +263,21 @@ class CoreDataManager {
         
         // Add product name predicate if provided
         if let productName = productName {
-            predicates.append(NSPredicate(format: "productName == %@", productName))
+            predicates.append(NSPredicate(format: "%K == %@", "productName", productName))
         }
         
         // Add brand predicate if provided
         if let brand = brand {
-            predicates.append(NSPredicate(format: "brand == %@", brand))
+            predicates.append(NSPredicate(format: "%K == %@", "brand", brand))
         }
         
         // Add size predicate if provided
         if let size = size {
-            predicates.append(NSPredicate(format: "size == %@", size))
+            predicates.append(NSPredicate(format: "%K == %@", "size", size))
         }
         
         // Only count non-finished products
-        predicates.append(NSPredicate(format: "isFinished == NO"))
+        predicates.append(NSPredicate(format: "%K == NO", "isFinished"))
         
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         
@@ -587,14 +588,93 @@ class CoreDataManager {
     
     // MARK: - Backend sync methods
     func syncUsageEntryToBackend(userId: String, productId: String, usageType: String, usageAmount: Double, notes: String?, createdAt: Date) {
-        // Implementation for syncing usage entry to backend
-        print("Syncing usage entry to backend: \(usageType) for product \(productId)")
-        // Add actual API call here when needed
+        guard let url = URL(string: "\(APIService.shared.baseURL)/users/\(userId)/products/\(productId)/usage-entries") else {
+            print("❌ Invalid URL for usage entry sync")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add auth token if available
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestBody: [String: Any] = [
+            "usageType": usageType,
+            "usageAmount": usageAmount,
+            "notes": notes as Any,
+            "createdAt": ISO8601DateFormatter().string(from: createdAt)
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            print("❌ Error encoding usage entry data: \(error)")
+            return
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Error syncing usage entry: \(error)")
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 201 {
+                    print("✅ Usage entry synced to backend successfully")
+                } else {
+                    print("❌ Failed to sync usage entry: HTTP \(httpResponse.statusCode)")
+                }
+            }
+        }.resume()
     }
     
     func syncJourneyEventToBackend(userId: String, productId: String, eventType: String, text: String?, title: String?, rating: Int, createdAt: Date) {
-        // Implementation for syncing journey event to backend
-        print("Syncing journey event to backend: \(eventType) for product \(productId)")
-        // Add actual API call here when needed
+        guard let url = URL(string: "\(APIService.shared.baseURL)/users/\(userId)/products/\(productId)/journey-events") else {
+            print("❌ Invalid URL for journey event sync")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add auth token if available
+        if let token = AuthService.shared.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestBody: [String: Any] = [
+            "eventType": eventType,
+            "text": text as Any,
+            "title": title as Any,
+            "rating": rating,
+            "createdAt": ISO8601DateFormatter().string(from: createdAt)
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            print("❌ Error encoding journey event data: \(error)")
+            return
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Error syncing journey event: \(error)")
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 201 {
+                    print("✅ Journey event synced to backend successfully")
+                } else {
+                    print("❌ Failed to sync journey event: HTTP \(httpResponse.statusCode)")
+                }
+            }
+        }.resume()
     }
 }

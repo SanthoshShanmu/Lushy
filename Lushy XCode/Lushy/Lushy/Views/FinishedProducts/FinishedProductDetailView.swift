@@ -450,7 +450,7 @@ private struct _FinishedBeautyJourneySection: View {
                     Image(systemName: "map.fill")
                         .font(.title3)
                         .foregroundColor(.lushyPink)
-                    Text("Beauty Journey")
+                    Text("Usage Journey")
                         .font(.headline)
                         .fontWeight(.semibold)
                     Spacer()

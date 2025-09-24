@@ -167,49 +167,11 @@ class UsageJourneyViewModel: ObservableObject {
     
     // Enhanced event creation for better data persistence
     func ensureInitialEventsExist() {
-        let existingEvents = fetchEventsArray() // Use fetchEventsArray() when we need the return value
+        // DISABLED: This method was creating duplicate events
+        // All event creation is now handled by CoreDataManager.addUsageEntry and other dedicated methods
+        print("📊 ensureInitialEventsExist: DISABLED to prevent duplicate events")
         
-        // Check if we need purchase event
-        if let purchaseDate = product.purchaseDate,
-           !existingEvents.contains(where: { $0.eventType == "purchase" }) {
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .purchase,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: purchaseDate
-            )
-        }
-        
-        // Check if we need open event (only if product is opened)
-        if let openDate = product.openDate,
-           !existingEvents.contains(where: { $0.eventType == "open" }) {
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .open,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: openDate
-            )
-        }
-        
-        // Check if we need finished event (only if product is finished)
-        if product.isFinished,
-           !existingEvents.contains(where: { $0.eventType == "finished" }) {
-            let finishDate = product.finishDate ?? Date()
-            CoreDataManager.shared.addUsageJourneyEventNew(
-                to: product.objectID,
-                type: .finished,
-                text: nil,
-                title: nil,
-                rating: 0,
-                date: finishDate
-            )
-        }
-        
-        // Refresh events after ensuring initial ones exist
-        loadEvents() // Use loadEvents() which doesn't return a value
+        // Just refresh events that already exist
+        loadEvents()
     }
 }

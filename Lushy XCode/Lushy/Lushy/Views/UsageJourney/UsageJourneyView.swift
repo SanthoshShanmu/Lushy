@@ -34,8 +34,7 @@ struct UsageJourneyView: View {
             .navigationTitle("Usage Journey")
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
-                viewModel.createInitialEvents() // No return value, so no warning
-                viewModel.ensureInitialEventsExist() // No return value, so no warning
+                viewModel.ensureInitialEventsExist() // Only call this one method
             }
             .sheet(isPresented: $showingThoughtSheet) {
                 ThoughtEntrySheet(viewModel: viewModel)
